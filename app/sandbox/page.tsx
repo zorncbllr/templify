@@ -8,6 +8,13 @@ type Shadow = {
   y: number;
   blur: number;
   color: string;
+  thickness: number; // text stroke width (text-shadow layering), 0 = off
+};
+type Border = {
+  enabled: boolean;
+  width: number;
+  color: string;
+  style: "solid" | "dashed" | "dotted" | "double";
 };
 type BaseObj = {
   id: number;
@@ -23,6 +30,8 @@ type ImageObject = BaseObj & {
   name: string;
   opacity: number;
   shadow: Shadow;
+  border: Border;
+  borderRadius: number;
   isBackground: boolean;
   naturalWidth: number;
   naturalHeight: number;
@@ -53,6 +62,13 @@ const DEFAULT_SHADOW: Shadow = {
   y: 2,
   blur: 8,
   color: "rgba(0,0,0,0.35)",
+  thickness: 0,
+};
+const DEFAULT_BORDER: Border = {
+  enabled: false,
+  width: 2,
+  color: "#ffffff",
+  style: "solid",
 };
 
 const PRESET_GROUPS = [
@@ -345,6 +361,29 @@ function shrinkFontSize(
 const shadowCSS = (s: Shadow) =>
   s.enabled ? `${s.x}px ${s.y}px ${s.blur}px ${s.color}` : "none";
 
+// Generates a CSS text-shadow value that includes optional thickness (stroke simulation)
+// by stacking many shadows in a ring pattern around the text.
+function textShadowCSS(s: Shadow): string {
+  if (!s.enabled && (!s.thickness || s.thickness === 0)) return "none";
+  const parts: string[] = [];
+  // Stroke ring: layered shadows at all angles
+  if (s.thickness && s.thickness > 0) {
+    const t = s.thickness;
+    const steps = Math.max(8, Math.round(t * 6));
+    for (let i = 0; i < steps; i++) {
+      const angle = (i / steps) * 2 * Math.PI;
+      const tx = Math.round(Math.cos(angle) * t * 10) / 10;
+      const ty = Math.round(Math.sin(angle) * t * 10) / 10;
+      parts.push(`${tx}px ${ty}px 0px ${s.color}`);
+    }
+  }
+  // Regular directional shadow
+  if (s.enabled) {
+    parts.push(`${s.x}px ${s.y}px ${s.blur}px ${s.color}`);
+  }
+  return parts.length ? parts.join(", ") : "none";
+}
+
 type HandleKey = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 const HANDLES: { key: HandleKey; cursor: string; pos: React.CSSProperties }[] =
   [
@@ -612,6 +651,13 @@ function ImageEl({
     );
   }
 
+  // Outer wrapper: overflow visible so handles (-5px outside) are never clipped.
+  // Inner visual div: overflow hidden for borderRadius clipping + border.
+  const borderVal = obj.border?.enabled
+    ? `${obj.border.width}px ${obj.border.style} ${obj.border.color}`
+    : "none";
+  const radiusVal = obj.borderRadius ?? 0;
+
   return (
     <div
       onMouseDown={handleMouseDown}
@@ -626,70 +672,87 @@ function ImageEl({
         cursor: "move",
         userSelect: "none",
         overflow: "visible",
-        outline: selected
-          ? "1.5px solid #e8ff47"
-          : obj.isDataImage
-            ? "1.5px dashed rgba(99,179,237,0.4)"
-            : "1.5px solid transparent",
+        outline: selected ? "1.5px solid #e8ff47" : "1.5px solid transparent",
         filter: obj.shadow.enabled
           ? `drop-shadow(${shadowCSS(obj.shadow)})`
           : "none",
       }}
     >
-      {resolvedSrc === PLACEHOLDER_SRC ? (
+      {/* Inner visual div — clips image/placeholder to borderRadius */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          overflow: "hidden",
+          borderRadius: radiusVal,
+          boxSizing: "border-box",
+          pointerEvents: "none",
+        }}
+      >
+        {resolvedSrc === PLACEHOLDER_SRC ? (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              background:
+                "repeating-conic-gradient(rgba(99,179,237,0.07) 0% 25%, rgba(99,179,237,0.02) 0% 50%) 0 0 / 14px 14px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              opacity: obj.opacity,
+              boxSizing: "border-box",
+            }}
+          >
+            <span style={{ fontSize: 22, opacity: 0.5 }}>📷</span>
+            <span
+              style={{
+                fontSize: 8,
+                color: "rgba(99,179,237,0.7)",
+                fontWeight: 700,
+                textAlign: "center",
+                padding: "0 6px",
+                lineHeight: 1.4,
+              }}
+            >
+              {obj.dataImageColumn || "Data Photo"}
+            </span>
+            <span
+              style={{
+                fontSize: 7,
+                color: "rgba(99,179,237,0.4)",
+                textAlign: "center",
+                padding: "0 6px",
+              }}
+            >
+              matched by column value
+            </span>
+          </div>
+        ) : (
+          <img
+            src={resolvedSrc}
+            alt={obj.name}
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "fill",
+              display: "block",
+              opacity: obj.opacity,
+            }}
+          />
+        )}
+      </div>
+      {/* Border overlay — rendered above image, respects borderRadius, never clips handles */}
+      {obj.border?.enabled && (
         <div
           style={{
-            width: "100%",
-            height: "100%",
-            background:
-              "repeating-conic-gradient(rgba(99,179,237,0.07) 0% 25%, rgba(99,179,237,0.02) 0% 50%) 0 0 / 14px 14px",
-            border: "1.5px dashed rgba(99,179,237,0.35)",
-            borderRadius: 2,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            pointerEvents: "none",
-            opacity: obj.opacity,
+            position: "absolute",
+            inset: 0,
+            borderRadius: radiusVal,
+            border: borderVal,
             boxSizing: "border-box",
-          }}
-        >
-          <span style={{ fontSize: 22, opacity: 0.5 }}>📷</span>
-          <span
-            style={{
-              fontSize: 8,
-              color: "rgba(99,179,237,0.7)",
-              fontWeight: 700,
-              textAlign: "center",
-              padding: "0 6px",
-              lineHeight: 1.4,
-            }}
-          >
-            {obj.dataImageColumn || "Data Photo"}
-          </span>
-          <span
-            style={{
-              fontSize: 7,
-              color: "rgba(99,179,237,0.4)",
-              textAlign: "center",
-              padding: "0 6px",
-            }}
-          >
-            matched by column value
-          </span>
-        </div>
-      ) : (
-        <img
-          src={resolvedSrc}
-          alt={obj.name}
-          draggable={false}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "fill",
-            display: "block",
-            opacity: obj.opacity,
             pointerEvents: "none",
           }}
         />
@@ -799,7 +862,7 @@ function TextEl({
         style={{
           position: "absolute",
           inset: 0,
-          overflow: "hidden",
+          overflow: "visible",
           display: "flex",
           alignItems: "center",
           justifyContent:
@@ -813,18 +876,24 @@ function TextEl({
           pointerEvents: "none",
         }}
       >
+        {/* Outer span: display:inline so it shrinks to text width AND height */}
         <span
           style={{
+            display: "inline",
+            lineHeight: 1.2,
+            whiteSpace: "nowrap",
+            overflow: "visible",
             fontFamily: `'${obj.fontFamily}', serif`,
             fontSize: displaySize,
             color: obj.color,
             fontWeight: obj.bold ? "bold" : "normal",
             fontStyle: obj.italic ? "italic" : "normal",
             textAlign: obj.textAlign,
-            textShadow: obj.shadow.enabled ? shadowCSS(obj.shadow) : "none",
-            lineHeight: 1,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
+            textShadow:
+              obj.shadow.enabled ||
+              (obj.shadow.thickness && obj.shadow.thickness > 0)
+                ? textShadowCSS(obj.shadow)
+                : "none",
           }}
         >
           {rawText}
@@ -1057,9 +1126,11 @@ function FontPicker({
 function ShadowPanel({
   shadow,
   onChange,
+  isText = false,
 }: {
   shadow: Shadow;
   onChange: (s: Shadow) => void;
+  isText?: boolean;
 }) {
   const set = (k: keyof Shadow, v: any) => onChange({ ...shadow, [k]: v });
   return (
@@ -1221,6 +1292,287 @@ function ShadowPanel({
               </span>
             </div>
           ))}
+          {isText && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                minWidth: 0,
+                paddingTop: 4,
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "rgba(240,237,232,0.3)",
+                  width: 20,
+                  flexShrink: 0,
+                }}
+              >
+                Wt
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={8}
+                step={0.5}
+                value={shadow.thickness ?? 0}
+                onChange={(e) => set("thickness", Number(e.target.value))}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "3px",
+                  accentColor: "#e8ff47",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "#e8ff47",
+                  width: 28,
+                  textAlign: "right",
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {shadow.thickness ?? 0}px
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── BorderPanel ─────────────────────────────────────────────────────────────
+function BorderPanel({
+  border,
+  onChange,
+  label = "Border",
+}: {
+  border: Border;
+  onChange: (b: Border) => void;
+  label?: string;
+}) {
+  const set = (k: keyof Border, v: any) => onChange({ ...border, [k]: v });
+  const BORDER_STYLES: Border["style"][] = [
+    "solid",
+    "dashed",
+    "dotted",
+    "double",
+  ];
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: "rgba(240,237,232,0.28)",
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.08em",
+          }}
+        >
+          {label}
+        </span>
+        <button
+          onClick={() => set("enabled", !border.enabled)}
+          style={{
+            width: 30,
+            height: 16,
+            borderRadius: 8,
+            background: border.enabled ? "#e8ff47" : "rgba(255,255,255,0.1)",
+            border: "none",
+            cursor: "pointer",
+            position: "relative",
+            transition: "background 0.2s",
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: 2,
+              left: border.enabled ? 14 : 2,
+              width: 12,
+              height: 12,
+              borderRadius: "50%",
+              background: border.enabled ? "#0a0a10" : "white",
+              transition: "left 0.15s",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+            }}
+          />
+        </button>
+      </div>
+      {border.enabled && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 7,
+            padding: "8px",
+            borderRadius: 7,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            minWidth: 0,
+            overflow: "hidden",
+          }}
+        >
+          {/* Color row */}
+          <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
+            <div
+              style={{
+                position: "relative",
+                width: 24,
+                height: 24,
+                borderRadius: 5,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.1)",
+                flexShrink: 0,
+              }}
+            >
+              <input
+                type="color"
+                value={border.color}
+                onChange={(e) => set("color", e.target.value)}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  transform: "scale(1.5)",
+                }}
+              />
+            </div>
+            <input
+              value={border.color}
+              onChange={(e) => set("color", e.target.value)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: "3px 6px",
+                borderRadius: 5,
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#f0ede8",
+                fontSize: 10,
+                fontFamily: "monospace",
+                outline: "none",
+              }}
+            />
+          </div>
+          {/* Width */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              minWidth: 0,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                color: "rgba(240,237,232,0.3)",
+                width: 24,
+                flexShrink: 0,
+              }}
+            >
+              W
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              value={border.width}
+              onChange={(e) => set("width", Number(e.target.value))}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: "3px",
+                accentColor: "#e8ff47",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 9,
+                color: "#e8ff47",
+                width: 26,
+                textAlign: "right",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {border.width}px
+            </span>
+          </div>
+          {/* Style pills — 2×2 grid to avoid overflow */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 3,
+              minWidth: 0,
+            }}
+          >
+            {BORDER_STYLES.map((s) => (
+              <button
+                key={s}
+                onClick={() => set("style", s)}
+                style={{
+                  padding: "3px 0",
+                  borderRadius: 4,
+                  fontSize: 8,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: "none",
+                  background:
+                    border.style === s
+                      ? "rgba(232,255,71,0.15)"
+                      : "rgba(255,255,255,0.05)",
+                  color:
+                    border.style === s ? "#e8ff47" : "rgba(240,237,232,0.4)",
+                  transition: "all 0.12s",
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.04em",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          {/* Live preview */}
+          <div
+            style={{
+              height: 24,
+              borderRadius: 4,
+              background: "rgba(255,255,255,0.04)",
+              border: `${border.width}px ${border.style} ${border.color}`,
+              boxSizing: "border-box",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 0,
+              overflow: "hidden",
+            }}
+          >
+            <span style={{ fontSize: 8, color: "rgba(240,237,232,0.25)" }}>
+              preview
+            </span>
+          </div>
         </div>
       )}
     </div>
@@ -1239,15 +1591,19 @@ function DataImagesPanel({
   dataImagesLabel,
   dataImagesLoading,
   autoDetectedColumns,
+  objects,
   onUpload,
   onClear,
+  onPlacePhoto,
 }: {
   dataImages: DataImageMap;
   dataImagesLabel: string | null;
   dataImagesLoading: boolean;
   autoDetectedColumns: string[];
+  objects: CanvasObject[];
   onUpload: (files: FileList) => void;
   onClear: () => void;
+  onPlacePhoto: (column: string) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const imageCount = Object.keys(dataImages).length / 2;
@@ -1420,37 +1776,101 @@ function DataImagesPanel({
         </label>
       )}
 
-      {/* Auto-detected columns — read-only info badges */}
+      {/* Auto-detected photo column buttons — re-addable like text fields */}
       {autoDetectedColumns.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <p
             style={{
               fontSize: 9,
               color: "rgba(240,237,232,0.22)",
-              marginBottom: 4,
+              marginBottom: 5,
+              lineHeight: 1.5,
             }}
           >
-            Auto-detected photo column
-            {autoDetectedColumns.length > 1 ? "s" : ""}:
+            Photo field{autoDetectedColumns.length > 1 ? "s" : ""} — click to
+            place:
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {autoDetectedColumns.map((col) => (
-              <span
-                key={col}
-                style={{
-                  padding: "2px 7px",
-                  borderRadius: 5,
-                  fontSize: 9,
-                  fontWeight: 600,
-                  background: "rgba(99,179,237,0.1)",
-                  border: "1px solid rgba(99,179,237,0.22)",
-                  color: "#63b3ed",
-                  fontFamily: "monospace",
-                }}
-              >
-                📷 {col}
-              </span>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {autoDetectedColumns.map((col) => {
+              const cnt = objects.filter(
+                (o) =>
+                  o.kind === "image" &&
+                  (o as ImageObject).isDataImage &&
+                  (o as ImageObject).dataImageColumn === col,
+              ).length;
+              return (
+                <button
+                  key={col}
+                  onClick={() => onPlacePhoto(col)}
+                  className="chip"
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "5px 8px",
+                    borderRadius: 7,
+                    fontSize: 10,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    transition: "all 0.15s",
+                    background:
+                      cnt > 0
+                        ? "rgba(99,179,237,0.08)"
+                        : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${cnt > 0 ? "rgba(99,179,237,0.28)" : "rgba(255,255,255,0.07)"}`,
+                    color: cnt > 0 ? "#63b3ed" : "rgba(240,237,232,0.55)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                      minWidth: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 10, flexShrink: 0 }}>📷</span>
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 9,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {col}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {cnt > 0 && (
+                      <span
+                        style={{
+                          background: "rgba(99,179,237,0.2)",
+                          color: "#63b3ed",
+                          borderRadius: 3,
+                          padding: "0 4px",
+                          fontSize: 8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {cnt}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, opacity: 0.4 }}>+</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2176,7 +2596,7 @@ async function renderBatchedPageToCanvas(
         img.src = imgObj.isDataImage
           ? resolveDataImageSrc(imgObj, rowData, dataImages)
           : imgObj.src;
-        img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;`;
+        img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;border-radius:${imgObj.borderRadius ?? 0}px;box-sizing:border-box;${imgObj.border?.enabled ? `border:${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color};` : ""}`;
         if (imgObj.shadow.enabled)
           img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
         cell.appendChild(img);
@@ -2203,7 +2623,9 @@ async function renderBatchedPageToCanvas(
           `text-align:${f.textAlign};display:flex;align-items:center;`,
           `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
           `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
-          f.shadow.enabled ? `text-shadow:${shadowCSS(f.shadow)};` : "",
+          f.shadow.enabled || (f.shadow.thickness && f.shadow.thickness > 0)
+            ? `text-shadow:${textShadowCSS(f.shadow)};`
+            : "",
         ].join("");
         cell.appendChild(span);
       }
@@ -2928,6 +3350,8 @@ export default function TemplifyEditor() {
         zIndex: nextZ.current++,
         opacity: 1,
         shadow: { ...DEFAULT_SHADOW },
+        border: { ...DEFAULT_BORDER },
+        borderRadius: 0,
         isBackground: false,
         naturalWidth: W,
         naturalHeight: H,
@@ -3045,6 +3469,8 @@ export default function TemplifyEditor() {
         zIndex: nextZ.current++,
         opacity: 1,
         shadow: { ...DEFAULT_SHADOW },
+        border: { ...DEFAULT_BORDER },
+        borderRadius: 0,
         isBackground: false,
         naturalWidth: nw,
         naturalHeight: nh,
@@ -3644,7 +4070,7 @@ export default function TemplifyEditor() {
                     marginBottom: 1,
                   }}
                 >
-                  Upload Template
+                  Upload Image
                 </p>
                 <p style={{ fontSize: 9, color: "rgba(240,237,232,0.25)" }}>
                   or drag & drop
@@ -3865,11 +4291,13 @@ export default function TemplifyEditor() {
             dataImagesLabel={dataImagesLabel}
             dataImagesLoading={dataImagesLoading}
             autoDetectedColumns={autoDetectedImageColumns}
+            objects={objects}
             onUpload={handleDataImagesUpload}
             onClear={() => {
               setDataImages({});
               setDataImagesLabel(null);
             }}
+            onPlacePhoto={addDataPhotoObject}
           />
 
           {/* Text Fields — only non-image columns */}
@@ -4278,6 +4706,8 @@ export default function TemplifyEditor() {
                   display: "flex",
                   flexDirection: "column",
                   gap: 16,
+                  minWidth: 0,
+                  overflow: "hidden",
                 }}
               >
                 {!selectedObj ? (
@@ -4576,6 +5006,106 @@ export default function TemplifyEditor() {
                                 }}
                               />
                             </div>
+
+                            {/* Border Radius — only for non-background images */}
+                            {!img.isBackground && (
+                              <div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  <SLabel>Corner Radius</SLabel>
+                                  <span
+                                    style={{
+                                      fontSize: 9,
+                                      color: "#e8ff47",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {img.borderRadius ?? 0}px
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={Math.round(
+                                    Math.min(img.width, img.height) / 2,
+                                  )}
+                                  value={img.borderRadius ?? 0}
+                                  onChange={(e) =>
+                                    updateObj(
+                                      "borderRadius",
+                                      Number(e.target.value),
+                                    )
+                                  }
+                                  style={{
+                                    width: "100%",
+                                    height: "3px",
+                                    accentColor: "#e8ff47",
+                                  }}
+                                />
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: 4,
+                                    marginTop: 6,
+                                  }}
+                                >
+                                  {[0, 4, 8, 16, 50].map((r) => {
+                                    const maxR = Math.round(
+                                      Math.min(img.width, img.height) / 2,
+                                    );
+                                    const actualR = r === 50 ? maxR : r;
+                                    const label =
+                                      r === 50
+                                        ? "⬤"
+                                        : r === 0
+                                          ? "▭"
+                                          : String(r);
+                                    return (
+                                      <button
+                                        key={r}
+                                        onClick={() =>
+                                          updateObj("borderRadius", actualR)
+                                        }
+                                        title={r === 50 ? "Circle" : `${r}px`}
+                                        style={{
+                                          flex: 1,
+                                          padding: "5px 2px",
+                                          borderRadius:
+                                            actualR > 8 ? actualR : 4,
+                                          fontSize: 10,
+                                          cursor: "pointer",
+                                          border: "none",
+                                          background:
+                                            (img.borderRadius ?? 0) === actualR
+                                              ? "rgba(232,255,71,0.15)"
+                                              : "rgba(255,255,255,0.05)",
+                                          color:
+                                            (img.borderRadius ?? 0) === actualR
+                                              ? "#e8ff47"
+                                              : "rgba(240,237,232,0.4)",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Border */}
+                            {!img.isBackground && (
+                              <BorderPanel
+                                border={img.border ?? DEFAULT_BORDER}
+                                onChange={(b) => updateObj("border", b)}
+                              />
+                            )}
 
                             {!img.isBackground && (
                               <ShadowPanel
@@ -5074,6 +5604,7 @@ export default function TemplifyEditor() {
                             <ShadowPanel
                               shadow={f.shadow}
                               onChange={(s) => updateObj("shadow", s)}
+                              isText
                             />
                           </>
                         );
