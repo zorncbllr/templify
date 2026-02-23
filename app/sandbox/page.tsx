@@ -26,6 +26,8 @@ type ImageObject = BaseObj & {
   isBackground: boolean;
   naturalWidth: number;
   naturalHeight: number;
+  isDataImage: boolean;
+  dataImageColumn: string;
 };
 type TextField = BaseObj & {
   kind: "field";
@@ -41,6 +43,9 @@ type TextField = BaseObj & {
 };
 type CanvasObject = ImageObject | TextField;
 type CanvasSize = { width: number; height: number };
+
+// dataImages: map of normalized-filename → base64 data URL
+type DataImageMap = Record<string, string>;
 
 const DEFAULT_SHADOW: Shadow = {
   enabled: false,
@@ -129,6 +134,88 @@ function batchGrid(count: number): { cols: number; rows: number } {
   if (count === 8) return { cols: 4, rows: 2 };
   if (count === 9) return { cols: 3, rows: 3 };
   return { cols: 1, rows: 1 };
+}
+
+// ─── Image extension matcher ──────────────────────────────────────────────────
+const IMAGE_EXTS = /\.(jpe?g|png|gif|webp|bmp|svg|tiff?|avif|ico)$/i;
+
+function normalizeImageKey(filename: string): string {
+  return filename
+    .replace(/\.[^/.]+$/, "")
+    .toLowerCase()
+    .trim();
+}
+
+// ─── Auto-detect columns whose values look like image filenames ───────────────
+// Scans up to `sampleSize` rows and returns columns where ≥ `threshold`
+// fraction of non-empty values match IMAGE_EXTS or look like bare basenames
+// that could be image filenames (alphanumeric / underscore / dash, no spaces).
+function detectImageColumns(
+  rows: RowData[],
+  columns: string[],
+  sampleSize = 20,
+  threshold = 0.5,
+): string[] {
+  if (!rows.length || !columns.length) return [];
+
+  const sample = rows.slice(0, sampleSize);
+  const detected: string[] = [];
+
+  for (const col of columns) {
+    const values = sample
+      .map((r) => (r[col] ?? "").trim())
+      .filter((v) => v.length > 0);
+
+    if (!values.length) continue;
+
+    const matchCount = values.filter((v) => {
+      // Direct extension match
+      if (IMAGE_EXTS.test(v)) return true;
+      // Looks like a bare image basename: short, no spaces, looks like a name
+      if (
+        v.length < 80 &&
+        !/\s/.test(v) &&
+        /^[a-zA-Z0-9_\-().]+$/.test(v) &&
+        v.length >= 2
+      ) {
+        // Extra signal: column name hints at photo/image/photo/avatar/picture/headshot
+        const colLower = col.toLowerCase();
+        if (
+          colLower.includes("photo") ||
+          colLower.includes("image") ||
+          colLower.includes("img") ||
+          colLower.includes("picture") ||
+          colLower.includes("avatar") ||
+          colLower.includes("headshot") ||
+          colLower.includes("pic") ||
+          colLower.includes("portrait")
+        )
+          return true;
+      }
+      return false;
+    }).length;
+
+    if (matchCount / values.length >= threshold) {
+      detected.push(col);
+    }
+  }
+
+  return detected;
+}
+
+function resolveDataImageSrc(
+  obj: ImageObject,
+  row: RowData | null,
+  dataImages: DataImageMap,
+): string {
+  if (!obj.isDataImage || !row || !obj.dataImageColumn) return obj.src;
+  const rawValue = (row[obj.dataImageColumn] ?? "").trim();
+  if (!rawValue) return obj.src;
+  return (
+    dataImages[rawValue.toLowerCase()] ??
+    dataImages[normalizeImageKey(rawValue)] ??
+    obj.src
+  );
 }
 
 async function loadSheetJS(): Promise<any> {
@@ -450,6 +537,7 @@ function useDragResize(
   return { handleMouseDown, handleResizeDown };
 }
 
+// ─── ImageEl ─────────────────────────────────────────────────────────────────
 function ImageEl({
   obj,
   selected,
@@ -457,6 +545,7 @@ function ImageEl({
   onDrag,
   onResize,
   scale,
+  resolvedSrc,
 }: {
   obj: ImageObject;
   selected: boolean;
@@ -464,6 +553,7 @@ function ImageEl({
   onDrag: (id: number, x: number, y: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   scale: number;
+  resolvedSrc: string;
 }) {
   const { handleMouseDown, handleResizeDown } = useDragResize(
     obj,
@@ -472,6 +562,7 @@ function ImageEl({
     onResize,
     scale,
   );
+
   if (obj.isBackground) {
     return (
       <div
@@ -480,7 +571,7 @@ function ImageEl({
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={obj.src}
+          src={resolvedSrc}
           alt={obj.name}
           draggable={false}
           style={{
@@ -520,6 +611,7 @@ function ImageEl({
       </div>
     );
   }
+
   return (
     <div
       onMouseDown={handleMouseDown}
@@ -534,25 +626,74 @@ function ImageEl({
         cursor: "move",
         userSelect: "none",
         overflow: "visible",
-        outline: selected ? "1.5px solid #e8ff47" : "1.5px solid transparent",
+        outline: selected
+          ? "1.5px solid #e8ff47"
+          : obj.isDataImage
+            ? "1.5px dashed rgba(99,179,237,0.4)"
+            : "1.5px solid transparent",
         filter: obj.shadow.enabled
           ? `drop-shadow(${shadowCSS(obj.shadow)})`
           : "none",
       }}
     >
-      <img
-        src={obj.src}
-        alt={obj.name}
-        draggable={false}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "fill",
-          display: "block",
-          opacity: obj.opacity,
-          pointerEvents: "none",
-        }}
-      />
+      {resolvedSrc === PLACEHOLDER_SRC ? (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            background:
+              "repeating-conic-gradient(rgba(99,179,237,0.07) 0% 25%, rgba(99,179,237,0.02) 0% 50%) 0 0 / 14px 14px",
+            border: "1.5px dashed rgba(99,179,237,0.35)",
+            borderRadius: 2,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            pointerEvents: "none",
+            opacity: obj.opacity,
+            boxSizing: "border-box",
+          }}
+        >
+          <span style={{ fontSize: 22, opacity: 0.5 }}>📷</span>
+          <span
+            style={{
+              fontSize: 8,
+              color: "rgba(99,179,237,0.7)",
+              fontWeight: 700,
+              textAlign: "center",
+              padding: "0 6px",
+              lineHeight: 1.4,
+            }}
+          >
+            {obj.dataImageColumn || "Data Photo"}
+          </span>
+          <span
+            style={{
+              fontSize: 7,
+              color: "rgba(99,179,237,0.4)",
+              textAlign: "center",
+              padding: "0 6px",
+            }}
+          >
+            matched by column value
+          </span>
+        </div>
+      ) : (
+        <img
+          src={resolvedSrc}
+          alt={obj.name}
+          draggable={false}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "fill",
+            display: "block",
+            opacity: obj.opacity,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       {selected && (
         <>
           <div
@@ -561,8 +702,8 @@ function ImageEl({
               top: -24,
               left: 0,
               background: "#0c0c14",
-              border: "1px solid rgba(232,255,71,0.3)",
-              color: "#e8ff47",
+              border: "1px solid rgba(99,179,237,0.35)",
+              color: "#63b3ed",
               fontSize: 9,
               fontWeight: 700,
               padding: "0 6px",
@@ -573,7 +714,9 @@ function ImageEl({
               whiteSpace: "nowrap",
             }}
           >
-            🖼 {obj.name}
+            {obj.isDataImage
+              ? `📷 ${obj.dataImageColumn || "Data Photo"}`
+              : `🖼 ${obj.name}`}
           </div>
           <SelectionHandles onDown={handleResizeDown} />
         </>
@@ -582,6 +725,7 @@ function ImageEl({
   );
 }
 
+// ─── TextEl ───────────────────────────────────────────────────────────────────
 function TextEl({
   obj,
   selected,
@@ -691,6 +835,7 @@ function TextEl({
   );
 }
 
+// ─── FontPicker ───────────────────────────────────────────────────────────────
 function FontPicker({
   value,
   onChange,
@@ -908,6 +1053,7 @@ function FontPicker({
   );
 }
 
+// ─── ShadowPanel ─────────────────────────────────────────────────────────────
 function ShadowPanel({
   shadow,
   onChange,
@@ -976,7 +1122,6 @@ function ShadowPanel({
             borderRadius: 7,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.07)",
-            // Prevent the panel itself from overflowing its parent
             minWidth: 0,
             overflow: "hidden",
           }}
@@ -1011,7 +1156,7 @@ function ShadowPanel({
               onChange={(e) => set("color", e.target.value)}
               style={{
                 flex: 1,
-                minWidth: 0, // allow the input to shrink below its content size
+                minWidth: 0,
                 padding: "4px 7px",
                 borderRadius: 5,
                 background: "rgba(255,255,255,0.05)",
@@ -1036,14 +1181,14 @@ function ShadowPanel({
                 display: "flex",
                 alignItems: "center",
                 gap: 5,
-                minWidth: 0, // allow row to shrink
+                minWidth: 0,
               }}
             >
               <span
                 style={{
                   fontSize: 9,
                   color: "rgba(240,237,232,0.3)",
-                  width: 20, // slightly narrower
+                  width: 20,
                   flexShrink: 0,
                 }}
               >
@@ -1057,7 +1202,7 @@ function ShadowPanel({
                 onChange={(e) => set(k, Number(e.target.value))}
                 style={{
                   flex: 1,
-                  minWidth: 0, // key fix: lets the slider compress
+                  minWidth: 0,
                   height: "3px",
                   accentColor: "#e8ff47",
                 }}
@@ -1066,7 +1211,7 @@ function ShadowPanel({
                 style={{
                   fontSize: 9,
                   color: "#e8ff47",
-                  width: 28, // enough for "-20px"
+                  width: 28,
                   textAlign: "right",
                   flexShrink: 0,
                   whiteSpace: "nowrap",
@@ -1082,6 +1227,418 @@ function ShadowPanel({
   );
 }
 
+// ─── Placeholder SVG ──────────────────────────────────────────────────────────
+const PLACEHOLDER_SRC = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#e0e0e0"/><rect width="40" height="40" fill="#c0c0c0"/><rect x="40" y="40" width="40" height="40" fill="#c0c0c0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#999">no photo</text></svg>`,
+)}`;
+
+// ─── DataImagesPanel ──────────────────────────────────────────────────────────
+// Now only handles photo upload + shows auto-detected columns as read-only info.
+function DataImagesPanel({
+  dataImages,
+  dataImagesLabel,
+  dataImagesLoading,
+  autoDetectedColumns,
+  onUpload,
+  onClear,
+}: {
+  dataImages: DataImageMap;
+  dataImagesLabel: string | null;
+  dataImagesLoading: boolean;
+  autoDetectedColumns: string[];
+  onUpload: (files: FileList) => void;
+  onClear: () => void;
+}) {
+  const [dragOver, setDragOver] = useState(false);
+  const imageCount = Object.keys(dataImages).length / 2;
+  const hasPhotos = imageCount > 0;
+
+  return (
+    <div
+      style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+    >
+      <p
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          color: "rgba(240,237,232,0.28)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          marginBottom: 8,
+        }}
+      >
+        Photo Data
+      </p>
+
+      {dataImagesLabel ? (
+        <div
+          style={{
+            background: "rgba(99,179,237,0.05)",
+            border: "1px solid rgba(99,179,237,0.2)",
+            borderRadius: 8,
+            padding: "8px 10px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 3,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                minWidth: 0,
+              }}
+            >
+              <span style={{ flexShrink: 0 }}>📷</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#63b3ed",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {dataImagesLabel}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexShrink: 0,
+                marginLeft: 5,
+              }}
+            >
+              <label
+                style={{
+                  fontSize: 9,
+                  color: "rgba(240,237,232,0.4)",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Replace
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => e.target.files && onUpload(e.target.files)}
+                />
+              </label>
+              <button
+                onClick={onClear}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(240,237,232,0.3)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                }}
+                title="Clear"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
+            {Math.round(imageCount)} photo{imageCount === 1 ? "" : "s"} loaded
+          </p>
+        </div>
+      ) : (
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (e.dataTransfer.files) onUpload(e.dataTransfer.files);
+          }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 5,
+            padding: "12px 10px",
+            borderRadius: 9,
+            cursor: "pointer",
+            transition: "all 0.2s",
+            background: dragOver
+              ? "rgba(99,179,237,0.08)"
+              : "rgba(255,255,255,0.02)",
+            border: `1.5px dashed ${dragOver ? "#63b3ed" : "rgba(255,255,255,0.09)"}`,
+          }}
+        >
+          {dataImagesLoading ? (
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                border: "2px solid rgba(99,179,237,0.2)",
+                borderTop: "2px solid #63b3ed",
+                borderRadius: "50%",
+                animation: "spin 0.7s linear infinite",
+              }}
+            />
+          ) : (
+            <span style={{ fontSize: 18 }}>📷</span>
+          )}
+          <div style={{ textAlign: "center" }}>
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "rgba(240,237,232,0.5)",
+                marginBottom: 1,
+              }}
+            >
+              {dataImagesLoading ? "Loading…" : "Upload Photos"}
+            </p>
+            <p style={{ fontSize: 9, color: "rgba(240,237,232,0.22)" }}>
+              Select multiple images
+            </p>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => e.target.files && onUpload(e.target.files)}
+          />
+        </label>
+      )}
+
+      {/* Auto-detected columns — read-only info badges */}
+      {autoDetectedColumns.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <p
+            style={{
+              fontSize: 9,
+              color: "rgba(240,237,232,0.22)",
+              marginBottom: 4,
+            }}
+          >
+            Auto-detected photo column
+            {autoDetectedColumns.length > 1 ? "s" : ""}:
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {autoDetectedColumns.map((col) => (
+              <span
+                key={col}
+                style={{
+                  padding: "2px 7px",
+                  borderRadius: 5,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  background: "rgba(99,179,237,0.1)",
+                  border: "1px solid rgba(99,179,237,0.22)",
+                  color: "#63b3ed",
+                  fontFamily: "monospace",
+                }}
+              >
+                📷 {col}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DataImageInfo (right panel — read-only column badge, no picker) ──────────
+function DataImageInfo({
+  obj,
+  dataImages,
+  currentRow,
+}: {
+  obj: ImageObject;
+  dataImages: DataImageMap;
+  currentRow: RowData | null;
+}) {
+  const previewSrc = resolveDataImageSrc(obj, currentRow, dataImages);
+  const hasMatch =
+    previewSrc && previewSrc !== PLACEHOLDER_SRC && previewSrc !== obj.src;
+
+  return (
+    <div
+      style={{
+        padding: "10px",
+        borderRadius: 9,
+        background: "rgba(99,179,237,0.05)",
+        border: "1px solid rgba(99,179,237,0.25)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      {/* Column badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 10, color: "rgba(240,237,232,0.45)" }}>
+          Photo column
+        </span>
+        <span
+          style={{
+            padding: "2px 7px",
+            borderRadius: 5,
+            fontSize: 9,
+            fontWeight: 700,
+            background: "rgba(99,179,237,0.15)",
+            border: "1px solid rgba(99,179,237,0.28)",
+            color: "#63b3ed",
+            fontFamily: "monospace",
+          }}
+        >
+          {obj.dataImageColumn || "—"}
+        </span>
+        <span
+          style={{
+            marginLeft: "auto",
+            padding: "1px 5px",
+            borderRadius: 4,
+            fontSize: 8,
+            fontWeight: 700,
+            background: "rgba(99,179,237,0.1)",
+            color: "rgba(99,179,237,0.55)",
+            border: "1px solid rgba(99,179,237,0.15)",
+          }}
+        >
+          AUTO
+        </span>
+      </div>
+
+      {/* Live match preview */}
+      {obj.dataImageColumn && (
+        <div
+          style={{
+            padding: "7px 8px",
+            borderRadius: 6,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 8,
+              color: "rgba(240,237,232,0.3)",
+              marginBottom: 5,
+            }}
+          >
+            PREVIEW · CURRENT ROW
+          </p>
+          {hasMatch ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <img
+                src={previewSrc!}
+                alt="preview"
+                style={{
+                  width: 36,
+                  height: 36,
+                  objectFit: "cover",
+                  borderRadius: 4,
+                  border: "1px solid rgba(99,179,237,0.3)",
+                  flexShrink: 0,
+                }}
+              />
+              <div>
+                <p style={{ fontSize: 9, color: "#63b3ed", fontWeight: 600 }}>
+                  ✓ Match found
+                </p>
+                <p
+                  style={{
+                    fontSize: 8,
+                    color: "rgba(240,237,232,0.3)",
+                    marginTop: 2,
+                  }}
+                >
+                  Value:{" "}
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      color: "rgba(240,237,232,0.5)",
+                    }}
+                  >
+                    {currentRow?.[obj.dataImageColumn] ?? "—"}
+                  </span>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 4,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px dashed rgba(255,255,255,0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{ fontSize: 14, opacity: 0.3 }}>📷</span>
+              </div>
+              <div>
+                <p style={{ fontSize: 9, color: "#f6ad55", fontWeight: 600 }}>
+                  No match yet
+                </p>
+                <p
+                  style={{
+                    fontSize: 8,
+                    color: "rgba(240,237,232,0.3)",
+                    marginTop: 2,
+                  }}
+                >
+                  Upload photos to match{" "}
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      color: "rgba(240,237,232,0.5)",
+                    }}
+                  >
+                    {currentRow?.[obj.dataImageColumn] ?? "—"}
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p
+        style={{
+          fontSize: 9,
+          color: "rgba(240,237,232,0.22)",
+          lineHeight: 1.5,
+        }}
+      >
+        Column auto-detected from your data. Value{" "}
+        <span style={{ color: "#63b3ed", fontFamily: "monospace" }}>john</span>{" "}
+        matches{" "}
+        <span style={{ color: "#63b3ed", fontFamily: "monospace" }}>
+          john.jpg
+        </span>
+        , etc.
+      </p>
+    </div>
+  );
+}
+
+// ─── SizePicker ───────────────────────────────────────────────────────────────
 function SizePicker({
   current,
   onSelect,
@@ -1444,7 +2001,6 @@ function KbdHint({ keys, label }: { keys: string[]; label: string }) {
   );
 }
 
-// ─── Batch Stepper ────────────────────────────────────────────────────────────
 function BatchStepper({
   value,
   onChange,
@@ -1460,7 +2016,6 @@ function BatchStepper({
     onChange(BATCH_OPTIONS[Math.min(BATCH_OPTIONS.length - 1, idx + 1)]);
   const { cols, rows } = batchGrid(value);
   const pageCount = totalRows > 0 ? Math.ceil(totalRows / value) : "—";
-
   return (
     <div
       style={{
@@ -1584,22 +2139,22 @@ async function renderBatchedPageToCanvas(
   rows: RowData[],
   pageRowStart: number,
   batch: number,
+  dataImages: DataImageMap,
 ): Promise<HTMLCanvasElement> {
   const { cols, rows: gridRows } = batchGrid(batch);
-  const pageW = canvasSize.width * cols;
-  const pageH = canvasSize.height * gridRows;
+  const pageW = canvasSize.width * cols,
+    pageH = canvasSize.height * gridRows;
   const page = document.createElement("div");
   page.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${pageW}px;height:${pageH}px;overflow:hidden;background:#fff;`;
   document.body.appendChild(page);
-
   for (let slot = 0; slot < batch; slot++) {
     const rowIdx = pageRowStart + slot;
     if (rowIdx >= rows.length) break;
     const rowData = rows[rowIdx];
-    const col = slot % cols;
-    const row = Math.floor(slot / cols);
-    const ox = col * canvasSize.width;
-    const oy = row * canvasSize.height;
+    const col = slot % cols,
+      row = Math.floor(slot / cols);
+    const ox = col * canvasSize.width,
+      oy = row * canvasSize.height;
     const cell = document.createElement("div");
     cell.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;`;
     page.appendChild(cell);
@@ -1613,20 +2168,21 @@ async function renderBatchedPageToCanvas(
       cell.appendChild(img);
     }
     const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
-    const ci = rowIdx; // use absolute row index for rendering
     for (const obj of sorted) {
       if (obj.kind === "image") {
         const imgObj = obj as ImageObject;
         if (imgObj.isBackground) continue;
         const img = document.createElement("img");
-        img.src = imgObj.src;
+        img.src = imgObj.isDataImage
+          ? resolveDataImageSrc(imgObj, rowData, dataImages)
+          : imgObj.src;
         img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;`;
         if (imgObj.shadow.enabled)
           img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
         cell.appendChild(img);
       } else {
         const f = obj as TextField;
-        const ti = ci + f.columnOffset;
+        const ti = rowIdx + f.columnOffset;
         const text =
           ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
         const fs = shrinkFontSize(
@@ -1653,7 +2209,6 @@ async function renderBatchedPageToCanvas(
       }
     }
   }
-
   const imgs = page.querySelectorAll("img");
   await Promise.all(
     Array.from(imgs).map((img) =>
@@ -1704,6 +2259,7 @@ async function exportRecords(
   canvasSize: CanvasSize,
   rows: RowData[],
   batch: number,
+  dataImages: DataImageMap,
   onProgress: (pct: number) => void,
 ) {
   if (!rows.length) rows = [{}];
@@ -1717,6 +2273,7 @@ async function exportRecords(
         rows,
         p * batch,
         batch,
+        dataImages,
       );
       await new Promise<void>((resolve) =>
         cv.toBlob((blob) => {
@@ -1739,8 +2296,8 @@ async function exportRecords(
     );
     const { jsPDF: JsPDF } = jsPDF;
     const { cols, rows: gridRows } = batchGrid(batch);
-    const pageW = canvasSize.width * cols;
-    const pageH = canvasSize.height * gridRows;
+    const pageW = canvasSize.width * cols,
+      pageH = canvasSize.height * gridRows;
     const pW = pageW * 0.264583,
       pH = pageH * 0.264583;
     let pdf: any = null;
@@ -1751,6 +2308,7 @@ async function exportRecords(
         rows,
         p * batch,
         batch,
+        dataImages,
       );
       const imgData = cv.toDataURL("image/png");
       if (!pdf)
@@ -1847,10 +2405,13 @@ function LayerItem({
   };
 }) {
   const isImg = obj.kind === "image";
+  const imgObj = isImg ? (obj as ImageObject) : null;
   const label = isImg
-    ? (obj as ImageObject).name
+    ? imgObj!.isDataImage
+      ? `📷 ${imgObj!.dataImageColumn || "Data Photo"}`
+      : imgObj!.name
     : `{{${(obj as TextField).column}}}`;
-  const isBg = isImg && (obj as ImageObject).isBackground;
+  const isBg = isImg && imgObj!.isBackground;
   const offset = !isImg ? (obj as TextField).columnOffset : 0;
   const isDragging = dragHandlers.draggingId === obj.id;
   return (
@@ -1886,7 +2447,7 @@ function LayerItem({
           ⠿
         </span>
         <span style={{ fontSize: 11, flexShrink: 0 }}>
-          {isImg ? "🖼" : "T"}
+          {isImg ? (imgObj!.isDataImage ? "📷" : "🖼") : "T"}
         </span>
         <span
           style={{
@@ -1913,6 +2474,21 @@ function LayerItem({
             }}
           >
             BG
+          </span>
+        )}
+        {isImg && imgObj!.isDataImage && !isBg && (
+          <span
+            style={{
+              fontSize: 8,
+              padding: "1px 4px",
+              borderRadius: 3,
+              background: "rgba(99,179,237,0.15)",
+              color: "#63b3ed",
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            AUTO
           </span>
         )}
         {!isImg && offset !== 0 && (
@@ -1960,7 +2536,6 @@ function LayerItem({
   );
 }
 
-// ─── Floating Page Navigator (bottom bar) ─────────────────────────────────────
 function FloatingPageNav({
   pageIndex,
   totalPages,
@@ -1977,10 +2552,8 @@ function FloatingPageNav({
   rows: RowData[];
 }) {
   if (totalPages === 0) return null;
-
-  const startRow = pageIndex * batchSize + 1;
-  const endRow = Math.min((pageIndex + 1) * batchSize, rows.length);
-
+  const startRow = pageIndex * batchSize + 1,
+    endRow = Math.min((pageIndex + 1) * batchSize, rows.length);
   return (
     <div
       style={{
@@ -2002,64 +2575,52 @@ function FloatingPageNav({
         animation: "slideUp 0.2s ease",
       }}
     >
-      {/* Batch stepper */}
       <BatchStepper
         value={batchSize}
         onChange={onBatchChange}
         totalRows={rows.length}
       />
-
       <div
         style={{ width: 1, height: 28, background: "rgba(255,255,255,0.1)" }}
       />
-
-      {/* Page navigator */}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <button
-          onClick={() => onPageChange(0)}
-          disabled={pageIndex === 0}
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 5,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color:
-              pageIndex === 0
+        {[
+          {
+            label: "⟨⟨",
+            action: () => onPageChange(0),
+            disabled: pageIndex === 0,
+            size: 9,
+          },
+          {
+            label: "‹",
+            action: () => onPageChange(Math.max(0, pageIndex - 1)),
+            disabled: pageIndex === 0,
+            size: 12,
+          },
+        ].map((btn, i) => (
+          <button
+            key={i}
+            onClick={btn.action}
+            disabled={btn.disabled}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 5,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: btn.disabled
                 ? "rgba(240,237,232,0.15)"
                 : "rgba(240,237,232,0.6)",
-            cursor: pageIndex === 0 ? "not-allowed" : "pointer",
-            fontSize: 9,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ⟨⟨
-        </button>
-        <button
-          onClick={() => onPageChange(Math.max(0, pageIndex - 1))}
-          disabled={pageIndex === 0}
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 5,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color:
-              pageIndex === 0
-                ? "rgba(240,237,232,0.15)"
-                : "rgba(240,237,232,0.6)",
-            cursor: pageIndex === 0 ? "not-allowed" : "pointer",
-            fontSize: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ‹
-        </button>
-
+              cursor: btn.disabled ? "not-allowed" : "pointer",
+              fontSize: btn.size,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {btn.label}
+          </button>
+        ))}
         <div style={{ textAlign: "center", minWidth: 90 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#f0ede8" }}>
             Page {pageIndex + 1}{" "}
@@ -2077,56 +2638,49 @@ function FloatingPageNav({
             Rows {startRow}–{endRow} of {rows.length}
           </div>
         </div>
-
-        <button
-          onClick={() => onPageChange(Math.min(totalPages - 1, pageIndex + 1))}
-          disabled={pageIndex === totalPages - 1}
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 5,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color:
-              pageIndex === totalPages - 1
+        {[
+          {
+            label: "›",
+            action: () => onPageChange(Math.min(totalPages - 1, pageIndex + 1)),
+            disabled: pageIndex === totalPages - 1,
+            size: 12,
+          },
+          {
+            label: "⟩⟩",
+            action: () => onPageChange(totalPages - 1),
+            disabled: pageIndex === totalPages - 1,
+            size: 9,
+          },
+        ].map((btn, i) => (
+          <button
+            key={i}
+            onClick={btn.action}
+            disabled={btn.disabled}
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 5,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: btn.disabled
                 ? "rgba(240,237,232,0.15)"
                 : "rgba(240,237,232,0.6)",
-            cursor: pageIndex === totalPages - 1 ? "not-allowed" : "pointer",
-            fontSize: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ›
-        </button>
-        <button
-          onClick={() => onPageChange(totalPages - 1)}
-          disabled={pageIndex === totalPages - 1}
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 5,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color:
-              pageIndex === totalPages - 1
-                ? "rgba(240,237,232,0.15)"
-                : "rgba(240,237,232,0.6)",
-            cursor: pageIndex === totalPages - 1 ? "not-allowed" : "pointer",
-            fontSize: 9,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          ⟩⟩
-        </button>
+              cursor: btn.disabled ? "not-allowed" : "pointer",
+              fontSize: btn.size,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {btn.label}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
+// ─── Main Editor ──────────────────────────────────────────────────────────────
 export default function TemplifyEditor() {
   const [mounted, setMounted] = useState(false);
   const {
@@ -2148,6 +2702,7 @@ export default function TemplifyEditor() {
     },
     [setObjectsRaw],
   );
+
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [clipboard, setClipboard] = useState<CanvasObject | null>(null);
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({
@@ -2156,8 +2711,6 @@ export default function TemplifyEditor() {
   });
   const [activePreset, setActivePreset] = useState("16:9 HD");
   const [showSizePicker, setShowSizePicker] = useState(false);
-  // ── Page-based navigation (replaces rowIndex) ──
-  // pageIndex = which page (group of batchSize rows) we're previewing
   const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -2172,8 +2725,18 @@ export default function TemplifyEditor() {
   const [dataLoading, setDataLoading] = useState(false);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
   const [batchSize, setBatchSize] = useState<BatchSize>(1);
-  const nextZ = useRef(100);
 
+  // ── Data images state ──
+  const [dataImages, setDataImages] = useState<DataImageMap>({});
+  const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(null);
+  const [dataImagesLoading, setDataImagesLoading] = useState(false);
+
+  // ── Auto-detected image columns ──
+  const [autoDetectedImageColumns, setAutoDetectedImageColumns] = useState<
+    string[]
+  >([]);
+
+  const nextZ = useRef(100);
   const MAX_W = 840,
     MAX_H = 560;
   const scale = Math.min(
@@ -2182,25 +2745,16 @@ export default function TemplifyEditor() {
     MAX_H / canvasSize.height,
   );
 
-  // ── Derived values ──
-  // totalPages = how many pages given current batch size
   const totalPages = rows.length > 0 ? Math.ceil(rows.length / batchSize) : 0;
-  // The absolute row index of the FIRST row on the current preview page
   const previewRowStart = pageIndex * batchSize;
-  // The row shown in the canvas preview (always first row of the current page)
   const currentRow = useMemo(() => {
     if (rows.length === 0) return null;
-    const idx = Math.min(previewRowStart, rows.length - 1);
-    return rows[idx];
+    return rows[Math.min(previewRowStart, rows.length - 1)];
   }, [rows, previewRowStart]);
 
-  // When batchSize changes, clamp pageIndex so we don't go out of bounds
   useEffect(() => {
-    if (totalPages > 0 && pageIndex >= totalPages) {
-      setPageIndex(totalPages - 1);
-    }
+    if (totalPages > 0 && pageIndex >= totalPages) setPageIndex(totalPages - 1);
   }, [batchSize, totalPages, pageIndex]);
-
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -2349,6 +2903,46 @@ export default function TemplifyEditor() {
     return () => window.removeEventListener("keydown", dn, { capture: true });
   }, []);
 
+  // ── addDataPhotoObject: places a data-image placeholder on canvas ──────────
+  const addDataPhotoObjectRef = useRef<(column: string) => void>(() => {});
+
+  const addDataPhotoObject = useCallback(
+    (column: string) => {
+      const W = Math.round(canvasSize.width * 0.3);
+      const H = Math.round(W * 1.2);
+      const existing = objectsRef.current.filter(
+        (o) =>
+          o.kind === "image" &&
+          (o as ImageObject).isDataImage &&
+          (o as ImageObject).dataImageColumn === column,
+      );
+      const obj: ImageObject = {
+        kind: "image",
+        id: Date.now(),
+        src: PLACEHOLDER_SRC,
+        name: `Photo · ${column}`,
+        x: Math.round((canvasSize.width - W) / 2) + existing.length * 20,
+        y: Math.round((canvasSize.height - H) / 2) + existing.length * 20,
+        width: W,
+        height: H,
+        zIndex: nextZ.current++,
+        opacity: 1,
+        shadow: { ...DEFAULT_SHADOW },
+        isBackground: false,
+        naturalWidth: W,
+        naturalHeight: H,
+        isDataImage: true,
+        dataImageColumn: column,
+      };
+      setObjects((p) => [...p, obj]);
+      setSelectedId(obj.id);
+      setRightTab("style");
+    },
+    [canvasSize, setObjects],
+  );
+
+  addDataPhotoObjectRef.current = addDataPhotoObject;
+
   const handleDataFile = async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!["xlsx", "xls", "csv", "tsv"].includes(ext || "")) {
@@ -2364,20 +2958,74 @@ export default function TemplifyEditor() {
         setDataLoading(false);
         return;
       }
+
+      // ── Auto-detect image columns ──────────────────────────────────────────
+      const imgCols = detectImageColumns(rd, cols);
+      setAutoDetectedImageColumns(imgCols);
+
       setColumns(cols);
       setRows(rd);
       setDataFileName(file.name);
       setPageIndex(0);
+
+      // Remove stale text fields
       setObjects((p) =>
         p.filter(
           (o) => o.kind !== "field" || cols.includes((o as TextField).column),
         ),
       );
+
+      // ── Auto-place a data photo object for each detected image column ──────
+      // We defer to next tick so objectsRef is current, placing them side-by-side.
+      if (imgCols.length > 0) {
+        setTimeout(() => {
+          imgCols.forEach((col) => {
+            // Only place if no object already exists for this column
+            const alreadyPlaced = objectsRef.current.some(
+              (o) =>
+                o.kind === "image" &&
+                (o as ImageObject).isDataImage &&
+                (o as ImageObject).dataImageColumn === col,
+            );
+            if (!alreadyPlaced) addDataPhotoObjectRef.current(col);
+          });
+        }, 0);
+      }
     } catch (err: any) {
       setDataError(`Parse error: ${err?.message || "Unknown"}`);
     }
     setDataLoading(false);
   };
+
+  // ── Data images upload ─────────────────────────────────────────────────────
+  const handleDataImagesUpload = useCallback(async (files: FileList) => {
+    const imageFiles = Array.from(files).filter(
+      (f) => IMAGE_EXTS.test(f.name) || f.type.startsWith("image/"),
+    );
+    if (!imageFiles.length) return;
+    setDataImagesLoading(true);
+    const map: DataImageMap = {};
+    await Promise.all(
+      imageFiles.map(
+        (f) =>
+          new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const src = e.target?.result as string;
+              map[f.name.toLowerCase()] = src;
+              map[normalizeImageKey(f.name)] = src;
+              resolve();
+            };
+            reader.readAsDataURL(f);
+          }),
+      ),
+    );
+    setDataImages(map);
+    setDataImagesLabel(
+      `${imageFiles.length} photo${imageFiles.length === 1 ? "" : "s"}`,
+    );
+    setDataImagesLoading(false);
+  }, []);
 
   const addImage = useCallback(
     (src: string, name: string, nw: number, nh: number) => {
@@ -2400,6 +3048,8 @@ export default function TemplifyEditor() {
         isBackground: false,
         naturalWidth: nw,
         naturalHeight: nh,
+        isDataImage: false,
+        dataImageColumn: "",
       };
       setObjects((p) => [...p, obj]);
       setSelectedId(obj.id);
@@ -2445,6 +3095,7 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
+
   const handleResize = useCallback(
     (id: number, patch: Partial<CanvasObject>, live: boolean) => {
       setObjects(
@@ -2457,6 +3108,7 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
+
   const deleteObj = useCallback(
     (id: number) => {
       setObjects((p) => p.filter((o) => o.id !== id));
@@ -2464,6 +3116,7 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
+
   const updateObj = useCallback(
     (key: string, value: unknown) => {
       const sid = selectedIdRef.current;
@@ -2580,6 +3233,7 @@ export default function TemplifyEditor() {
         canvasSize,
         rows,
         batchSize,
+        dataImages,
         (pct) => setExportProgress(pct),
       );
     } catch (err: any) {
@@ -2587,7 +3241,15 @@ export default function TemplifyEditor() {
     } finally {
       setTimeout(() => setExportProgress(null), 800);
     }
-  }, [exportFormat, objects, canvasSize, rows, batchSize, exportProgress]);
+  }, [
+    exportFormat,
+    objects,
+    canvasSize,
+    rows,
+    batchSize,
+    dataImages,
+    exportProgress,
+  ]);
 
   if (!mounted) return null;
 
@@ -2613,6 +3275,7 @@ export default function TemplifyEditor() {
         button{font-family:'DM Sans',sans-serif;}
         @keyframes spin{to{transform:rotate(360deg)}} @keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
         @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        @keyframes popIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
       `}</style>
 
       {exportProgress !== null && (
@@ -2699,7 +3362,7 @@ export default function TemplifyEditor() {
         </div>
       )}
 
-      {/* ─── Header ─────────────────────────────────────────────── */}
+      {/* ─── Header ─────────────────────────────────────────────────────── */}
       <header
         style={{
           display: "flex",
@@ -2793,7 +3456,6 @@ export default function TemplifyEditor() {
             </button>
           </div>
         </div>
-
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <button
             onClick={() => setShowSizePicker(true)}
@@ -2817,7 +3479,6 @@ export default function TemplifyEditor() {
               {canvasSize.width}×{canvasSize.height}
             </span>
           </button>
-
           <div style={{ position: "relative" }}>
             <div
               style={{
@@ -2916,7 +3577,7 @@ export default function TemplifyEditor() {
       </header>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* ─── Left panel ─────────────────────────────────────────────── */}
+        {/* ─── Left panel ──────────────────────────────────────────────── */}
         <aside
           style={{
             width: 210,
@@ -2928,6 +3589,7 @@ export default function TemplifyEditor() {
             overflow: "hidden",
           }}
         >
+          {/* Template / Image upload */}
           <div
             style={{
               padding: 12,
@@ -2982,7 +3644,7 @@ export default function TemplifyEditor() {
                     marginBottom: 1,
                   }}
                 >
-                  Upload Image
+                  Upload Template
                 </p>
                 <p style={{ fontSize: 9, color: "rgba(240,237,232,0.25)" }}>
                   or drag & drop
@@ -2997,6 +3659,8 @@ export default function TemplifyEditor() {
               />
             </label>
           </div>
+
+          {/* Data Source */}
           <div
             style={{
               padding: 12,
@@ -3078,6 +3742,41 @@ export default function TemplifyEditor() {
                 <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
                   {rows.length} rows · {columns.length} cols
                 </p>
+                {/* Auto-detection result summary */}
+                {autoDetectedImageColumns.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      padding: "5px 6px",
+                      borderRadius: 6,
+                      background: "rgba(99,179,237,0.06)",
+                      border: "1px solid rgba(99,179,237,0.15)",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 8,
+                        color: "rgba(99,179,237,0.6)",
+                        marginBottom: 3,
+                        fontWeight: 700,
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      ✦ AUTO-DETECTED
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 9,
+                        color: "rgba(99,179,237,0.8)",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {autoDetectedImageColumns.length} photo column
+                      {autoDetectedImageColumns.length > 1 ? "s" : ""} placed on
+                      canvas
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <label
@@ -3159,6 +3858,21 @@ export default function TemplifyEditor() {
               </p>
             )}
           </div>
+
+          {/* Photo Data — upload only, auto-detection badge */}
+          <DataImagesPanel
+            dataImages={dataImages}
+            dataImagesLabel={dataImagesLabel}
+            dataImagesLoading={dataImagesLoading}
+            autoDetectedColumns={autoDetectedImageColumns}
+            onUpload={handleDataImagesUpload}
+            onClear={() => {
+              setDataImages({});
+              setDataImagesLabel(null);
+            }}
+          />
+
+          {/* Text Fields — only non-image columns */}
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
             <p
               style={{
@@ -3184,75 +3898,94 @@ export default function TemplifyEditor() {
               </p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {columns.map((col) => {
-                  const cnt = objects.filter(
-                    (o) =>
-                      o.kind === "field" && (o as TextField).column === col,
-                  ).length;
-                  return (
-                    <button
-                      key={col}
-                      onClick={() => addField(col)}
-                      className="chip"
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "5px 8px",
-                        borderRadius: 7,
-                        fontSize: 10,
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        transition: "all 0.15s",
-                        background:
-                          cnt > 0
-                            ? "rgba(232,255,71,0.05)"
-                            : "rgba(255,255,255,0.02)",
-                        border: `1px solid ${cnt > 0 ? "rgba(232,255,71,0.15)" : "rgba(255,255,255,0.06)"}`,
-                        color: cnt > 0 ? "#e8ff47" : "rgba(240,237,232,0.6)",
-                      }}
-                    >
-                      <span
+                {columns
+                  // Hide auto-detected image columns from text fields list
+                  .filter((col) => !autoDetectedImageColumns.includes(col))
+                  .map((col) => {
+                    const cnt = objects.filter(
+                      (o) =>
+                        o.kind === "field" && (o as TextField).column === col,
+                    ).length;
+                    return (
+                      <button
+                        key={col}
+                        onClick={() => addField(col)}
+                        className="chip"
                         style={{
-                          fontFamily: "monospace",
-                          fontSize: 9,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >{`{{${col}}}`}</span>
-                      <span
-                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "5px 8px",
+                          borderRadius: 7,
+                          fontSize: 10,
+                          fontWeight: 500,
+                          cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
-                          gap: 3,
-                          flexShrink: 0,
+                          justifyContent: "space-between",
+                          transition: "all 0.15s",
+                          background:
+                            cnt > 0
+                              ? "rgba(232,255,71,0.05)"
+                              : "rgba(255,255,255,0.02)",
+                          border: `1px solid ${cnt > 0 ? "rgba(232,255,71,0.15)" : "rgba(255,255,255,0.06)"}`,
+                          color: cnt > 0 ? "#e8ff47" : "rgba(240,237,232,0.6)",
                         }}
                       >
-                        {cnt > 0 && (
-                          <span
-                            style={{
-                              background: "rgba(232,255,71,0.15)",
-                              color: "#e8ff47",
-                              borderRadius: 3,
-                              padding: "0 4px",
-                              fontSize: 8,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {cnt}
-                          </span>
-                        )}
-                        <span style={{ fontSize: 10, opacity: 0.4 }}>+</span>
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: 9,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >{`{{${col}}}`}</span>
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 3,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {cnt > 0 && (
+                            <span
+                              style={{
+                                background: "rgba(232,255,71,0.15)",
+                                color: "#e8ff47",
+                                borderRadius: 3,
+                                padding: "0 4px",
+                                fontSize: 8,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {cnt}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 10, opacity: 0.4 }}>+</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                {/* If all columns are image columns, show a message */}
+                {columns.filter(
+                  (col) => !autoDetectedImageColumns.includes(col),
+                ).length === 0 && (
+                  <p
+                    style={{
+                      fontSize: 10,
+                      color: "rgba(240,237,232,0.2)",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    All columns are photo columns.
+                  </p>
+                )}
               </div>
             )}
           </div>
+
+          {/* Shortcuts */}
           <div
             style={{
               padding: 12,
@@ -3361,6 +4094,11 @@ export default function TemplifyEditor() {
                 onDrag={handleDrag}
                 onResize={handleResize}
                 scale={scale}
+                resolvedSrc={resolveDataImageSrc(
+                  bgImage,
+                  currentRow,
+                  dataImages,
+                )}
               />
             )}
             {objects
@@ -3377,6 +4115,11 @@ export default function TemplifyEditor() {
                     onDrag={handleDrag}
                     onResize={handleResize}
                     scale={scale}
+                    resolvedSrc={resolveDataImageSrc(
+                      obj as ImageObject,
+                      currentRow,
+                      dataImages,
+                    )}
                   />
                 ) : (
                   <TextEl
@@ -3393,8 +4136,6 @@ export default function TemplifyEditor() {
                 ),
               )}
           </div>
-
-          {/* ─── Canvas footer label ─── */}
           <div
             style={{
               position: "absolute",
@@ -3410,8 +4151,6 @@ export default function TemplifyEditor() {
             {canvasSize.width}×{canvasSize.height}px · {activePreset}
             {batchSize > 1 ? ` · ${batchSize}× batch` : ""}
           </div>
-
-          {/* ─── Floating page navigator ─── */}
           <FloatingPageNav
             pageIndex={pageIndex}
             totalPages={totalPages}
@@ -3470,6 +4209,7 @@ export default function TemplifyEditor() {
               </button>
             ))}
           </div>
+
           <div style={{ flex: 1, overflowY: "auto" }}>
             {rightTab === "layers" && (
               <div style={{ padding: 12 }}>
@@ -3530,6 +4270,7 @@ export default function TemplifyEditor() {
                 </p>
               </div>
             )}
+
             {rightTab === "style" && (
               <div
                 style={{
@@ -3575,10 +4316,14 @@ export default function TemplifyEditor() {
                         }}
                       >
                         {selectedObj.kind === "image"
-                          ? `🖼 ${(selectedObj as ImageObject).name}`
+                          ? (selectedObj as ImageObject).isDataImage
+                            ? `📷 ${(selectedObj as ImageObject).dataImageColumn || "Data Photo"}`
+                            : `🖼 ${(selectedObj as ImageObject).name}`
                           : `T  {{${(selectedObj as TextField).column}}}`}
                       </p>
                     </div>
+
+                    {/* Size & Position */}
                     <div>
                       <SLabel>Size & Position</SLabel>
                       <div
@@ -3629,6 +4374,8 @@ export default function TemplifyEditor() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Layer Order */}
                     <div>
                       <SLabel>Layer Order</SLabel>
                       <div style={{ display: "flex", gap: 5 }}>
@@ -3689,11 +4436,14 @@ export default function TemplifyEditor() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Image-specific */}
                     {selectedObj.kind === "image" &&
                       (() => {
                         const img = selectedObj as ImageObject;
                         return (
                           <>
+                            {/* Background toggle */}
                             <div
                               style={{
                                 padding: "10px",
@@ -3778,6 +4528,17 @@ export default function TemplifyEditor() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Auto-detected photo info — no manual picker */}
+                            {!img.isBackground && img.isDataImage && (
+                              <DataImageInfo
+                                obj={img}
+                                dataImages={dataImages}
+                                currentRow={currentRow}
+                              />
+                            )}
+
+                            {/* Opacity */}
                             <div>
                               <div
                                 style={{
@@ -3815,6 +4576,7 @@ export default function TemplifyEditor() {
                                 }}
                               />
                             </div>
+
                             {!img.isBackground && (
                               <ShadowPanel
                                 shadow={img.shadow}
@@ -3824,6 +4586,8 @@ export default function TemplifyEditor() {
                           </>
                         );
                       })()}
+
+                    {/* TextField-specific */}
                     {selectedObj.kind === "field" &&
                       (() => {
                         const f = selectedObj as TextField;
@@ -4314,6 +5078,7 @@ export default function TemplifyEditor() {
                           </>
                         );
                       })()}
+
                     <button
                       onClick={() => deleteObj(selectedObj.id)}
                       style={{
@@ -4345,7 +5110,7 @@ export default function TemplifyEditor() {
             )}
           </div>
 
-          {/* ─── Current page row preview ─── */}
+          {/* Current page row preview */}
           {currentRow && (
             <div
               style={{
@@ -4401,6 +5166,7 @@ export default function TemplifyEditor() {
           )}
         </aside>
       </div>
+
       {showSizePicker && (
         <SizePicker
           current={canvasSize}
