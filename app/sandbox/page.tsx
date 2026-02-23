@@ -8,7 +8,7 @@ type Shadow = {
   y: number;
   blur: number;
   color: string;
-  thickness: number; // text stroke width (text-shadow layering), 0 = off
+  thickness: number;
 };
 type Border = {
   enabled: boolean;
@@ -52,9 +52,38 @@ type TextField = BaseObj & {
 };
 type CanvasObject = ImageObject | TextField;
 type CanvasSize = { width: number; height: number };
-
-// dataImages: map of normalized-filename → base64 data URL
 type DataImageMap = Record<string, string>;
+
+// ── Canvas style settings ──────────────────────────────────────────────────
+type CanvasStyle = {
+  background: string;
+  showGrid: boolean;
+  gridSize: number;
+  gridColor: string;
+  showRulers: boolean;
+  shadow: boolean;
+  shadowIntensity: number;
+  borderRadius: number;
+  borderEnabled: boolean;
+  borderColor: string;
+  borderWidth: number;
+  borderStyle: "solid" | "dashed" | "dotted";
+};
+
+const DEFAULT_CANVAS_STYLE: CanvasStyle = {
+  background: "#ffffff",
+  showGrid: false,
+  gridSize: 20,
+  gridColor: "rgba(0,0,0,0.06)",
+  showRulers: false,
+  shadow: true,
+  shadowIntensity: 90,
+  borderRadius: 0,
+  borderEnabled: false,
+  borderColor: "#e8ff47",
+  borderWidth: 2,
+  borderStyle: "solid",
+};
 
 const DEFAULT_SHADOW: Shadow = {
   enabled: false,
@@ -152,7 +181,6 @@ function batchGrid(count: number): { cols: number; rows: number } {
   return { cols: 1, rows: 1 };
 }
 
-// ─── Image extension matcher ──────────────────────────────────────────────────
 const IMAGE_EXTS = /\.(jpe?g|png|gif|webp|bmp|svg|tiff?|avif|ico)$/i;
 
 function normalizeImageKey(filename: string): string {
@@ -162,10 +190,6 @@ function normalizeImageKey(filename: string): string {
     .trim();
 }
 
-// ─── Auto-detect columns whose values look like image filenames ───────────────
-// Scans up to `sampleSize` rows and returns columns where ≥ `threshold`
-// fraction of non-empty values match IMAGE_EXTS or look like bare basenames
-// that could be image filenames (alphanumeric / underscore / dash, no spaces).
 function detectImageColumns(
   rows: RowData[],
   columns: string[],
@@ -173,28 +197,21 @@ function detectImageColumns(
   threshold = 0.5,
 ): string[] {
   if (!rows.length || !columns.length) return [];
-
   const sample = rows.slice(0, sampleSize);
   const detected: string[] = [];
-
   for (const col of columns) {
     const values = sample
       .map((r) => (r[col] ?? "").trim())
       .filter((v) => v.length > 0);
-
     if (!values.length) continue;
-
     const matchCount = values.filter((v) => {
-      // Direct extension match
       if (IMAGE_EXTS.test(v)) return true;
-      // Looks like a bare image basename: short, no spaces, looks like a name
       if (
         v.length < 80 &&
         !/\s/.test(v) &&
         /^[a-zA-Z0-9_\-().]+$/.test(v) &&
         v.length >= 2
       ) {
-        // Extra signal: column name hints at photo/image/photo/avatar/picture/headshot
         const colLower = col.toLowerCase();
         if (
           colLower.includes("photo") ||
@@ -210,12 +227,8 @@ function detectImageColumns(
       }
       return false;
     }).length;
-
-    if (matchCount / values.length >= threshold) {
-      detected.push(col);
-    }
+    if (matchCount / values.length >= threshold) detected.push(col);
   }
-
   return detected;
 }
 
@@ -361,12 +374,9 @@ function shrinkFontSize(
 const shadowCSS = (s: Shadow) =>
   s.enabled ? `${s.x}px ${s.y}px ${s.blur}px ${s.color}` : "none";
 
-// Generates a CSS text-shadow value that includes optional thickness (stroke simulation)
-// by stacking many shadows in a ring pattern around the text.
 function textShadowCSS(s: Shadow): string {
   if (!s.enabled && (!s.thickness || s.thickness === 0)) return "none";
   const parts: string[] = [];
-  // Stroke ring: layered shadows at all angles
   if (s.thickness && s.thickness > 0) {
     const t = s.thickness;
     const steps = Math.max(8, Math.round(t * 6));
@@ -377,10 +387,7 @@ function textShadowCSS(s: Shadow): string {
       parts.push(`${tx}px ${ty}px 0px ${s.color}`);
     }
   }
-  // Regular directional shadow
-  if (s.enabled) {
-    parts.push(`${s.x}px ${s.y}px ${s.blur}px ${s.color}`);
-  }
+  if (s.enabled) parts.push(`${s.x}px ${s.y}px ${s.blur}px ${s.color}`);
   return parts.length ? parts.join(", ") : "none";
 }
 
@@ -576,7 +583,10 @@ function useDragResize(
   return { handleMouseDown, handleResizeDown };
 }
 
-// ─── ImageEl ─────────────────────────────────────────────────────────────────
+const PLACEHOLDER_SRC = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#e0e0e0"/><rect width="40" height="40" fill="#c0c0c0"/><rect x="40" y="40" width="40" height="40" fill="#c0c0c0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#999">no photo</text></svg>`,
+)}`;
+
 function ImageEl({
   obj,
   selected,
@@ -601,7 +611,6 @@ function ImageEl({
     onResize,
     scale,
   );
-
   if (obj.isBackground) {
     return (
       <div
@@ -650,14 +659,10 @@ function ImageEl({
       </div>
     );
   }
-
-  // Outer wrapper: overflow visible so handles (-5px outside) are never clipped.
-  // Inner visual div: overflow hidden for borderRadius clipping + border.
   const borderVal = obj.border?.enabled
     ? `${obj.border.width}px ${obj.border.style} ${obj.border.color}`
     : "none";
   const radiusVal = obj.borderRadius ?? 0;
-
   return (
     <div
       onMouseDown={handleMouseDown}
@@ -678,7 +683,6 @@ function ImageEl({
           : "none",
       }}
     >
-      {/* Inner visual div — clips image/placeholder to borderRadius */}
       <div
         style={{
           position: "absolute",
@@ -744,7 +748,6 @@ function ImageEl({
           />
         )}
       </div>
-      {/* Border overlay — rendered above image, respects borderRadius, never clips handles */}
       {obj.border?.enabled && (
         <div
           style={{
@@ -788,7 +791,6 @@ function ImageEl({
   );
 }
 
-// ─── TextEl ───────────────────────────────────────────────────────────────────
 function TextEl({
   obj,
   selected,
@@ -876,7 +878,6 @@ function TextEl({
           pointerEvents: "none",
         }}
       >
-        {/* Outer span: display:inline so it shrinks to text width AND height */}
         <span
           style={{
             display: "inline",
@@ -904,7 +905,6 @@ function TextEl({
   );
 }
 
-// ─── FontPicker ───────────────────────────────────────────────────────────────
 function FontPicker({
   value,
   onChange,
@@ -1122,7 +1122,6 @@ function FontPicker({
   );
 }
 
-// ─── ShadowPanel ─────────────────────────────────────────────────────────────
 function ShadowPanel({
   shadow,
   onChange,
@@ -1154,34 +1153,10 @@ function ShadowPanel({
         >
           Shadow
         </span>
-        <button
-          onClick={() => set("enabled", !shadow.enabled)}
-          style={{
-            width: 30,
-            height: 16,
-            borderRadius: 8,
-            background: shadow.enabled ? "#e8ff47" : "rgba(255,255,255,0.1)",
-            border: "none",
-            cursor: "pointer",
-            position: "relative",
-            transition: "background 0.2s",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              top: 2,
-              left: shadow.enabled ? 14 : 2,
-              width: 12,
-              height: 12,
-              borderRadius: "50%",
-              background: shadow.enabled ? "#0a0a10" : "white",
-              transition: "left 0.15s",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-            }}
-          />
-        </button>
+        <ToggleSwitch
+          value={shadow.enabled}
+          onChange={(v) => set("enabled", v)}
+        />
       </div>
       {shadow.enabled && (
         <div
@@ -1347,7 +1322,6 @@ function ShadowPanel({
   );
 }
 
-// ─── BorderPanel ─────────────────────────────────────────────────────────────
 function BorderPanel({
   border,
   onChange,
@@ -1385,34 +1359,10 @@ function BorderPanel({
         >
           {label}
         </span>
-        <button
-          onClick={() => set("enabled", !border.enabled)}
-          style={{
-            width: 30,
-            height: 16,
-            borderRadius: 8,
-            background: border.enabled ? "#e8ff47" : "rgba(255,255,255,0.1)",
-            border: "none",
-            cursor: "pointer",
-            position: "relative",
-            transition: "background 0.2s",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            style={{
-              position: "absolute",
-              top: 2,
-              left: border.enabled ? 14 : 2,
-              width: 12,
-              height: 12,
-              borderRadius: "50%",
-              background: border.enabled ? "#0a0a10" : "white",
-              transition: "left 0.15s",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-            }}
-          />
-        </button>
+        <ToggleSwitch
+          value={border.enabled}
+          onChange={(v) => set("enabled", v)}
+        />
       </div>
       {border.enabled && (
         <div
@@ -1428,7 +1378,6 @@ function BorderPanel({
             overflow: "hidden",
           }}
         >
-          {/* Color row */}
           <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
             <div
               style={{
@@ -1471,7 +1420,6 @@ function BorderPanel({
               }}
             />
           </div>
-          {/* Width */}
           <div
             style={{
               display: "flex",
@@ -1516,7 +1464,6 @@ function BorderPanel({
               {border.width}px
             </span>
           </div>
-          {/* Style pills — 2×2 grid to avoid overflow */}
           <div
             style={{
               display: "grid",
@@ -1542,19 +1489,14 @@ function BorderPanel({
                       : "rgba(255,255,255,0.05)",
                   color:
                     border.style === s ? "#e8ff47" : "rgba(240,237,232,0.4)",
-                  transition: "all 0.12s",
                   textTransform: "uppercase" as const,
                   letterSpacing: "0.04em",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
               >
                 {s}
               </button>
             ))}
           </div>
-          {/* Live preview */}
           <div
             style={{
               height: 24,
@@ -1579,13 +1521,546 @@ function BorderPanel({
   );
 }
 
-// ─── Placeholder SVG ──────────────────────────────────────────────────────────
-const PLACEHOLDER_SRC = `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#e0e0e0"/><rect width="40" height="40" fill="#c0c0c0"/><rect x="40" y="40" width="40" height="40" fill="#c0c0c0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#999">no photo</text></svg>`,
-)}`;
+// ── Reusable ToggleSwitch ──────────────────────────────────────────────────
+function ToggleSwitch({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      style={{
+        width: 30,
+        height: 16,
+        borderRadius: 8,
+        background: value ? "#e8ff47" : "rgba(255,255,255,0.1)",
+        border: "none",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background 0.2s",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 2,
+          left: value ? 14 : 2,
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          background: value ? "#0a0a10" : "white",
+          transition: "left 0.15s",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+        }}
+      />
+    </button>
+  );
+}
 
-// ─── DataImagesPanel ──────────────────────────────────────────────────────────
-// Now only handles photo upload + shows auto-detected columns as read-only info.
+// ── Canvas Style Panel ─────────────────────────────────────────────────────
+function CanvasStylePanel({
+  style,
+  onChange,
+}: {
+  style: CanvasStyle;
+  onChange: (s: CanvasStyle) => void;
+}) {
+  const set = (k: keyof CanvasStyle, v: any) => onChange({ ...style, [k]: v });
+  const PRESET_BG_COLORS = [
+    "#ffffff",
+    "#f8f8f0",
+    "#1a1a2e",
+    "#0a0a10",
+    "#fef9ef",
+    "#e8f4f8",
+    "#fff0f0",
+    "#f0fff0",
+    "#2d2d2d",
+    "#000000",
+  ];
+  const CANVAS_BORDER_STYLES = ["solid", "dashed", "dotted"] as const;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        padding: 12,
+        minWidth: 0,
+      }}
+    >
+      {/* Background Color */}
+      <div>
+        <SLabel>Background</SLabel>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <div
+            style={{
+              position: "relative",
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.12)",
+              flexShrink: 0,
+            }}
+          >
+            <input
+              type="color"
+              value={style.background}
+              onChange={(e) => set("background", e.target.value)}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                cursor: "pointer",
+                transform: "scale(1.5)",
+              }}
+            />
+          </div>
+          <input
+            value={style.background}
+            onChange={(e) => set("background", e.target.value)}
+            style={{
+              flex: 1,
+              padding: "5px 7px",
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "#f0ede8",
+              fontSize: 11,
+              fontFamily: "monospace",
+              outline: "none",
+            }}
+          />
+        </div>
+        {/* Color presets */}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {PRESET_BG_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => set("background", c)}
+              title={c}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 4,
+                background: c,
+                border:
+                  style.background === c
+                    ? "2px solid #e8ff47"
+                    : "1px solid rgba(255,255,255,0.15)",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "transform 0.1s",
+                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform = "scale(1.15)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")
+              }
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Shadow */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 8,
+          }}
+        >
+          <SLabel>Drop Shadow</SLabel>
+          <ToggleSwitch
+            value={style.shadow}
+            onChange={(v) => set("shadow", v)}
+          />
+        </div>
+        {style.shadow && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span
+              style={{
+                fontSize: 9,
+                color: "rgba(240,237,232,0.3)",
+                width: 30,
+                flexShrink: 0,
+              }}
+            >
+              Depth
+            </span>
+            <input
+              type="range"
+              min={10}
+              max={100}
+              value={style.shadowIntensity}
+              onChange={(e) => set("shadowIntensity", Number(e.target.value))}
+              style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
+            />
+            <span
+              style={{
+                fontSize: 9,
+                color: "#e8ff47",
+                width: 28,
+                textAlign: "right",
+                flexShrink: 0,
+              }}
+            >
+              {style.shadowIntensity}%
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Border Radius */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: 5,
+          }}
+        >
+          <SLabel>Corner Radius</SLabel>
+          <span style={{ fontSize: 9, color: "#e8ff47", fontWeight: 700 }}>
+            {style.borderRadius}px
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={60}
+          value={style.borderRadius}
+          onChange={(e) => set("borderRadius", Number(e.target.value))}
+          style={{ width: "100%", height: "3px", accentColor: "#e8ff47" }}
+        />
+        <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+          {[0, 4, 8, 16, 24].map((r) => (
+            <button
+              key={r}
+              onClick={() => set("borderRadius", r)}
+              style={{
+                flex: 1,
+                padding: "5px 2px",
+                borderRadius: r > 4 ? r : 4,
+                fontSize: 9,
+                cursor: "pointer",
+                border: "none",
+                background:
+                  style.borderRadius === r
+                    ? "rgba(232,255,71,0.15)"
+                    : "rgba(255,255,255,0.05)",
+                color:
+                  style.borderRadius === r
+                    ? "#e8ff47"
+                    : "rgba(240,237,232,0.4)",
+                fontWeight: 600,
+              }}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Canvas Border */}
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 6,
+          }}
+        >
+          <SLabel>Canvas Border</SLabel>
+          <ToggleSwitch
+            value={style.borderEnabled}
+            onChange={(v) => set("borderEnabled", v)}
+          />
+        </div>
+        {style.borderEnabled && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 7,
+              padding: "8px",
+              borderRadius: 7,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <div style={{ display: "flex", gap: 6 }}>
+              <div
+                style={{
+                  position: "relative",
+                  width: 24,
+                  height: 24,
+                  borderRadius: 5,
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  flexShrink: 0,
+                }}
+              >
+                <input
+                  type="color"
+                  value={style.borderColor}
+                  onChange={(e) => set("borderColor", e.target.value)}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    transform: "scale(1.5)",
+                  }}
+                />
+              </div>
+              <input
+                value={style.borderColor}
+                onChange={(e) => set("borderColor", e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "3px 6px",
+                  borderRadius: 5,
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#f0ede8",
+                  fontSize: 10,
+                  fontFamily: "monospace",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "rgba(240,237,232,0.3)",
+                  width: 24,
+                  flexShrink: 0,
+                }}
+              >
+                W
+              </span>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                value={style.borderWidth}
+                onChange={(e) => set("borderWidth", Number(e.target.value))}
+                style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
+              />
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "#e8ff47",
+                  width: 26,
+                  textAlign: "right",
+                  flexShrink: 0,
+                }}
+              >
+                {style.borderWidth}px
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 3 }}>
+              {CANVAS_BORDER_STYLES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => set("borderStyle", s)}
+                  style={{
+                    flex: 1,
+                    padding: "3px 0",
+                    borderRadius: 4,
+                    fontSize: 8,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "none",
+                    background:
+                      style.borderStyle === s
+                        ? "rgba(232,255,71,0.15)"
+                        : "rgba(255,255,255,0.05)",
+                    color:
+                      style.borderStyle === s
+                        ? "#e8ff47"
+                        : "rgba(240,237,232,0.4)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Grid */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: style.showGrid ? 8 : 0,
+          }}
+        >
+          <SLabel>Grid Overlay</SLabel>
+          <ToggleSwitch
+            value={style.showGrid}
+            onChange={(v) => set("showGrid", v)}
+          />
+        </div>
+        {style.showGrid && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 7,
+              padding: "8px",
+              borderRadius: 7,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "rgba(240,237,232,0.3)",
+                  width: 24,
+                  flexShrink: 0,
+                }}
+              >
+                Size
+              </span>
+              <input
+                type="range"
+                min={5}
+                max={80}
+                value={style.gridSize}
+                onChange={(e) => set("gridSize", Number(e.target.value))}
+                style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
+              />
+              <span
+                style={{
+                  fontSize: 9,
+                  color: "#e8ff47",
+                  width: 26,
+                  textAlign: "right",
+                  flexShrink: 0,
+                }}
+              >
+                {style.gridSize}px
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <div
+                style={{
+                  position: "relative",
+                  width: 24,
+                  height: 24,
+                  borderRadius: 5,
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  flexShrink: 0,
+                }}
+              >
+                <input
+                  type="color"
+                  value={
+                    style.gridColor.startsWith("r")
+                      ? "#000000"
+                      : style.gridColor
+                  }
+                  onChange={(e) => set("gridColor", e.target.value + "30")}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    transform: "scale(1.5)",
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 3 }}>
+                {[
+                  "rgba(0,0,0,0.06)",
+                  "rgba(0,0,0,0.12)",
+                  "rgba(255,255,255,0.08)",
+                  "rgba(99,179,237,0.12)",
+                  "rgba(232,255,71,0.1)",
+                ].map((c, i) => (
+                  <button
+                    key={i}
+                    onClick={() => set("gridColor", c)}
+                    title="Grid color preset"
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 4,
+                      background:
+                        c === "rgba(0,0,0,0.06)" || c === "rgba(0,0,0,0.12)"
+                          ? "#888"
+                          : c.includes("255,255,255")
+                            ? "#444"
+                            : c.includes("99,179")
+                              ? "#63b3ed"
+                              : "#e8ff47",
+                      border:
+                        style.gridColor === c
+                          ? "2px solid #e8ff47"
+                          : "1px solid rgba(255,255,255,0.12)",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      opacity: 0.7,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Reset button */}
+      <button
+        onClick={() => onChange(DEFAULT_CANVAS_STYLE)}
+        style={{
+          width: "100%",
+          padding: "7px 0",
+          borderRadius: 7,
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: "pointer",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          color: "rgba(240,237,232,0.45)",
+          transition: "all 0.15s",
+        }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background = "rgba(255,255,255,0.08)")
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.background = "rgba(255,255,255,0.04)")
+        }
+      >
+        ↺ Reset Canvas Style
+      </button>
+    </div>
+  );
+}
+
 function DataImagesPanel({
   dataImages,
   dataImagesLabel,
@@ -1607,8 +2082,6 @@ function DataImagesPanel({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const imageCount = Object.keys(dataImages).length / 2;
-  const hasPhotos = imageCount > 0;
-
   return (
     <div
       style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
@@ -1625,7 +2098,6 @@ function DataImagesPanel({
       >
         Photo Data
       </p>
-
       {dataImagesLabel ? (
         <div
           style={{
@@ -1700,7 +2172,6 @@ function DataImagesPanel({
                   cursor: "pointer",
                   fontSize: 11,
                 }}
-                title="Clear"
               >
                 ✕
               </button>
@@ -1730,7 +2201,6 @@ function DataImagesPanel({
             padding: "12px 10px",
             borderRadius: 9,
             cursor: "pointer",
-            transition: "all 0.2s",
             background: dragOver
               ? "rgba(99,179,237,0.08)"
               : "rgba(255,255,255,0.02)",
@@ -1775,8 +2245,6 @@ function DataImagesPanel({
           />
         </label>
       )}
-
-      {/* Auto-detected photo column buttons — re-addable like text fields */}
       {autoDetectedColumns.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <p
@@ -1814,7 +2282,6 @@ function DataImagesPanel({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    transition: "all 0.15s",
                     background:
                       cnt > 0
                         ? "rgba(99,179,237,0.08)"
@@ -1878,7 +2345,6 @@ function DataImagesPanel({
   );
 }
 
-// ─── DataImageInfo (right panel — read-only column badge, no picker) ──────────
 function DataImageInfo({
   obj,
   dataImages,
@@ -1891,7 +2357,6 @@ function DataImageInfo({
   const previewSrc = resolveDataImageSrc(obj, currentRow, dataImages);
   const hasMatch =
     previewSrc && previewSrc !== PLACEHOLDER_SRC && previewSrc !== obj.src;
-
   return (
     <div
       style={{
@@ -1904,7 +2369,6 @@ function DataImageInfo({
         gap: 8,
       }}
     >
-      {/* Column badge */}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 10, color: "rgba(240,237,232,0.45)" }}>
           Photo column
@@ -1938,8 +2402,6 @@ function DataImageInfo({
           AUTO
         </span>
       </div>
-
-      {/* Live match preview */}
       {obj.dataImageColumn && (
         <div
           style={{
@@ -2038,27 +2500,10 @@ function DataImageInfo({
           )}
         </div>
       )}
-
-      <p
-        style={{
-          fontSize: 9,
-          color: "rgba(240,237,232,0.22)",
-          lineHeight: 1.5,
-        }}
-      >
-        Column auto-detected from your data. Value{" "}
-        <span style={{ color: "#63b3ed", fontFamily: "monospace" }}>john</span>{" "}
-        matches{" "}
-        <span style={{ color: "#63b3ed", fontFamily: "monospace" }}>
-          john.jpg
-        </span>
-        , etc.
-      </p>
     </div>
   );
 }
 
-// ─── SizePicker ───────────────────────────────────────────────────────────────
 function SizePicker({
   current,
   onSelect,
@@ -2337,34 +2782,7 @@ function Toggle({
       <span style={{ fontSize: 11, color: "rgba(240,237,232,0.55)" }}>
         {label}
       </span>
-      <button
-        onClick={() => onChange(!value)}
-        style={{
-          width: 30,
-          height: 16,
-          borderRadius: 8,
-          background: value ? "#e8ff47" : "rgba(255,255,255,0.1)",
-          border: "none",
-          cursor: "pointer",
-          position: "relative",
-          transition: "background 0.2s",
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 2,
-            left: value ? 14 : 2,
-            width: 12,
-            height: 12,
-            borderRadius: "50%",
-            background: value ? "#0a0a10" : "white",
-            transition: "left 0.15s",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-          }}
-        />
-      </button>
+      <ToggleSwitch value={value} onChange={onChange} />
     </div>
   );
 }
@@ -2448,7 +2866,6 @@ function BatchStepper({
           value > 1 ? "rgba(232,255,71,0.08)" : "rgba(255,255,255,0.06)",
         border: `1px solid ${value > 1 ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.12)"}`,
       }}
-      title={`Batch ${value} records per page → ${pageCount} page${pageCount === 1 ? "" : "s"}`}
     >
       <button
         onClick={prev}
@@ -2852,7 +3269,6 @@ function LayerItem({
         borderRadius: 7,
         cursor: "grab",
         userSelect: "none",
-        transition: "all 0.1s",
         background: selected
           ? "rgba(232,255,71,0.07)"
           : "rgba(255,255,255,0.02)",
@@ -3102,6 +3518,141 @@ function FloatingPageNav({
   );
 }
 
+// ── Zoom Controls ──────────────────────────────────────────────────────────
+function ZoomControls({
+  zoom,
+  onZoom,
+  onReset,
+  onFit,
+}: {
+  zoom: number;
+  onZoom: (delta: number) => void;
+  onReset: () => void;
+  onFit: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 20,
+        right: 20,
+        zIndex: 30,
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(12,12,20,0.92)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10,
+          overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        }}
+      >
+        <button
+          onClick={() => onZoom(0.1)}
+          title="Zoom In"
+          style={{
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            color: "rgba(240,237,232,0.7)",
+            cursor: "pointer",
+            fontSize: 16,
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          +
+        </button>
+        <button
+          onClick={onReset}
+          title="Reset Zoom (100%)"
+          style={{
+            width: 32,
+            height: 22,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            color: "#e8ff47",
+            cursor: "pointer",
+            fontSize: 8,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            padding: 0,
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          onClick={() => onZoom(-0.1)}
+          title="Zoom Out"
+          style={{
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            color: "rgba(240,237,232,0.7)",
+            cursor: "pointer",
+            fontSize: 16,
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          −
+        </button>
+        <button
+          onClick={onFit}
+          title="Fit to Screen"
+          style={{
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            color: "rgba(240,237,232,0.5)",
+            cursor: "pointer",
+            fontSize: 11,
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          ⊡
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Editor ──────────────────────────────────────────────────────────────
 export default function TemplifyEditor() {
   const [mounted, setMounted] = useState(false);
@@ -3131,13 +3682,17 @@ export default function TemplifyEditor() {
     width: 960,
     height: 540,
   });
+  const [canvasStyle, setCanvasStyle] =
+    useState<CanvasStyle>(DEFAULT_CANVAS_STYLE);
   const [activePreset, setActivePreset] = useState("16:9 HD");
   const [showSizePicker, setShowSizePicker] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
-  const [rightTab, setRightTab] = useState<"layers" | "style">("layers");
+  const [rightTab, setRightTab] = useState<"layers" | "style" | "canvas">(
+    "layers",
+  );
   const [imgDragOver, setImgDragOver] = useState(false);
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
@@ -3147,25 +3702,22 @@ export default function TemplifyEditor() {
   const [dataLoading, setDataLoading] = useState(false);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
   const [batchSize, setBatchSize] = useState<BatchSize>(1);
-
-  // ── Data images state ──
   const [dataImages, setDataImages] = useState<DataImageMap>({});
   const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(null);
   const [dataImagesLoading, setDataImagesLoading] = useState(false);
-
-  // ── Auto-detected image columns ──
   const [autoDetectedImageColumns, setAutoDetectedImageColumns] = useState<
     string[]
   >([]);
 
+  // ── Zoom & Pan state ──────────────────────────────────────────────────────
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
+
   const nextZ = useRef(100);
-  const MAX_W = 840,
-    MAX_H = 560;
-  const scale = Math.min(
-    1,
-    MAX_W / canvasSize.width,
-    MAX_H / canvasSize.height,
-  );
 
   const totalPages = rows.length > 0 ? Math.ceil(rows.length / batchSize) : 0;
   const previewRowStart = pageIndex * batchSize;
@@ -3173,6 +3725,129 @@ export default function TemplifyEditor() {
     if (rows.length === 0) return null;
     return rows[Math.min(previewRowStart, rows.length - 1)];
   }, [rows, previewRowStart]);
+
+  // Fit zoom to viewport
+  const computeFitZoom = useCallback(() => {
+    if (!canvasAreaRef.current) return 1;
+    const rect = canvasAreaRef.current.getBoundingClientRect();
+    const availW = rect.width - 80;
+    const availH = rect.height - 80;
+    return Math.min(1, availW / canvasSize.width, availH / canvasSize.height);
+  }, [canvasSize]);
+
+  const fitToScreen = useCallback(() => {
+    const z = computeFitZoom();
+    setZoom(z);
+    setPanX(0);
+    setPanY(0);
+  }, [computeFitZoom]);
+
+  // Fit on canvas size change or mount
+  useEffect(() => {
+    if (mounted) fitToScreen();
+  }, [canvasSize, mounted]);
+
+  // Mouse wheel zoom on canvas area
+  useEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.08 : -0.08;
+        setZoom((z) => Math.min(4, Math.max(0.1, z + delta)));
+      } else {
+        // Scroll to pan
+        setPanX((p) => p - e.deltaX);
+        setPanY((p) => p - e.deltaY);
+      }
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [mounted]);
+
+  // Middle-mouse or space+drag panning
+  const handleCanvasMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      // Middle mouse or space held
+      if (e.button === 1 || (e as any).spaceHeld) {
+        e.preventDefault();
+        isPanning.current = true;
+        panStart.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
+        const mv = (e: MouseEvent) => {
+          if (!isPanning.current) return;
+          setPanX(panStart.current.px + (e.clientX - panStart.current.x));
+          setPanY(panStart.current.py + (e.clientY - panStart.current.y));
+        };
+        const up = () => {
+          isPanning.current = false;
+          window.removeEventListener("mousemove", mv);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", mv);
+        window.addEventListener("mouseup", up);
+      }
+    },
+    [panX, panY],
+  );
+
+  // Space key to enable pan mode
+  const spaceHeld = useRef(false);
+  const [panCursor, setPanCursor] = useState(false);
+
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !spaceHeld.current) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        spaceHeld.current = true;
+        setPanCursor(true);
+        e.preventDefault();
+      }
+    };
+    const ku = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        spaceHeld.current = false;
+        setPanCursor(false);
+        isPanning.current = false;
+      }
+    };
+    window.addEventListener("keydown", kd);
+    window.addEventListener("keyup", ku);
+    return () => {
+      window.removeEventListener("keydown", kd);
+      window.removeEventListener("keyup", ku);
+    };
+  }, []);
+
+  const handleSpacePanStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (!spaceHeld.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      isPanning.current = true;
+      panStart.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
+      const mv = (e: MouseEvent) => {
+        if (!isPanning.current) return;
+        setPanX(panStart.current.px + (e.clientX - panStart.current.x));
+        setPanY(panStart.current.py + (e.clientY - panStart.current.y));
+      };
+      const up = () => {
+        isPanning.current = false;
+        window.removeEventListener("mousemove", mv);
+        window.removeEventListener("mouseup", up);
+      };
+      window.addEventListener("mousemove", mv);
+      window.addEventListener("mouseup", up);
+    },
+    [panX, panY],
+  );
+
+  const handleZoomDelta = useCallback((delta: number) => {
+    setZoom((z) =>
+      Math.min(4, Math.max(0.1, Math.round((z + delta) * 10) / 10)),
+    );
+  }, []);
 
   useEffect(() => {
     if (totalPages > 0 && pageIndex >= totalPages) setPageIndex(totalPages - 1);
@@ -3234,6 +3909,21 @@ export default function TemplifyEditor() {
       if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
         redoRef.current();
+        return;
+      }
+      if (ctrl && e.key === "=") {
+        e.preventDefault();
+        setZoom((z) => Math.min(4, z + 0.1));
+        return;
+      }
+      if (ctrl && e.key === "-") {
+        e.preventDefault();
+        setZoom((z) => Math.max(0.1, z - 0.1));
+        return;
+      }
+      if (ctrl && e.key === "0") {
+        e.preventDefault();
+        fitToScreen();
         return;
       }
       const sid = selectedIdRef.current;
@@ -3323,11 +4013,9 @@ export default function TemplifyEditor() {
     };
     window.addEventListener("keydown", dn, { capture: true });
     return () => window.removeEventListener("keydown", dn, { capture: true });
-  }, []);
+  }, [fitToScreen]);
 
-  // ── addDataPhotoObject: places a data-image placeholder on canvas ──────────
   const addDataPhotoObjectRef = useRef<(column: string) => void>(() => {});
-
   const addDataPhotoObject = useCallback(
     (column: string) => {
       const W = Math.round(canvasSize.width * 0.3);
@@ -3364,7 +4052,6 @@ export default function TemplifyEditor() {
     },
     [canvasSize, setObjects],
   );
-
   addDataPhotoObjectRef.current = addDataPhotoObject;
 
   const handleDataFile = async (file: File) => {
@@ -3382,29 +4069,20 @@ export default function TemplifyEditor() {
         setDataLoading(false);
         return;
       }
-
-      // ── Auto-detect image columns ──────────────────────────────────────────
       const imgCols = detectImageColumns(rd, cols);
       setAutoDetectedImageColumns(imgCols);
-
       setColumns(cols);
       setRows(rd);
       setDataFileName(file.name);
       setPageIndex(0);
-
-      // Remove stale text fields
       setObjects((p) =>
         p.filter(
           (o) => o.kind !== "field" || cols.includes((o as TextField).column),
         ),
       );
-
-      // ── Auto-place a data photo object for each detected image column ──────
-      // We defer to next tick so objectsRef is current, placing them side-by-side.
       if (imgCols.length > 0) {
         setTimeout(() => {
           imgCols.forEach((col) => {
-            // Only place if no object already exists for this column
             const alreadyPlaced = objectsRef.current.some(
               (o) =>
                 o.kind === "image" &&
@@ -3421,7 +4099,6 @@ export default function TemplifyEditor() {
     setDataLoading(false);
   };
 
-  // ── Data images upload ─────────────────────────────────────────────────────
   const handleDataImagesUpload = useCallback(async (files: FileList) => {
     const imageFiles = Array.from(files).filter(
       (f) => IMAGE_EXTS.test(f.name) || f.type.startsWith("image/"),
@@ -3486,10 +4163,10 @@ export default function TemplifyEditor() {
 
   const addField = useCallback(
     (column: string) => {
+      const fields = objectsRef.current.filter((o) => o.kind === "field");
       const existing = objectsRef.current.filter(
         (o) => o.kind === "field" && (o as TextField).column === column,
       );
-      const fields = objectsRef.current.filter((o) => o.kind === "field");
       const obj: TextField = {
         kind: "field",
         id: Date.now(),
@@ -3521,7 +4198,6 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
-
   const handleResize = useCallback(
     (id: number, patch: Partial<CanvasObject>, live: boolean) => {
       setObjects(
@@ -3534,7 +4210,6 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
-
   const deleteObj = useCallback(
     (id: number) => {
       setObjects((p) => p.filter((o) => o.id !== id));
@@ -3542,7 +4217,6 @@ export default function TemplifyEditor() {
     },
     [setObjects],
   );
-
   const updateObj = useCallback(
     (key: string, value: unknown) => {
       const sid = selectedIdRef.current;
@@ -3677,6 +4351,17 @@ export default function TemplifyEditor() {
     exportProgress,
   ]);
 
+  // Canvas style derived values
+  const canvasShadow = canvasStyle.shadow
+    ? `0 20px ${Math.round(40 + canvasStyle.shadowIntensity * 0.4)}px rgba(0,0,0,${(canvasStyle.shadowIntensity / 100).toFixed(2)}),0 0 0 1px rgba(255,255,255,0.04)`
+    : "none";
+  const canvasBorder = canvasStyle.borderEnabled
+    ? `${canvasStyle.borderWidth}px ${canvasStyle.borderStyle} ${canvasStyle.borderColor}`
+    : "none";
+  const canvasGridBg = canvasStyle.showGrid
+    ? `linear-gradient(${canvasStyle.gridColor} 1px, transparent 1px), linear-gradient(90deg, ${canvasStyle.gridColor} 1px, transparent 1px)`
+    : undefined;
+
   if (!mounted) return null;
 
   return (
@@ -3755,18 +4440,6 @@ export default function TemplifyEditor() {
                 ? `Exporting… ${exportProgress}%`
                 : "Export complete!"}
             </p>
-            {totalPages > 0 && exportProgress < 100 && (
-              <p
-                style={{
-                  fontSize: 10,
-                  color: "rgba(240,237,232,0.35)",
-                  marginBottom: 10,
-                }}
-              >
-                {totalPages} page{totalPages === 1 ? "" : "s"} · {batchSize}×
-                batch
-              </p>
-            )}
             <div
               style={{
                 height: 4,
@@ -4015,7 +4688,6 @@ export default function TemplifyEditor() {
             overflow: "hidden",
           }}
         >
-          {/* Template / Image upload */}
           <div
             style={{
               padding: 12,
@@ -4053,7 +4725,6 @@ export default function TemplifyEditor() {
                 padding: "12px 10px",
                 borderRadius: 9,
                 cursor: "pointer",
-                transition: "all 0.2s",
                 background: imgDragOver
                   ? "rgba(232,255,71,0.1)"
                   : "rgba(232,255,71,0.03)",
@@ -4086,7 +4757,6 @@ export default function TemplifyEditor() {
             </label>
           </div>
 
-          {/* Data Source */}
           <div
             style={{
               padding: 12,
@@ -4168,7 +4838,6 @@ export default function TemplifyEditor() {
                 <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
                   {rows.length} rows · {columns.length} cols
                 </p>
-                {/* Auto-detection result summary */}
                 {autoDetectedImageColumns.length > 0 && (
                   <div
                     style={{
@@ -4225,7 +4894,6 @@ export default function TemplifyEditor() {
                   padding: "12px 10px",
                   borderRadius: 9,
                   cursor: "pointer",
-                  transition: "all 0.2s",
                   background: xlsxDragOver
                     ? "rgba(232,255,71,0.06)"
                     : "rgba(255,255,255,0.02)",
@@ -4285,7 +4953,6 @@ export default function TemplifyEditor() {
             )}
           </div>
 
-          {/* Photo Data — upload only, auto-detection badge */}
           <DataImagesPanel
             dataImages={dataImages}
             dataImagesLabel={dataImagesLabel}
@@ -4300,7 +4967,6 @@ export default function TemplifyEditor() {
             onPlacePhoto={addDataPhotoObject}
           />
 
-          {/* Text Fields — only non-image columns */}
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
             <p
               style={{
@@ -4327,7 +4993,6 @@ export default function TemplifyEditor() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 {columns
-                  // Hide auto-detected image columns from text fields list
                   .filter((col) => !autoDetectedImageColumns.includes(col))
                   .map((col) => {
                     const cnt = objects.filter(
@@ -4350,7 +5015,6 @@ export default function TemplifyEditor() {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
-                          transition: "all 0.15s",
                           background:
                             cnt > 0
                               ? "rgba(232,255,71,0.05)"
@@ -4395,7 +5059,6 @@ export default function TemplifyEditor() {
                       </button>
                     );
                   })}
-                {/* If all columns are image columns, show a message */}
                 {columns.filter(
                   (col) => !autoDetectedImageColumns.includes(col),
                 ).length === 0 && (
@@ -4413,7 +5076,6 @@ export default function TemplifyEditor() {
             )}
           </div>
 
-          {/* Shortcuts */}
           <div
             style={{
               padding: 12,
@@ -4435,14 +5097,17 @@ export default function TemplifyEditor() {
             <KbdHint keys={["Ctrl", "Z"]} label="Undo" />
             <KbdHint keys={["Ctrl", "Y"]} label="Redo" />
             <KbdHint keys={["Ctrl", "D"]} label="Duplicate" />
-            <KbdHint keys={["Ctrl", "B"]} label="Bold" />
-            <KbdHint keys={["Ctrl", "I"]} label="Italic" />
+            <KbdHint keys={["Ctrl", "="]} label="Zoom In" />
+            <KbdHint keys={["Ctrl", "-"]} label="Zoom Out" />
+            <KbdHint keys={["Ctrl", "0"]} label="Fit View" />
+            <KbdHint keys={["Space", "drag"]} label="Pan" />
             <KbdHint keys={["Del"]} label="Delete" />
           </div>
         </aside>
 
-        {/* ─── Canvas ─────────────────────────────────────────────────── */}
+        {/* ─── Canvas Area ─────────────────────────────────────────────── */}
         <main
+          ref={canvasAreaRef}
           style={{
             flex: 1,
             background: "#07070e",
@@ -4450,11 +5115,18 @@ export default function TemplifyEditor() {
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
-            padding: 36,
             overflow: "hidden",
+            cursor: panCursor ? "grab" : "default",
           }}
-          onClick={() => setSelectedId(null)}
+          onClick={() => {
+            if (!isPanning.current) setSelectedId(null);
+          }}
+          onMouseDown={(e) => {
+            handleCanvasMouseDown(e);
+            handleSpacePanStart(e);
+          }}
         >
+          {/* dot grid background */}
           <div
             style={{
               position: "absolute",
@@ -4465,105 +5137,128 @@ export default function TemplifyEditor() {
               backgroundSize: "22px 22px",
             }}
           />
+
+          {/* Scrollable+zoomable canvas container */}
           <div
             style={{
-              transform: `scale(${scale})`,
-              transformOrigin: "center center",
-              flexShrink: 0,
-              width: canvasSize.width,
-              height: canvasSize.height,
-              position: "relative",
+              position: "absolute",
+              inset: 0,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <div
-              id="templify-canvas"
               style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: bgImage ? 0 : 5,
-                background: "#fff",
-                boxShadow:
-                  "0 20px 80px rgba(0,0,0,0.9),0 0 0 1px rgba(255,255,255,0.04)",
-                overflow: "hidden",
+                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                transformOrigin: "center center",
+                flexShrink: 0,
+                width: canvasSize.width,
+                height: canvasSize.height,
+                position: "relative",
+                transition: isPanning.current ? "none" : undefined,
               }}
             >
-              {objects.length === 0 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    pointerEvents: "none",
-                  }}
-                >
-                  <div style={{ fontSize: 40, opacity: 0.07 }}>🖼</div>
-                  <p
+              {/* The canvas itself */}
+              <div
+                id="templify-canvas"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: canvasStyle.borderRadius,
+                  background: canvasStyle.background,
+                  boxShadow: canvasShadow,
+                  border: canvasBorder,
+                  overflow: "hidden",
+                  backgroundImage: canvasGridBg,
+                  backgroundSize: canvasStyle.showGrid
+                    ? `${canvasStyle.gridSize}px ${canvasStyle.gridSize}px`
+                    : undefined,
+                }}
+              >
+                {objects.length === 0 && (
+                  <div
                     style={{
-                      color: "rgba(10,10,16,0.18)",
-                      fontSize: 12,
-                      fontWeight: 500,
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      pointerEvents: "none",
                     }}
                   >
-                    Upload a template to begin
-                  </p>
-                </div>
-              )}
-            </div>
-            {bgImage && (
-              <ImageEl
-                key={bgImage.id}
-                obj={bgImage}
-                selected={selectedId === bgImage.id}
-                onSelect={setSelectedId}
-                onDrag={handleDrag}
-                onResize={handleResize}
-                scale={scale}
-                resolvedSrc={resolveDataImageSrc(
-                  bgImage,
-                  currentRow,
-                  dataImages,
+                    <div style={{ fontSize: 40, opacity: 0.07 }}>🖼</div>
+                    <p
+                      style={{
+                        color: "rgba(10,10,16,0.18)",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Upload a template to begin
+                    </p>
+                  </div>
                 )}
-              />
-            )}
-            {objects
-              .filter(
-                (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
-              )
-              .map((obj) =>
-                obj.kind === "image" ? (
-                  <ImageEl
-                    key={obj.id}
-                    obj={obj as ImageObject}
-                    selected={selectedId === obj.id}
-                    onSelect={setSelectedId}
-                    onDrag={handleDrag}
-                    onResize={handleResize}
-                    scale={scale}
-                    resolvedSrc={resolveDataImageSrc(
-                      obj as ImageObject,
-                      currentRow,
-                      dataImages,
-                    )}
-                  />
-                ) : (
-                  <TextEl
-                    key={obj.id}
-                    obj={obj as TextField}
-                    selected={selectedId === obj.id}
-                    onSelect={setSelectedId}
-                    onDrag={handleDrag}
-                    onResize={handleResize}
-                    currentRow={currentRow}
-                    rows={rows}
-                    scale={scale}
-                  />
-                ),
+              </div>
+
+              {bgImage && (
+                <ImageEl
+                  key={bgImage.id}
+                  obj={bgImage}
+                  selected={selectedId === bgImage.id}
+                  onSelect={setSelectedId}
+                  onDrag={handleDrag}
+                  onResize={handleResize}
+                  scale={zoom}
+                  resolvedSrc={resolveDataImageSrc(
+                    bgImage,
+                    currentRow,
+                    dataImages,
+                  )}
+                />
               )}
+              {objects
+                .filter(
+                  (o) =>
+                    !(o.kind === "image" && (o as ImageObject).isBackground),
+                )
+                .map((obj) =>
+                  obj.kind === "image" ? (
+                    <ImageEl
+                      key={obj.id}
+                      obj={obj as ImageObject}
+                      selected={selectedId === obj.id}
+                      onSelect={setSelectedId}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      scale={zoom}
+                      resolvedSrc={resolveDataImageSrc(
+                        obj as ImageObject,
+                        currentRow,
+                        dataImages,
+                      )}
+                    />
+                  ) : (
+                    <TextEl
+                      key={obj.id}
+                      obj={obj as TextField}
+                      selected={selectedId === obj.id}
+                      onSelect={setSelectedId}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      currentRow={currentRow}
+                      rows={rows}
+                      scale={zoom}
+                    />
+                  ),
+                )}
+            </div>
           </div>
+
+          {/* Canvas size label */}
           <div
             style={{
               position: "absolute",
@@ -4576,9 +5271,10 @@ export default function TemplifyEditor() {
               whiteSpace: "nowrap",
             }}
           >
-            {canvasSize.width}×{canvasSize.height}px · {activePreset}
-            {batchSize > 1 ? ` · ${batchSize}× batch` : ""}
+            {canvasSize.width}×{canvasSize.height}px · {activePreset} ·{" "}
+            {Math.round(zoom * 100)}%
           </div>
+
           <FloatingPageNav
             pageIndex={pageIndex}
             totalPages={totalPages}
@@ -4589,6 +5285,18 @@ export default function TemplifyEditor() {
               setPageIndex(0);
             }}
             rows={rows}
+          />
+
+          {/* ── Zoom Controls ── */}
+          <ZoomControls
+            zoom={zoom}
+            onZoom={handleZoomDelta}
+            onReset={() => {
+              setZoom(1);
+              setPanX(0);
+              setPanY(0);
+            }}
+            onFit={fitToScreen}
           />
         </main>
 
@@ -4604,6 +5312,7 @@ export default function TemplifyEditor() {
             overflow: "hidden",
           }}
         >
+          {/* Tabs: Layers / Style / Canvas */}
           <div
             style={{
               display: "flex",
@@ -4611,14 +5320,14 @@ export default function TemplifyEditor() {
               flexShrink: 0,
             }}
           >
-            {(["layers", "style"] as const).map((tab) => (
+            {(["layers", "style", "canvas"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
                 style={{
                   flex: 1,
                   padding: "10px 0",
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: 700,
                   textTransform: "uppercase",
                   letterSpacing: "0.07em",
@@ -4633,12 +5342,22 @@ export default function TemplifyEditor() {
                       : "2px solid transparent",
                 }}
               >
-                {tab === "layers" ? "Layers" : "Style"}
+                {tab === "layers"
+                  ? "Layers"
+                  : tab === "style"
+                    ? "Style"
+                    : "Canvas"}
               </button>
             ))}
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
+            {/* ── Canvas Tab ── */}
+            {rightTab === "canvas" && (
+              <CanvasStylePanel style={canvasStyle} onChange={setCanvasStyle} />
+            )}
+
+            {/* ── Layers Tab ── */}
             {rightTab === "layers" && (
               <div style={{ padding: 12 }}>
                 <p
@@ -4699,6 +5418,7 @@ export default function TemplifyEditor() {
               </div>
             )}
 
+            {/* ── Style Tab ── */}
             {rightTab === "style" && (
               <div
                 style={{
@@ -4753,7 +5473,6 @@ export default function TemplifyEditor() {
                       </p>
                     </div>
 
-                    {/* Size & Position */}
                     <div>
                       <SLabel>Size & Position</SLabel>
                       <div
@@ -4805,7 +5524,6 @@ export default function TemplifyEditor() {
                       </div>
                     </div>
 
-                    {/* Layer Order */}
                     <div>
                       <SLabel>Layer Order</SLabel>
                       <div style={{ display: "flex", gap: 5 }}>
@@ -4867,13 +5585,11 @@ export default function TemplifyEditor() {
                       </div>
                     </div>
 
-                    {/* Image-specific */}
                     {selectedObj.kind === "image" &&
                       (() => {
                         const img = selectedObj as ImageObject;
                         return (
                           <>
-                            {/* Background toggle */}
                             <div
                               style={{
                                 padding: "10px",
@@ -4958,8 +5674,6 @@ export default function TemplifyEditor() {
                                 </div>
                               )}
                             </div>
-
-                            {/* Auto-detected photo info — no manual picker */}
                             {!img.isBackground && img.isDataImage && (
                               <DataImageInfo
                                 obj={img}
@@ -4967,8 +5681,6 @@ export default function TemplifyEditor() {
                                 currentRow={currentRow}
                               />
                             )}
-
-                            {/* Opacity */}
                             <div>
                               <div
                                 style={{
@@ -5006,8 +5718,6 @@ export default function TemplifyEditor() {
                                 }}
                               />
                             </div>
-
-                            {/* Border Radius — only for non-background images */}
                             {!img.isBackground && (
                               <div>
                                 <div
@@ -5059,19 +5769,12 @@ export default function TemplifyEditor() {
                                       Math.min(img.width, img.height) / 2,
                                     );
                                     const actualR = r === 50 ? maxR : r;
-                                    const label =
-                                      r === 50
-                                        ? "⬤"
-                                        : r === 0
-                                          ? "▭"
-                                          : String(r);
                                     return (
                                       <button
                                         key={r}
                                         onClick={() =>
                                           updateObj("borderRadius", actualR)
                                         }
-                                        title={r === 50 ? "Circle" : `${r}px`}
                                         style={{
                                           flex: 1,
                                           padding: "5px 2px",
@@ -5091,22 +5794,23 @@ export default function TemplifyEditor() {
                                           fontWeight: 600,
                                         }}
                                       >
-                                        {label}
+                                        {r === 50
+                                          ? "⬤"
+                                          : r === 0
+                                            ? "▭"
+                                            : String(r)}
                                       </button>
                                     );
                                   })}
                                 </div>
                               </div>
                             )}
-
-                            {/* Border */}
                             {!img.isBackground && (
                               <BorderPanel
                                 border={img.border ?? DEFAULT_BORDER}
                                 onChange={(b) => updateObj("border", b)}
                               />
                             )}
-
                             {!img.isBackground && (
                               <ShadowPanel
                                 shadow={img.shadow}
@@ -5117,7 +5821,6 @@ export default function TemplifyEditor() {
                         );
                       })()}
 
-                    {/* TextField-specific */}
                     {selectedObj.kind === "field" &&
                       (() => {
                         const f = selectedObj as TextField;
@@ -5189,7 +5892,6 @@ export default function TemplifyEditor() {
                                           f.columnOffset === v
                                             ? "#0a0a10"
                                             : "rgba(240,237,232,0.45)",
-                                        transition: "all 0.12s",
                                       }}
                                     >
                                       {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
@@ -5279,15 +5981,6 @@ export default function TemplifyEditor() {
                                   accentColor: "#e8ff47",
                                 }}
                               />
-                              <p
-                                style={{
-                                  fontSize: 9,
-                                  color: "rgba(240,237,232,0.22)",
-                                  marginTop: 4,
-                                }}
-                              >
-                                Auto-shrinks if text overflows box
-                              </p>
                             </div>
                             <div>
                               <SLabel>Alignment</SLabel>
@@ -5305,7 +5998,6 @@ export default function TemplifyEditor() {
                                     onClick={() =>
                                       updateObj("textAlign", align)
                                     }
-                                    title={align}
                                     style={{
                                       flex: 1,
                                       padding: "7px 2px",
@@ -5321,142 +6013,44 @@ export default function TemplifyEditor() {
                                       border: `1px solid ${f.textAlign === align ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
                                     }}
                                   >
-                                    {align === "left" && (
-                                      <svg
+                                    <svg
+                                      width="12"
+                                      height="10"
+                                      viewBox="0 0 12 10"
+                                      fill={
+                                        f.textAlign === align
+                                          ? "#e8ff47"
+                                          : "rgba(240,237,232,0.4)"
+                                      }
+                                    >
+                                      <rect
+                                        x="0"
+                                        y="0"
                                         width="12"
-                                        height="10"
-                                        viewBox="0 0 12 10"
-                                        fill={
-                                          f.textAlign === align
-                                            ? "#e8ff47"
-                                            : "rgba(240,237,232,0.4)"
+                                        height="1.5"
+                                        rx=".75"
+                                      />
+                                      <rect
+                                        x={
+                                          align === "center"
+                                            ? 2
+                                            : align === "right"
+                                              ? 4
+                                              : 0
                                         }
-                                      >
-                                        <rect
-                                          x="0"
-                                          y="0"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="3.5"
-                                          width="8"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="7"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                      </svg>
-                                    )}
-                                    {align === "center" && (
-                                      <svg
+                                        y="3.5"
+                                        width={align === "justify" ? 12 : 8}
+                                        height="1.5"
+                                        rx=".75"
+                                      />
+                                      <rect
+                                        x="0"
+                                        y="7"
                                         width="12"
-                                        height="10"
-                                        viewBox="0 0 12 10"
-                                        fill={
-                                          f.textAlign === align
-                                            ? "#e8ff47"
-                                            : "rgba(240,237,232,0.4)"
-                                        }
-                                      >
-                                        <rect
-                                          x="0"
-                                          y="0"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="2"
-                                          y="3.5"
-                                          width="8"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="7"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                      </svg>
-                                    )}
-                                    {align === "right" && (
-                                      <svg
-                                        width="12"
-                                        height="10"
-                                        viewBox="0 0 12 10"
-                                        fill={
-                                          f.textAlign === align
-                                            ? "#e8ff47"
-                                            : "rgba(240,237,232,0.4)"
-                                        }
-                                      >
-                                        <rect
-                                          x="0"
-                                          y="0"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="4"
-                                          y="3.5"
-                                          width="8"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="7"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                      </svg>
-                                    )}
-                                    {align === "justify" && (
-                                      <svg
-                                        width="12"
-                                        height="10"
-                                        viewBox="0 0 12 10"
-                                        fill={
-                                          f.textAlign === align
-                                            ? "#e8ff47"
-                                            : "rgba(240,237,232,0.4)"
-                                        }
-                                      >
-                                        <rect
-                                          x="0"
-                                          y="0"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="3.5"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                        <rect
-                                          x="0"
-                                          y="7"
-                                          width="12"
-                                          height="1.5"
-                                          rx=".75"
-                                        />
-                                      </svg>
-                                    )}
+                                        height="1.5"
+                                        rx=".75"
+                                      />
+                                    </svg>
                                   </button>
                                 ))}
                               </div>
@@ -5541,7 +6135,6 @@ export default function TemplifyEditor() {
                                           ? "2px solid #e8ff47"
                                           : "none",
                                       outlineOffset: 1,
-                                      transition: "transform 0.1s",
                                     }}
                                     onMouseEnter={(e) =>
                                       (e.currentTarget.style.transform =
@@ -5622,7 +6215,6 @@ export default function TemplifyEditor() {
                         background: "rgba(239,68,68,0.07)",
                         border: "1px solid rgba(239,68,68,0.18)",
                         color: "rgba(248,113,113,0.85)",
-                        transition: "all 0.15s",
                       }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.background =
