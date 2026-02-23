@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 type RowData = Record<string, string>;
@@ -4466,33 +4467,35 @@ export default function TemplifyEditor() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <div
-              style={{
-                width: 26,
-                height: 26,
-                background: "#e8ff47",
-                borderRadius: 7,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-                fontWeight: 900,
-                color: "#0a0a10",
-              }}
-            >
-              ✦
+          <Link href={"/"}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div
+                style={{
+                  width: 26,
+                  height: 26,
+                  background: "#e8ff47",
+                  borderRadius: 7,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: "#0a0a10",
+                }}
+              >
+                ✦
+              </div>
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 13,
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Templify
+              </span>
             </div>
-            <span
-              style={{
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Templify
-            </span>
-          </div>
+          </Link>
           <div
             style={{
               width: 1,
