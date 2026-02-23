@@ -1,6 +1,7 @@
 "use client";
+import EditorPreview from "@/components/EditorPreview";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const features = [
   {
@@ -21,7 +22,64 @@ const features = [
   {
     icon: "⬇",
     title: "Export in Any Format",
-    desc: "Download as PNG, PDF, PPTX, or DOCX. Bulk ZIP or one at a time — your choice.",
+    desc: "Download as PNG or PDF. Bulk export every record in one click.",
+  },
+];
+
+const featureGrid = [
+  {
+    icon: "🔤",
+    title: "26+ Google Fonts",
+    desc: "Search and preview fonts by category — Serif, Sans, Script, Display, Mono — live on your canvas.",
+    accent: "#e8ff47",
+  },
+  {
+    icon: "📐",
+    title: "Smart Auto-Shrink",
+    desc: "Long names never overflow. Text auto-scales to fit its field, and flagged records show in preview.",
+    accent: "#ffb400",
+  },
+  {
+    icon: "📷",
+    title: "Auto Photo Matching",
+    desc: "Upload a folder of photos and Templify matches each one to the right row by filename — instantly.",
+    accent: "#63b3ed",
+  },
+  {
+    icon: "📊",
+    title: "Batch Layout",
+    desc: "Print 1, 2, 4, 6, or 9 records per page. Perfect for ID cards, badges, and certificates.",
+    accent: "#a78bfa",
+  },
+  {
+    icon: "↩",
+    title: "Undo / Redo",
+    desc: "Full 25-step history. Experiment freely — every change is reversible.",
+    accent: "#e8ff47",
+  },
+  {
+    icon: "🎨",
+    title: "Canvas Styling",
+    desc: "Set background color, border, corner radius, and grid overlay. Every detail, your call.",
+    accent: "#f87171",
+  },
+  {
+    icon: "🖼",
+    title: "Background Images",
+    desc: "Upload any image as a full-bleed canvas background. Sync the canvas size to match it exactly.",
+    accent: "#4ade80",
+  },
+  {
+    icon: "🪄",
+    title: "Shadow & Border FX",
+    desc: "Add drop shadows, outlines, borders, and corner radius to any text or image element.",
+    accent: "#fb923c",
+  },
+  {
+    icon: "⌨️",
+    title: "Keyboard Shortcuts",
+    desc: "Ctrl+D to duplicate, arrow keys to nudge, Delete to remove. Designed for speed.",
+    accent: "#e8ff47",
   },
 ];
 
@@ -32,15 +90,11 @@ const useCases = [
   { label: "Scholarship Liquidation", emoji: "📋" },
   { label: "Invitations", emoji: "✉️" },
   { label: "Award Documents", emoji: "🏆" },
+  { label: "Name Tags", emoji: "🏷️" },
+  { label: "Bulk Certificates", emoji: "📜" },
 ];
 
-const exportFormats = ["PNG", "PDF", "PPTX", "DOCX"];
-
-const sampleData = [
-  { name: "Juan dela Cruz", course: "BSIT", date: "Feb 22, 2026" },
-  { name: "Ma. Theresa Reyes", course: "BSCS", date: "Feb 22, 2026" },
-  { name: "Carlo Mendoza", course: "BSECE", date: "Feb 22, 2026" },
-];
+const exportFormats = ["PNG", "PDF"];
 
 const shrinkRows = [
   { name: "Juan dela Cruz", status: "ok" },
@@ -51,7 +105,6 @@ const shrinkRows = [
 export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const [activeFormat, setActiveFormat] = useState(0);
-  const [previewRow, setPreviewRow] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -61,7 +114,6 @@ export default function LandingPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Render nothing on server — prevents any hydration mismatch
   if (!mounted) return null;
 
   return (
@@ -83,6 +135,10 @@ export default function LandingPage() {
           0% { background-position: -200% center; }
           100% { background-position: 200% center; }
         }
+        @keyframes slideInUp {
+          from { opacity: 0; transform: translateY(32px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .fade-up-1 { animation: fadeUp 0.7s 0.1s ease both; }
         .fade-up-2 { animation: fadeUp 0.7s 0.2s ease both; }
         .fade-up-3 { animation: fadeUp 0.7s 0.35s ease both; }
@@ -99,6 +155,16 @@ export default function LandingPage() {
         .grain-overlay {
           position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: 0.035;
           background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        }
+        .feature-card:hover {
+          border-color: rgba(232,255,71,0.2) !important;
+          background: rgba(232,255,71,0.03) !important;
+          transform: translateY(-4px);
+        }
+        .feature-card { transition: all 0.2s ease; }
+        .use-case-pill:hover {
+          background: rgba(232,255,71,0.06) !important;
+          border-color: rgba(232,255,71,0.2) !important;
         }
       `}</style>
 
@@ -152,7 +218,7 @@ export default function LandingPage() {
 
         <p className="fade-up-3 text-lg text-[#f0ede8]/55 max-w-lg leading-relaxed mt-6">
           Upload your Excel. Design your template. Drag your fields into place.
-          Export as PDF, PNG, PPTX, or DOCX — all in one go.
+          Export as PDF or PNG — all in one go.
         </p>
 
         <div className="fade-up-4 flex gap-3 mt-10 flex-wrap justify-center">
@@ -161,9 +227,11 @@ export default function LandingPage() {
               Try Templify free →
             </button>
           </Link>
-          <button className="px-9 py-4 rounded-full border border-white/20 text-base font-medium hover:border-white/40 hover:bg-white/5 transition-all">
-            See how it works
-          </button>
+          <a href="#editor-preview">
+            <button className="px-9 py-4 rounded-full border border-white/20 text-base font-medium hover:border-white/40 hover:bg-white/5 transition-all">
+              See how it works
+            </button>
+          </a>
         </div>
 
         {/* Format pills */}
@@ -185,91 +253,23 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* Preview card */}
-        <div className="float-card fade-up-4 mt-16 w-full max-w-[680px]">
-          <div className="bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/[0.07]">
-              {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
-                <div
-                  key={c}
-                  className="w-3 h-3 rounded-full"
-                  style={{ background: c }}
-                />
-              ))}
-              <span className="ml-2 text-[13px] text-white/30 font-mono">
-                templify.app — preview mode
-              </span>
-            </div>
-            <div className="p-6">
-              <div className="relative bg-gradient-to-br from-[#1a1a2e] to-[#16213e] border border-[rgba(232,255,71,0.15)] rounded-xl p-8 text-center mb-4 overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(232,255,71,0.06),transparent_70%)]" />
-                <p className="text-[11px] tracking-[0.2em] text-[#e8ff47]/60 uppercase mb-3">
-                  Certificate of Completion
-                </p>
-                <p className="font-display text-[22px] font-bold text-[#f0ede8] mb-2 transition-all duration-300">
-                  {sampleData[previewRow].name}
-                </p>
-                <p className="text-[13px] text-[#f0ede8]/50 mb-1">
-                  {sampleData[previewRow].course}
-                </p>
-                <p className="text-[12px] text-[#f0ede8]/35">
-                  {sampleData[previewRow].date}
-                </p>
-              </div>
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setPreviewRow((p) => Math.max(0, p - 1))}
-                  className="w-8 h-8 rounded-full bg-white/[0.06] text-[#f0ede8] flex items-center justify-center cursor-pointer hover:bg-white/10 transition-all border-0"
-                >
-                  ←
-                </button>
-                <div className="flex items-center gap-3">
-                  <span className="text-[13px] text-[#f0ede8]/40">
-                    Preview {previewRow + 1} of {sampleData.length}
-                  </span>
-                  <div className="flex gap-1.5">
-                    {sampleData.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPreviewRow(i)}
-                        className="w-2 h-2 rounded-full border-0 cursor-pointer transition-all"
-                        style={{
-                          background:
-                            previewRow === i
-                              ? "#e8ff47"
-                              : "rgba(255,255,255,0.2)",
-                          transform:
-                            previewRow === i ? "scale(1.3)" : "scale(1)",
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <button
-                  onClick={() =>
-                    setPreviewRow((p) => Math.min(sampleData.length - 1, p + 1))
-                  }
-                  className="w-8 h-8 rounded-full bg-white/[0.06] text-[#f0ede8] flex items-center justify-center cursor-pointer hover:bg-white/10 transition-all border-0"
-                >
-                  →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* ── EDITOR PREVIEW SECTION ── */}
+        <section id="editor-preview" className="py-24 px-6 w-[]">
+          <EditorPreview />
+        </section>
       </section>
 
       {/* USE CASES */}
       <section className="pb-24 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <p className="text-[13px] text-[#f0ede8]/35 tracking-[0.1em] uppercase mb-6">
+        <div className="max-w-4xl mx-auto text-center space-y-12">
+          <span className="inline-block bg-[rgba(232,255,71,0.1)] text-[#e8ff47] border border-[rgba(232,255,71,0.2)] rounded-full px-4 py-1.5 text-xs font-semibold tracking-widest uppercase">
             Perfect for
-          </p>
+          </span>
           <div className="flex flex-wrap gap-3 justify-center">
             {useCases.map((u) => (
               <div
                 key={u.label}
-                className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-5 py-2.5 text-sm text-[#f0ede8]/70 hover:bg-[rgba(232,255,71,0.06)] hover:border-[rgba(232,255,71,0.2)] transition-all whitespace-nowrap cursor-default"
+                className="use-case-pill flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-5 py-2.5 text-sm text-[#f0ede8]/70 transition-all whitespace-nowrap cursor-default"
               >
                 <span>{u.emoji}</span>
                 <span>{u.label}</span>
@@ -279,7 +279,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FEATURES */}
+      {/* FEATURES STEPS */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
@@ -299,7 +299,7 @@ export default function LandingPage() {
             {features.map((f, i) => (
               <div
                 key={i}
-                className="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-8 hover:border-[rgba(232,255,71,0.2)] hover:bg-[rgba(232,255,71,0.03)] hover:-translate-y-1 transition-all"
+                className="feature-card bg-white/[0.03] border border-white/[0.07] rounded-2xl p-8 hover:-translate-y-1"
               >
                 <div className="w-12 h-12 bg-[rgba(232,255,71,0.1)] border border-[rgba(232,255,71,0.15)] rounded-xl flex items-center justify-center text-xl mb-5">
                   {f.icon}
@@ -311,6 +311,47 @@ export default function LandingPage() {
                   {f.title}
                 </h3>
                 <p className="text-[14px] text-[#f0ede8]/50 leading-relaxed">
+                  {f.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FEATURES GRID ── */}
+      <section className="py-24 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <span className="inline-block bg-[rgba(232,255,71,0.1)] text-[#e8ff47] border border-[rgba(232,255,71,0.2)] rounded-full px-4 py-1.5 text-xs font-semibold tracking-widest uppercase mb-5">
+              What's inside
+            </span>
+            <h2
+              className="font-display font-black tracking-tight leading-tight"
+              style={{ fontSize: "clamp(32px,5vw,52px)" }}
+            >
+              Every tool. Already built.
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {featureGrid.map((f, i) => (
+              <div
+                key={i}
+                className="feature-card group bg-white/[0.025] border border-white/[0.07] rounded-2xl p-6 cursor-default"
+              >
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-4"
+                  style={{
+                    background: `${f.accent}14`,
+                    border: `1px solid ${f.accent}28`,
+                  }}
+                >
+                  {f.icon}
+                </div>
+                <h3 className="text-[16px] font-bold tracking-tight mb-2">
+                  {f.title}
+                </h3>
+                <p className="text-[13px] text-[#f0ede8]/45 leading-relaxed">
                   {f.desc}
                 </p>
               </div>
@@ -386,12 +427,12 @@ export default function LandingPage() {
             Stop manually typing names into templates. Let Templify handle the
             500. You handle the coffee.
           </p>
-          <button className="px-11 py-5 rounded-full bg-[#e8ff47] text-[#0a0a0f] text-[17px] font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(232,255,71,0.4)] transition-all">
-            Start for free — no account needed
-          </button>
-          <p className="text-[13px] text-[#f0ede8]/25 mt-4">
-            PNG · PDF · PPTX · DOCX · ZIP
-          </p>
+          <Link href={"/sandbox"}>
+            <button className="px-11 py-5 rounded-full bg-[#e8ff47] text-[#0a0a0f] text-[17px] font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(232,255,71,0.4)] transition-all">
+              Start for free — no account needed
+            </button>
+          </Link>
+          <p className="text-[13px] text-[#f0ede8]/25 mt-4">PNG · PDF · ZIP</p>
         </div>
       </section>
 
@@ -405,7 +446,7 @@ export default function LandingPage() {
         </div>
         <p className="text-[13px] text-[#f0ede8]/25">
           Built by a solo founder who was tired of copy-pasting names into
-          Template.
+          templates.
         </p>
       </footer>
     </div>
