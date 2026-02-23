@@ -117,6 +117,20 @@ const GOOGLE_FONTS = [
 ];
 const FONT_CATS = ["All", "Serif", "Sans-serif", "Display", "Script", "Mono"];
 
+const BATCH_OPTIONS = [1, 2, 3, 4, 6, 8, 9] as const;
+type BatchSize = (typeof BATCH_OPTIONS)[number];
+
+function batchGrid(count: number): { cols: number; rows: number } {
+  if (count === 1) return { cols: 1, rows: 1 };
+  if (count === 2) return { cols: 2, rows: 1 };
+  if (count === 3) return { cols: 3, rows: 1 };
+  if (count === 4) return { cols: 2, rows: 2 };
+  if (count === 6) return { cols: 3, rows: 2 };
+  if (count === 8) return { cols: 4, rows: 2 };
+  if (count === 9) return { cols: 3, rows: 3 };
+  return { cols: 1, rows: 1 };
+}
+
 async function loadSheetJS(): Promise<any> {
   return new Promise((resolve, reject) => {
     if ((window as any).XLSX) {
@@ -568,7 +582,6 @@ function ImageEl({
   );
 }
 
-// TextEl always renders real data — no placeholder mode.
 function TextEl({
   obj,
   selected,
@@ -935,6 +948,7 @@ function ShadowPanel({
             cursor: "pointer",
             position: "relative",
             transition: "background 0.2s",
+            flexShrink: 0,
           }}
         >
           <span
@@ -962,6 +976,9 @@ function ShadowPanel({
             borderRadius: 7,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.07)",
+            // Prevent the panel itself from overflowing its parent
+            minWidth: 0,
+            overflow: "hidden",
           }}
         >
           <div style={{ display: "flex", gap: 7 }}>
@@ -994,6 +1011,7 @@ function ShadowPanel({
               onChange={(e) => set("color", e.target.value)}
               style={{
                 flex: 1,
+                minWidth: 0, // allow the input to shrink below its content size
                 padding: "4px 7px",
                 borderRadius: 5,
                 background: "rgba(255,255,255,0.05)",
@@ -1014,13 +1032,18 @@ function ShadowPanel({
           ).map(([label, k, min, max]) => (
             <div
               key={k as string}
-              style={{ display: "flex", alignItems: "center", gap: 7 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                minWidth: 0, // allow row to shrink
+              }}
             >
               <span
                 style={{
                   fontSize: 9,
                   color: "rgba(240,237,232,0.3)",
-                  width: 22,
+                  width: 20, // slightly narrower
                   flexShrink: 0,
                 }}
               >
@@ -1032,15 +1055,21 @@ function ShadowPanel({
                 max={max}
                 value={shadow[k] as number}
                 onChange={(e) => set(k, Number(e.target.value))}
-                style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
+                style={{
+                  flex: 1,
+                  minWidth: 0, // key fix: lets the slider compress
+                  height: "3px",
+                  accentColor: "#e8ff47",
+                }}
               />
               <span
                 style={{
                   fontSize: 9,
                   color: "#e8ff47",
-                  width: 22,
+                  width: 28, // enough for "-20px"
                   textAlign: "right",
                   flexShrink: 0,
+                  whiteSpace: "nowrap",
                 }}
               >
                 {shadow[k]}px
@@ -1379,6 +1408,7 @@ function SLabel({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
+
 function KbdHint({ keys, label }: { keys: string[]; label: string }) {
   return (
     <div
@@ -1414,6 +1444,126 @@ function KbdHint({ keys, label }: { keys: string[]; label: string }) {
   );
 }
 
+// ─── Batch Stepper ────────────────────────────────────────────────────────────
+function BatchStepper({
+  value,
+  onChange,
+  totalRows,
+}: {
+  value: BatchSize;
+  onChange: (v: BatchSize) => void;
+  totalRows: number;
+}) {
+  const idx = BATCH_OPTIONS.indexOf(value);
+  const prev = () => onChange(BATCH_OPTIONS[Math.max(0, idx - 1)]);
+  const next = () =>
+    onChange(BATCH_OPTIONS[Math.min(BATCH_OPTIONS.length - 1, idx + 1)]);
+  const { cols, rows } = batchGrid(value);
+  const pageCount = totalRows > 0 ? Math.ceil(totalRows / value) : "—";
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 8px",
+        borderRadius: 10,
+        background:
+          value > 1 ? "rgba(232,255,71,0.08)" : "rgba(255,255,255,0.06)",
+        border: `1px solid ${value > 1 ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.12)"}`,
+      }}
+      title={`Batch ${value} records per page → ${pageCount} page${pageCount === 1 ? "" : "s"}`}
+    >
+      <button
+        onClick={prev}
+        disabled={idx === 0}
+        style={{
+          width: 20,
+          height: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 4,
+          background: "none",
+          border: "none",
+          color: idx === 0 ? "rgba(240,237,232,0.15)" : "rgba(240,237,232,0.7)",
+          cursor: idx === 0 ? "not-allowed" : "pointer",
+          fontSize: 11,
+        }}
+      >
+        ◂
+      </button>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${cols}, 1fr)`,
+          gridTemplateRows: `repeat(${rows}, 1fr)`,
+          gap: 2,
+          width: 26,
+          height: 18,
+        }}
+      >
+        {Array.from({ length: cols * rows }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              borderRadius: 1,
+              background:
+                value > 1 ? "rgba(232,255,71,0.7)" : "rgba(240,237,232,0.35)",
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ lineHeight: 1.2 }}>
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: value > 1 ? "#e8ff47" : "rgba(240,237,232,0.6)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {value === 1 ? "1 per page" : `${value} per page`}
+        </div>
+        {totalRows > 0 && (
+          <div
+            style={{
+              fontSize: 8,
+              color: "rgba(240,237,232,0.35)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {pageCount} page{pageCount === 1 ? "" : "s"} total
+          </div>
+        )}
+      </div>
+      <button
+        onClick={next}
+        disabled={idx === BATCH_OPTIONS.length - 1}
+        style={{
+          width: 20,
+          height: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 4,
+          background: "none",
+          border: "none",
+          color:
+            idx === BATCH_OPTIONS.length - 1
+              ? "rgba(240,237,232,0.15)"
+              : "rgba(240,237,232,0.7)",
+          cursor: idx === BATCH_OPTIONS.length - 1 ? "not-allowed" : "pointer",
+          fontSize: 11,
+        }}
+      >
+        ▸
+      </button>
+    </div>
+  );
+}
+
 async function loadScript(src: string, globalKey: string): Promise<any> {
   return new Promise((resolve, reject) => {
     if ((window as any)[globalKey]) {
@@ -1428,65 +1578,83 @@ async function loadScript(src: string, globalKey: string): Promise<any> {
   });
 }
 
-async function renderFrameToCanvas(
+async function renderBatchedPageToCanvas(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
-  rowData: RowData,
   rows: RowData[],
+  pageRowStart: number,
+  batch: number,
 ): Promise<HTMLCanvasElement> {
-  const container = document.createElement("div");
-  container.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;background:#fff;`;
-  document.body.appendChild(container);
-  const bgImg = objects.find(
-    (o) => o.kind === "image" && (o as ImageObject).isBackground,
-  ) as ImageObject | undefined;
-  if (bgImg) {
-    const img = document.createElement("img");
-    img.src = bgImg.src;
-    img.style.cssText = `position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:${bgImg.opacity};`;
-    container.appendChild(img);
-  }
-  const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
-  const ci = rows.indexOf(rowData);
-  for (const obj of sorted) {
-    if (obj.kind === "image") {
-      const imgObj = obj as ImageObject;
-      if (imgObj.isBackground) continue;
+  const { cols, rows: gridRows } = batchGrid(batch);
+  const pageW = canvasSize.width * cols;
+  const pageH = canvasSize.height * gridRows;
+  const page = document.createElement("div");
+  page.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${pageW}px;height:${pageH}px;overflow:hidden;background:#fff;`;
+  document.body.appendChild(page);
+
+  for (let slot = 0; slot < batch; slot++) {
+    const rowIdx = pageRowStart + slot;
+    if (rowIdx >= rows.length) break;
+    const rowData = rows[rowIdx];
+    const col = slot % cols;
+    const row = Math.floor(slot / cols);
+    const ox = col * canvasSize.width;
+    const oy = row * canvasSize.height;
+    const cell = document.createElement("div");
+    cell.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;`;
+    page.appendChild(cell);
+    const bgImg = objects.find(
+      (o) => o.kind === "image" && (o as ImageObject).isBackground,
+    ) as ImageObject | undefined;
+    if (bgImg) {
       const img = document.createElement("img");
-      img.src = imgObj.src;
-      img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;`;
-      if (imgObj.shadow.enabled)
-        img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
-      container.appendChild(img);
-    } else {
-      const f = obj as TextField;
-      const ti = ci + f.columnOffset;
-      const text =
-        ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
-      const fs = shrinkFontSize(
-        text,
-        f.width,
-        f.height,
-        f.fontFamily,
-        f.fontSize,
-        f.bold,
-        f.italic,
-      );
-      const span = document.createElement("div");
-      span.textContent = text;
-      span.style.cssText = [
-        `position:absolute;left:${f.x}px;top:${f.y}px;width:${f.width}px;height:${f.height}px;overflow:hidden;`,
-        `font-family:'${f.fontFamily}',serif;font-size:${fs}px;color:${f.color};`,
-        `font-weight:${f.bold ? "bold" : "normal"};font-style:${f.italic ? "italic" : "normal"};`,
-        `text-align:${f.textAlign};display:flex;align-items:center;`,
-        `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
-        `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
-        f.shadow.enabled ? `text-shadow:${shadowCSS(f.shadow)};` : "",
-      ].join("");
-      container.appendChild(span);
+      img.src = bgImg.src;
+      img.style.cssText = `position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:${bgImg.opacity};`;
+      cell.appendChild(img);
+    }
+    const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
+    const ci = rowIdx; // use absolute row index for rendering
+    for (const obj of sorted) {
+      if (obj.kind === "image") {
+        const imgObj = obj as ImageObject;
+        if (imgObj.isBackground) continue;
+        const img = document.createElement("img");
+        img.src = imgObj.src;
+        img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;`;
+        if (imgObj.shadow.enabled)
+          img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
+        cell.appendChild(img);
+      } else {
+        const f = obj as TextField;
+        const ti = ci + f.columnOffset;
+        const text =
+          ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
+        const fs = shrinkFontSize(
+          text,
+          f.width,
+          f.height,
+          f.fontFamily,
+          f.fontSize,
+          f.bold,
+          f.italic,
+        );
+        const span = document.createElement("div");
+        span.textContent = text;
+        span.style.cssText = [
+          `position:absolute;left:${f.x}px;top:${f.y}px;width:${f.width}px;height:${f.height}px;overflow:hidden;`,
+          `font-family:'${f.fontFamily}',serif;font-size:${fs}px;color:${f.color};`,
+          `font-weight:${f.bold ? "bold" : "normal"};font-style:${f.italic ? "italic" : "normal"};`,
+          `text-align:${f.textAlign};display:flex;align-items:center;`,
+          `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
+          `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
+          f.shadow.enabled ? `text-shadow:${shadowCSS(f.shadow)};` : "",
+        ].join("");
+        cell.appendChild(span);
+      }
     }
   }
-  const imgs = container.querySelectorAll("img");
+
+  const imgs = page.querySelectorAll("img");
   await Promise.all(
     Array.from(imgs).map((img) =>
       img.complete
@@ -1501,19 +1669,19 @@ async function renderFrameToCanvas(
     "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
     "html2canvas",
   );
-  const resultCanvas = await h2c(container, {
+  const resultCanvas = await h2c(page, {
     useCORS: true,
     allowTaint: true,
     scale: 2,
-    width: canvasSize.width,
-    height: canvasSize.height,
+    width: pageW,
+    height: pageH,
     x: 0,
     y: 0,
     scrollX: 0,
     scrollY: 0,
     backgroundColor: "#ffffff",
   });
-  document.body.removeChild(container);
+  document.body.removeChild(page);
   return resultCanvas;
 }
 
@@ -1535,20 +1703,34 @@ async function exportRecords(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
   rows: RowData[],
+  batch: number,
   onProgress: (pct: number) => void,
 ) {
   if (!rows.length) rows = [{}];
   onProgress(5);
+  const totalPages = Math.ceil(rows.length / batch);
   if (format === "PNG") {
-    for (let i = 0; i < rows.length; i++) {
-      const cv = await renderFrameToCanvas(objects, canvasSize, rows[i], rows);
+    for (let p = 0; p < totalPages; p++) {
+      const cv = await renderBatchedPageToCanvas(
+        objects,
+        canvasSize,
+        rows,
+        p * batch,
+        batch,
+      );
       await new Promise<void>((resolve) =>
         cv.toBlob((blob) => {
-          if (blob) downloadBlob(blob, `record_${i + 1}.png`);
+          if (blob)
+            downloadBlob(
+              blob,
+              batch === 1
+                ? `record_${p + 1}.png`
+                : `page_${p + 1}_x${batch}.png`,
+            );
           resolve();
         }, "image/png"),
       );
-      onProgress(Math.round(10 + (i / rows.length) * 90));
+      onProgress(Math.round(10 + (p / totalPages) * 90));
     }
   } else if (format === "PDF") {
     const jsPDF = await loadScript(
@@ -1556,12 +1738,21 @@ async function exportRecords(
       "jspdf",
     );
     const { jsPDF: JsPDF } = jsPDF;
+    const { cols, rows: gridRows } = batchGrid(batch);
+    const pageW = canvasSize.width * cols;
+    const pageH = canvasSize.height * gridRows;
+    const pW = pageW * 0.264583,
+      pH = pageH * 0.264583;
     let pdf: any = null;
-    for (let i = 0; i < rows.length; i++) {
-      const cv = await renderFrameToCanvas(objects, canvasSize, rows[i], rows);
+    for (let p = 0; p < totalPages; p++) {
+      const cv = await renderBatchedPageToCanvas(
+        objects,
+        canvasSize,
+        rows,
+        p * batch,
+        batch,
+      );
       const imgData = cv.toDataURL("image/png");
-      const pW = canvasSize.width * 0.264583,
-        pH = canvasSize.height * 0.264583;
       if (!pdf)
         pdf = new JsPDF({
           orientation: pW > pH ? "l" : "p",
@@ -1570,7 +1761,7 @@ async function exportRecords(
         });
       else pdf.addPage([pW, pH], pW > pH ? "l" : "p");
       pdf.addImage(imgData, "PNG", 0, 0, pW, pH);
-      onProgress(Math.round(10 + (i / rows.length) * 88));
+      onProgress(Math.round(10 + (p / totalPages) * 88));
     }
     if (pdf) pdf.save("templify_export.pdf");
   }
@@ -1769,6 +1960,173 @@ function LayerItem({
   );
 }
 
+// ─── Floating Page Navigator (bottom bar) ─────────────────────────────────────
+function FloatingPageNav({
+  pageIndex,
+  totalPages,
+  batchSize,
+  onPageChange,
+  onBatchChange,
+  rows,
+}: {
+  pageIndex: number;
+  totalPages: number;
+  batchSize: BatchSize;
+  onPageChange: (p: number) => void;
+  onBatchChange: (b: BatchSize) => void;
+  rows: RowData[];
+}) {
+  if (totalPages === 0) return null;
+
+  const startRow = pageIndex * batchSize + 1;
+  const endRow = Math.min((pageIndex + 1) * batchSize, rows.length);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 20,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 30,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 14px",
+        borderRadius: 16,
+        background: "rgba(12,12,20,0.92)",
+        backdropFilter: "blur(16px)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        boxShadow:
+          "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
+        animation: "slideUp 0.2s ease",
+      }}
+    >
+      {/* Batch stepper */}
+      <BatchStepper
+        value={batchSize}
+        onChange={onBatchChange}
+        totalRows={rows.length}
+      />
+
+      <div
+        style={{ width: 1, height: 28, background: "rgba(255,255,255,0.1)" }}
+      />
+
+      {/* Page navigator */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button
+          onClick={() => onPageChange(0)}
+          disabled={pageIndex === 0}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color:
+              pageIndex === 0
+                ? "rgba(240,237,232,0.15)"
+                : "rgba(240,237,232,0.6)",
+            cursor: pageIndex === 0 ? "not-allowed" : "pointer",
+            fontSize: 9,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ⟨⟨
+        </button>
+        <button
+          onClick={() => onPageChange(Math.max(0, pageIndex - 1))}
+          disabled={pageIndex === 0}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color:
+              pageIndex === 0
+                ? "rgba(240,237,232,0.15)"
+                : "rgba(240,237,232,0.6)",
+            cursor: pageIndex === 0 ? "not-allowed" : "pointer",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ‹
+        </button>
+
+        <div style={{ textAlign: "center", minWidth: 90 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#f0ede8" }}>
+            Page {pageIndex + 1}{" "}
+            <span style={{ color: "rgba(240,237,232,0.3)" }}>
+              / {totalPages}
+            </span>
+          </div>
+          <div
+            style={{
+              fontSize: 9,
+              color: "rgba(240,237,232,0.35)",
+              marginTop: 1,
+            }}
+          >
+            Rows {startRow}–{endRow} of {rows.length}
+          </div>
+        </div>
+
+        <button
+          onClick={() => onPageChange(Math.min(totalPages - 1, pageIndex + 1))}
+          disabled={pageIndex === totalPages - 1}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color:
+              pageIndex === totalPages - 1
+                ? "rgba(240,237,232,0.15)"
+                : "rgba(240,237,232,0.6)",
+            cursor: pageIndex === totalPages - 1 ? "not-allowed" : "pointer",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ›
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages - 1)}
+          disabled={pageIndex === totalPages - 1}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color:
+              pageIndex === totalPages - 1
+                ? "rgba(240,237,232,0.15)"
+                : "rgba(240,237,232,0.6)",
+            cursor: pageIndex === totalPages - 1 ? "not-allowed" : "pointer",
+            fontSize: 9,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ⟩⟩
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function TemplifyEditor() {
   const [mounted, setMounted] = useState(false);
   const {
@@ -1798,7 +2156,9 @@ export default function TemplifyEditor() {
   });
   const [activePreset, setActivePreset] = useState("16:9 HD");
   const [showSizePicker, setShowSizePicker] = useState(false);
-  const [rowIndex, setRowIndex] = useState(0);
+  // ── Page-based navigation (replaces rowIndex) ──
+  // pageIndex = which page (group of batchSize rows) we're previewing
+  const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
@@ -1811,6 +2171,7 @@ export default function TemplifyEditor() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
+  const [batchSize, setBatchSize] = useState<BatchSize>(1);
   const nextZ = useRef(100);
 
   const MAX_W = 840,
@@ -1820,6 +2181,25 @@ export default function TemplifyEditor() {
     MAX_W / canvasSize.width,
     MAX_H / canvasSize.height,
   );
+
+  // ── Derived values ──
+  // totalPages = how many pages given current batch size
+  const totalPages = rows.length > 0 ? Math.ceil(rows.length / batchSize) : 0;
+  // The absolute row index of the FIRST row on the current preview page
+  const previewRowStart = pageIndex * batchSize;
+  // The row shown in the canvas preview (always first row of the current page)
+  const currentRow = useMemo(() => {
+    if (rows.length === 0) return null;
+    const idx = Math.min(previewRowStart, rows.length - 1);
+    return rows[idx];
+  }, [rows, previewRowStart]);
+
+  // When batchSize changes, clamp pageIndex so we don't go out of bounds
+  useEffect(() => {
+    if (totalPages > 0 && pageIndex >= totalPages) {
+      setPageIndex(totalPages - 1);
+    }
+  }, [batchSize, totalPages, pageIndex]);
 
   useEffect(() => {
     setMounted(true);
@@ -1839,10 +2219,6 @@ export default function TemplifyEditor() {
   const selectedObj = useMemo(
     () => objects.find((o) => o.id === selectedId) ?? null,
     [objects, selectedId],
-  );
-  const currentRow = useMemo(
-    () => (rows.length > 0 ? rows[Math.min(rowIndex, rows.length - 1)] : null),
-    [rows, rowIndex],
   );
   const layersSorted = useMemo(
     () => [...objects].sort((a, b) => b.zIndex - a.zIndex),
@@ -1991,7 +2367,7 @@ export default function TemplifyEditor() {
       setColumns(cols);
       setRows(rd);
       setDataFileName(file.name);
-      setRowIndex(0);
+      setPageIndex(0);
       setObjects((p) =>
         p.filter(
           (o) => o.kind !== "field" || cols.includes((o as TextField).column),
@@ -2198,15 +2574,20 @@ export default function TemplifyEditor() {
     if (exportProgress !== null) return;
     setExportProgress(0);
     try {
-      await exportRecords(exportFormat, objects, canvasSize, rows, (pct) =>
-        setExportProgress(pct),
+      await exportRecords(
+        exportFormat,
+        objects,
+        canvasSize,
+        rows,
+        batchSize,
+        (pct) => setExportProgress(pct),
       );
     } catch (err: any) {
       alert(`Export failed: ${err?.message || "Unknown error"}`);
     } finally {
       setTimeout(() => setExportProgress(null), 800);
     }
-  }, [exportFormat, objects, canvasSize, rows, exportProgress]);
+  }, [exportFormat, objects, canvasSize, rows, batchSize, exportProgress]);
 
   if (!mounted) return null;
 
@@ -2231,6 +2612,7 @@ export default function TemplifyEditor() {
         .undob:disabled{opacity:0.18;cursor:not-allowed!important;} .undob:not(:disabled):hover{background:rgba(255,255,255,0.08)!important;}
         button{font-family:'DM Sans',sans-serif;}
         @keyframes spin{to{transform:rotate(360deg)}} @keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
       `}</style>
 
       {exportProgress !== null && (
@@ -2284,6 +2666,18 @@ export default function TemplifyEditor() {
                 ? `Exporting… ${exportProgress}%`
                 : "Export complete!"}
             </p>
+            {totalPages > 0 && exportProgress < 100 && (
+              <p
+                style={{
+                  fontSize: 10,
+                  color: "rgba(240,237,232,0.35)",
+                  marginBottom: 10,
+                }}
+              >
+                {totalPages} page{totalPages === 1 ? "" : "s"} · {batchSize}×
+                batch
+              </p>
+            )}
             <div
               style={{
                 height: 4,
@@ -2305,6 +2699,7 @@ export default function TemplifyEditor() {
         </div>
       )}
 
+      {/* ─── Header ─────────────────────────────────────────────── */}
       <header
         style={{
           display: "flex",
@@ -2398,6 +2793,7 @@ export default function TemplifyEditor() {
             </button>
           </div>
         </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <button
             onClick={() => setShowSizePicker(true)}
@@ -2421,73 +2817,7 @@ export default function TemplifyEditor() {
               {canvasSize.width}×{canvasSize.height}
             </span>
           </button>
-          {rows.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                borderRadius: 7,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.09)",
-              }}
-            >
-              <button
-                onClick={() => setRowIndex((i) => Math.max(0, i - 1))}
-                disabled={rowIndex === 0}
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  background: "none",
-                  border: "none",
-                  color: "rgba(240,237,232,0.5)",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  opacity: rowIndex === 0 ? 0.3 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ←
-              </button>
-              <span
-                style={{
-                  fontSize: 10,
-                  color: "rgba(240,237,232,0.6)",
-                  fontWeight: 600,
-                  minWidth: 52,
-                  textAlign: "center",
-                }}
-              >
-                Row {rowIndex + 1} / {rows.length}
-              </span>
-              <button
-                onClick={() =>
-                  setRowIndex((i) => Math.min(rows.length - 1, i + 1))
-                }
-                disabled={rowIndex === rows.length - 1}
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  background: "none",
-                  border: "none",
-                  color: "rgba(240,237,232,0.5)",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  opacity: rowIndex === rows.length - 1 ? 0.3 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                →
-              </button>
-            </div>
-          )}
+
           <div style={{ position: "relative" }}>
             <div
               style={{
@@ -2513,7 +2843,9 @@ export default function TemplifyEditor() {
               >
                 {exportProgress !== null
                   ? `${exportProgress}%`
-                  : `Export ${exportFormat}`}
+                  : totalPages > 1
+                    ? `Export ${exportFormat} · ${totalPages}p`
+                    : `Export ${exportFormat}`}
               </button>
               <button
                 onClick={() => setShowExportMenu((p) => !p)}
@@ -2584,6 +2916,7 @@ export default function TemplifyEditor() {
       </header>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* ─── Left panel ─────────────────────────────────────────────── */}
         <aside
           style={{
             width: 210,
@@ -2947,6 +3280,7 @@ export default function TemplifyEditor() {
           </div>
         </aside>
 
+        {/* ─── Canvas ─────────────────────────────────────────────────── */}
         <main
           style={{
             flex: 1,
@@ -3059,6 +3393,8 @@ export default function TemplifyEditor() {
                 ),
               )}
           </div>
+
+          {/* ─── Canvas footer label ─── */}
           <div
             style={{
               position: "absolute",
@@ -3072,9 +3408,24 @@ export default function TemplifyEditor() {
             }}
           >
             {canvasSize.width}×{canvasSize.height}px · {activePreset}
+            {batchSize > 1 ? ` · ${batchSize}× batch` : ""}
           </div>
+
+          {/* ─── Floating page navigator ─── */}
+          <FloatingPageNav
+            pageIndex={pageIndex}
+            totalPages={totalPages}
+            batchSize={batchSize}
+            onPageChange={setPageIndex}
+            onBatchChange={(b) => {
+              setBatchSize(b);
+              setPageIndex(0);
+            }}
+            rows={rows}
+          />
         </main>
 
+        {/* ─── Right panel ────────────────────────────────────────────── */}
         <aside
           style={{
             width: 248,
@@ -3993,6 +4344,8 @@ export default function TemplifyEditor() {
               </div>
             )}
           </div>
+
+          {/* ─── Current page row preview ─── */}
           {currentRow && (
             <div
               style={{
@@ -4013,7 +4366,8 @@ export default function TemplifyEditor() {
                   marginBottom: 7,
                 }}
               >
-                Row {rowIndex + 1}
+                Page {pageIndex + 1} · Rows {previewRowStart + 1}–
+                {Math.min(previewRowStart + batchSize, rows.length)}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {Object.entries(currentRow).map(([k, v]) => (
