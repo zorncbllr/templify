@@ -37,6 +37,7 @@ type ImageObject = BaseObj & {
   naturalHeight: number;
   isDataImage: boolean;
   dataImageColumn: string;
+  columnOffset: number; // row shift, same as TextField.columnOffset
 };
 type TextField = BaseObj & {
   kind: "field";
@@ -234,10 +235,15 @@ function detectImageColumns(
 
 function resolveDataImageSrc(
   obj: ImageObject,
-  row: RowData | null,
+  rows: RowData[],
+  baseRowIndex: number,
   dataImages: DataImageMap,
 ): string {
-  if (!obj.isDataImage || !row || !obj.dataImageColumn) return obj.src;
+  if (!obj.isDataImage || !obj.dataImageColumn) return obj.src;
+  const offset = obj.columnOffset ?? 0;
+  const ti = baseRowIndex + offset;
+  const row = ti >= 0 && ti < rows.length ? rows[ti] : null;
+  if (!row) return obj.src;
   const rawValue = (row[obj.dataImageColumn] ?? "").trim();
   if (!rawValue) return obj.src;
   return (
@@ -594,7 +600,9 @@ function ImageEl({
   onDrag,
   onResize,
   scale,
-  resolvedSrc,
+  rows,
+  baseRowIndex,
+  dataImages,
 }: {
   obj: ImageObject;
   selected: boolean;
@@ -602,8 +610,11 @@ function ImageEl({
   onDrag: (id: number, x: number, y: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   scale: number;
-  resolvedSrc: string;
+  rows: RowData[];
+  baseRowIndex: number;
+  dataImages: DataImageMap;
 }) {
+  const resolvedSrc = resolveDataImageSrc(obj, rows, baseRowIndex, dataImages);
   const { handleMouseDown, handleResizeDown } = useDragResize(
     obj,
     onSelect,
@@ -1671,57 +1682,6 @@ function CanvasStylePanel({
         </div>
       </div>
 
-      {/* Shadow */}
-      <div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 8,
-          }}
-        >
-          <SLabel>Drop Shadow</SLabel>
-          <ToggleSwitch
-            value={style.shadow}
-            onChange={(v) => set("shadow", v)}
-          />
-        </div>
-        {style.shadow && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span
-              style={{
-                fontSize: 9,
-                color: "rgba(240,237,232,0.3)",
-                width: 30,
-                flexShrink: 0,
-              }}
-            >
-              Depth
-            </span>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              value={style.shadowIntensity}
-              onChange={(e) => set("shadowIntensity", Number(e.target.value))}
-              style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
-            />
-            <span
-              style={{
-                fontSize: 9,
-                color: "#e8ff47",
-                width: 28,
-                textAlign: "right",
-                flexShrink: 0,
-              }}
-            >
-              {style.shadowIntensity}%
-            </span>
-          </div>
-        )}
-      </div>
-
       {/* Border Radius */}
       <div>
         <div
@@ -1859,7 +1819,12 @@ function CanvasStylePanel({
                 max={20}
                 value={style.borderWidth}
                 onChange={(e) => set("borderWidth", Number(e.target.value))}
-                style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "3px",
+                  accentColor: "#e8ff47",
+                }}
               />
               <span
                 style={{
@@ -2348,15 +2313,18 @@ function DataImagesPanel({
 function DataImageInfo({
   obj,
   dataImages,
-  currentRow,
+  rows,
+  baseRowIndex,
 }: {
   obj: ImageObject;
   dataImages: DataImageMap;
-  currentRow: RowData | null;
+  rows: RowData[];
+  baseRowIndex: number;
 }) {
-  const previewSrc = resolveDataImageSrc(obj, currentRow, dataImages);
+  const previewSrc = resolveDataImageSrc(obj, rows, baseRowIndex, dataImages);
   const hasMatch =
     previewSrc && previewSrc !== PLACEHOLDER_SRC && previewSrc !== obj.src;
+  const currentRow = rows[baseRowIndex] ?? null;
   return (
     <div
       style={{
@@ -3011,7 +2979,7 @@ async function renderBatchedPageToCanvas(
         if (imgObj.isBackground) continue;
         const img = document.createElement("img");
         img.src = imgObj.isDataImage
-          ? resolveDataImageSrc(imgObj, rowData, dataImages)
+          ? resolveDataImageSrc(imgObj, rows, rowIdx, dataImages)
           : imgObj.src;
         img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;border-radius:${imgObj.borderRadius ?? 0}px;box-sizing:border-box;${imgObj.border?.enabled ? `border:${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color};` : ""}`;
         if (imgObj.shadow.enabled)
@@ -3344,6 +3312,26 @@ function LayerItem({
             {offset > 0 ? `+${offset}` : offset}
           </span>
         )}
+        {isImg &&
+          imgObj!.isDataImage &&
+          !isBg &&
+          (imgObj!.columnOffset ?? 0) !== 0 && (
+            <span
+              style={{
+                fontSize: 8,
+                padding: "1px 4px",
+                borderRadius: 3,
+                background: "rgba(99,179,237,0.12)",
+                color: "#63b3ed",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {(imgObj!.columnOffset ?? 0) > 0
+                ? `+${imgObj!.columnOffset}`
+                : imgObj!.columnOffset}
+            </span>
+          )}
       </div>
       <button
         onClick={(e) => {
@@ -4045,6 +4033,7 @@ export default function TemplifyEditor() {
         naturalHeight: H,
         isDataImage: true,
         dataImageColumn: column,
+        columnOffset: 0,
       };
       setObjects((p) => [...p, obj]);
       setSelectedId(obj.id);
@@ -4153,6 +4142,7 @@ export default function TemplifyEditor() {
         naturalHeight: nh,
         isDataImage: false,
         dataImageColumn: "",
+        columnOffset: 0,
       };
       setObjects((p) => [...p, obj]);
       setSelectedId(obj.id);
@@ -5149,113 +5139,175 @@ export default function TemplifyEditor() {
               justifyContent: "center",
             }}
           >
-            <div
-              style={{
-                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-                transformOrigin: "center center",
-                flexShrink: 0,
-                width: canvasSize.width,
-                height: canvasSize.height,
-                position: "relative",
-                transition: isPanning.current ? "none" : undefined,
-              }}
-            >
-              {/* The canvas itself */}
-              <div
-                id="templify-canvas"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  borderRadius: canvasStyle.borderRadius,
-                  background: canvasStyle.background,
-                  boxShadow: canvasShadow,
-                  border: canvasBorder,
-                  overflow: "hidden",
-                  backgroundImage: canvasGridBg,
-                  backgroundSize: canvasStyle.showGrid
-                    ? `${canvasStyle.gridSize}px ${canvasStyle.gridSize}px`
-                    : undefined,
-                }}
-              >
-                {objects.length === 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <div style={{ fontSize: 40, opacity: 0.07 }}>🖼</div>
-                    <p
-                      style={{
-                        color: "rgba(10,10,16,0.18)",
-                        fontSize: 12,
-                        fontWeight: 500,
-                      }}
-                    >
-                      Upload a template to begin
-                    </p>
-                  </div>
-                )}
-              </div>
+            {(() => {
+              const { cols: bCols, rows: bRows } = batchGrid(batchSize);
+              const totalW = canvasSize.width * bCols;
+              const totalH = canvasSize.height * bRows;
+              return (
+                <div
+                  style={{
+                    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                    transformOrigin: "center center",
+                    flexShrink: 0,
+                    width: totalW,
+                    height: totalH,
+                    position: "relative",
+                  }}
+                >
+                  {Array.from({ length: batchSize }).map((_, slot) => {
+                    const rowIdx = previewRowStart + slot;
+                    const slotCol = slot % bCols;
+                    const slotRow = Math.floor(slot / bCols);
+                    const offsetX = slotCol * canvasSize.width;
+                    const offsetY = slotRow * canvasSize.height;
+                    const isFirstSlot = slot === 0;
+                    if (rowIdx >= rows.length && rows.length > 0) return null;
 
-              {bgImage && (
-                <ImageEl
-                  key={bgImage.id}
-                  obj={bgImage}
-                  selected={selectedId === bgImage.id}
-                  onSelect={setSelectedId}
-                  onDrag={handleDrag}
-                  onResize={handleResize}
-                  scale={zoom}
-                  resolvedSrc={resolveDataImageSrc(
-                    bgImage,
-                    currentRow,
-                    dataImages,
-                  )}
-                />
-              )}
-              {objects
-                .filter(
-                  (o) =>
-                    !(o.kind === "image" && (o as ImageObject).isBackground),
-                )
-                .map((obj) =>
-                  obj.kind === "image" ? (
-                    <ImageEl
-                      key={obj.id}
-                      obj={obj as ImageObject}
-                      selected={selectedId === obj.id}
-                      onSelect={setSelectedId}
-                      onDrag={handleDrag}
-                      onResize={handleResize}
-                      scale={zoom}
-                      resolvedSrc={resolveDataImageSrc(
-                        obj as ImageObject,
-                        currentRow,
-                        dataImages,
-                      )}
-                    />
-                  ) : (
-                    <TextEl
-                      key={obj.id}
-                      obj={obj as TextField}
-                      selected={selectedId === obj.id}
-                      onSelect={setSelectedId}
-                      onDrag={handleDrag}
-                      onResize={handleResize}
-                      currentRow={currentRow}
-                      rows={rows}
-                      scale={zoom}
-                    />
-                  ),
-                )}
-            </div>
+                    return (
+                      <div
+                        key={slot}
+                        style={{
+                          position: "absolute",
+                          left: offsetX,
+                          top: offsetY,
+                          width: canvasSize.width,
+                          height: canvasSize.height,
+                        }}
+                      >
+                        {/* The canvas cell background */}
+                        <div
+                          id={isFirstSlot ? "templify-canvas" : undefined}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: canvasStyle.borderRadius,
+                            background: canvasStyle.background,
+                            boxShadow: canvasShadow,
+                            border: canvasBorder,
+                            overflow: "hidden",
+                            backgroundImage: canvasGridBg,
+                            backgroundSize: canvasStyle.showGrid
+                              ? `${canvasStyle.gridSize}px ${canvasStyle.gridSize}px`
+                              : undefined,
+                          }}
+                        >
+                          {objects.length === 0 && isFirstSlot && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                pointerEvents: "none",
+                              }}
+                            >
+                              <div style={{ fontSize: 40, opacity: 0.07 }}>
+                                🖼
+                              </div>
+                              <p
+                                style={{
+                                  color: "rgba(10,10,16,0.18)",
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                Upload a template to begin
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Slot label when batch > 1 */}
+                        {batchSize > 1 && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: 6,
+                              right: 8,
+                              fontSize: 9,
+                              fontWeight: 700,
+                              color: "rgba(0,0,0,0.25)",
+                              pointerEvents: "none",
+                              zIndex: 50,
+                              background: "rgba(255,255,255,0.6)",
+                              borderRadius: 4,
+                              padding: "1px 5px",
+                            }}
+                          >
+                            {rowIdx < rows.length ? `Row ${rowIdx + 1}` : "—"}
+                          </div>
+                        )}
+
+                        {/* Background image for this slot */}
+                        {bgImage && (
+                          <ImageEl
+                            key={`${bgImage.id}-slot${slot}`}
+                            obj={bgImage}
+                            selected={isFirstSlot && selectedId === bgImage.id}
+                            onSelect={isFirstSlot ? setSelectedId : () => {}}
+                            onDrag={isFirstSlot ? handleDrag : () => {}}
+                            onResize={isFirstSlot ? handleResize : () => {}}
+                            scale={zoom}
+                            rows={rows.length > 0 ? rows : [{}]}
+                            baseRowIndex={rowIdx}
+                            dataImages={dataImages}
+                          />
+                        )}
+
+                        {/* All non-background objects for this slot */}
+                        {objects
+                          .filter(
+                            (o) =>
+                              !(
+                                o.kind === "image" &&
+                                (o as ImageObject).isBackground
+                              ),
+                          )
+                          .map((obj) =>
+                            obj.kind === "image" ? (
+                              <ImageEl
+                                key={`${obj.id}-slot${slot}`}
+                                obj={obj as ImageObject}
+                                selected={isFirstSlot && selectedId === obj.id}
+                                onSelect={
+                                  isFirstSlot ? setSelectedId : () => {}
+                                }
+                                onDrag={isFirstSlot ? handleDrag : () => {}}
+                                onResize={isFirstSlot ? handleResize : () => {}}
+                                scale={zoom}
+                                rows={rows.length > 0 ? rows : [{}]}
+                                baseRowIndex={rowIdx}
+                                dataImages={dataImages}
+                              />
+                            ) : (
+                              <TextEl
+                                key={`${obj.id}-slot${slot}`}
+                                obj={obj as TextField}
+                                selected={isFirstSlot && selectedId === obj.id}
+                                onSelect={
+                                  isFirstSlot ? setSelectedId : () => {}
+                                }
+                                onDrag={isFirstSlot ? handleDrag : () => {}}
+                                onResize={isFirstSlot ? handleResize : () => {}}
+                                currentRow={
+                                  rows.length > 0
+                                    ? rows[Math.min(rowIdx, rows.length - 1)]
+                                    : null
+                                }
+                                rows={rows}
+                                scale={zoom}
+                              />
+                            ),
+                          )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Canvas size label */}
@@ -5678,8 +5730,130 @@ export default function TemplifyEditor() {
                               <DataImageInfo
                                 obj={img}
                                 dataImages={dataImages}
-                                currentRow={currentRow}
+                                rows={rows}
+                                baseRowIndex={Math.min(
+                                  previewRowStart,
+                                  rows.length - 1,
+                                )}
                               />
+                            )}
+
+                            {/* Row Offset for data images — same as TextField */}
+                            {!img.isBackground && img.isDataImage && (
+                              <div>
+                                <SLabel>Row Offset</SLabel>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 5,
+                                    background: "rgba(255,255,255,0.03)",
+                                    border: "1px solid rgba(255,255,255,0.08)",
+                                    borderRadius: 8,
+                                    padding: "5px 8px",
+                                  }}
+                                >
+                                  <button
+                                    onClick={() =>
+                                      updateObj(
+                                        "columnOffset",
+                                        (img.columnOffset ?? 0) - 1,
+                                      )
+                                    }
+                                    style={{
+                                      width: 22,
+                                      height: 22,
+                                      borderRadius: 5,
+                                      background: "rgba(255,255,255,0.06)",
+                                      border: "1px solid rgba(255,255,255,0.1)",
+                                      color: "rgba(240,237,232,0.6)",
+                                      cursor: "pointer",
+                                      fontSize: 13,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    −
+                                  </button>
+                                  <div
+                                    style={{
+                                      flex: 1,
+                                      display: "flex",
+                                      gap: 3,
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    {[-1, 0, 1].map((v) => (
+                                      <button
+                                        key={v}
+                                        onClick={() =>
+                                          updateObj("columnOffset", v)
+                                        }
+                                        style={{
+                                          padding: "2px 7px",
+                                          borderRadius: 5,
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          cursor: "pointer",
+                                          border: "none",
+                                          background:
+                                            (img.columnOffset ?? 0) === v
+                                              ? "#e8ff47"
+                                              : "rgba(255,255,255,0.06)",
+                                          color:
+                                            (img.columnOffset ?? 0) === v
+                                              ? "#0a0a10"
+                                              : "rgba(240,237,232,0.45)",
+                                        }}
+                                      >
+                                        {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
+                                      </button>
+                                    ))}
+                                    {Math.abs(img.columnOffset ?? 0) > 1 && (
+                                      <span
+                                        style={{
+                                          padding: "2px 7px",
+                                          borderRadius: 5,
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          background: "#e8ff47",
+                                          color: "#0a0a10",
+                                        }}
+                                      >
+                                        {(img.columnOffset ?? 0) > 0
+                                          ? `+${img.columnOffset}`
+                                          : img.columnOffset}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      updateObj(
+                                        "columnOffset",
+                                        (img.columnOffset ?? 0) + 1,
+                                      )
+                                    }
+                                    style={{
+                                      width: 22,
+                                      height: 22,
+                                      borderRadius: 5,
+                                      background: "rgba(255,255,255,0.06)",
+                                      border: "1px solid rgba(255,255,255,0.1)",
+                                      color: "rgba(240,237,232,0.6)",
+                                      cursor: "pointer",
+                                      fontSize: 13,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
                             )}
                             <div>
                               <div
