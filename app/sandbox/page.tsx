@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 type RowData = Record<string, string>;
@@ -38,7 +37,7 @@ type ImageObject = BaseObj & {
   naturalHeight: number;
   isDataImage: boolean;
   dataImageColumn: string;
-  columnOffset: number; // row shift, same as TextField.columnOffset
+  columnOffset: number;
 };
 type TextField = BaseObj & {
   kind: "field";
@@ -56,37 +55,6 @@ type CanvasObject = ImageObject | TextField;
 type CanvasSize = { width: number; height: number };
 type DataImageMap = Record<string, string>;
 
-// ── Canvas style settings ──────────────────────────────────────────────────
-type CanvasStyle = {
-  background: string;
-  showGrid: boolean;
-  gridSize: number;
-  gridColor: string;
-  showRulers: boolean;
-  shadow: boolean;
-  shadowIntensity: number;
-  borderRadius: number;
-  borderEnabled: boolean;
-  borderColor: string;
-  borderWidth: number;
-  borderStyle: "solid" | "dashed" | "dotted";
-};
-
-const DEFAULT_CANVAS_STYLE: CanvasStyle = {
-  background: "#ffffff",
-  showGrid: false,
-  gridSize: 20,
-  gridColor: "rgba(0,0,0,0.06)",
-  showRulers: false,
-  shadow: true,
-  shadowIntensity: 90,
-  borderRadius: 0,
-  borderEnabled: false,
-  borderColor: "#e8ff47",
-  borderWidth: 2,
-  borderStyle: "solid",
-};
-
 const DEFAULT_SHADOW: Shadow = {
   enabled: false,
   x: 2,
@@ -102,85 +70,285 @@ const DEFAULT_BORDER: Border = {
   style: "solid",
 };
 
-const PRESET_GROUPS = [
-  {
-    group: "Print",
-    items: [
-      { label: "A4 Portrait", w: 595, h: 842 },
-      { label: "A4 Landscape", w: 842, h: 595 },
-      { label: "Letter", w: 612, h: 792 },
-      { label: "ID Card", w: 336, h: 213 },
-      { label: "Business Card", w: 350, h: 200 },
-    ],
-  },
-  {
-    group: "Presentation",
-    items: [
-      { label: "16:9 HD", w: 960, h: 540 },
-      { label: "4:3 Classic", w: 800, h: 600 },
-      { label: "Widescreen", w: 1280, h: 720 },
-    ],
-  },
-  {
-    group: "Social Media",
-    items: [
-      { label: "Instagram Post", w: 600, h: 600 },
-      { label: "Instagram Story", w: 450, h: 800 },
-      { label: "Facebook Post", w: 940, h: 788 },
-      { label: "YouTube Thumb", w: 1280, h: 720 },
-    ],
-  },
-  {
-    group: "Certificate",
-    items: [
-      { label: "Certificate", w: 792, h: 612 },
-      { label: "Diploma", w: 864, h: 648 },
-    ],
-  },
+// Standard sheet sizes in px (at 72dpi)
+const SHEET_PRESETS = [
+  { label: "A4 Portrait", w: 595, h: 842 },
+  { label: "A4 Landscape", w: 842, h: 595 },
+  { label: "Letter", w: 612, h: 792 },
+  { label: "Legal", w: 612, h: 1008 },
+  { label: "A3 Portrait", w: 842, h: 1191 },
+  { label: "A3 Landscape", w: 1191, h: 842 },
+  { label: "Tabloid", w: 792, h: 1224 },
 ];
 
-const GOOGLE_FONTS = [
-  { name: "Playfair Display", category: "Serif" },
-  { name: "Lora", category: "Serif" },
-  { name: "Merriweather", category: "Serif" },
-  { name: "EB Garamond", category: "Serif" },
-  { name: "Cormorant Garamond", category: "Serif" },
-  { name: "Libre Baskerville", category: "Serif" },
-  { name: "DM Sans", category: "Sans-serif" },
-  { name: "Nunito", category: "Sans-serif" },
-  { name: "Poppins", category: "Sans-serif" },
-  { name: "Raleway", category: "Sans-serif" },
-  { name: "Outfit", category: "Sans-serif" },
-  { name: "Plus Jakarta Sans", category: "Sans-serif" },
-  { name: "Rubik", category: "Sans-serif" },
-  { name: "Manrope", category: "Sans-serif" },
-  { name: "Syne", category: "Sans-serif" },
-  { name: "Cinzel", category: "Display" },
-  { name: "Bebas Neue", category: "Display" },
-  { name: "Oswald", category: "Display" },
-  { name: "Teko", category: "Display" },
-  { name: "Dancing Script", category: "Script" },
-  { name: "Great Vibes", category: "Script" },
-  { name: "Pacifico", category: "Script" },
-  { name: "Sacramento", category: "Script" },
-  { name: "JetBrains Mono", category: "Mono" },
-  { name: "Fira Code", category: "Mono" },
-  { name: "Source Code Pro", category: "Mono" },
-];
-const FONT_CATS = ["All", "Serif", "Sans-serif", "Display", "Script", "Mono"];
+type ImpositionGene = {
+  gapX: number;
+  gapY: number;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+  rotation: 0 | 1;
+};
 
-const BATCH_OPTIONS = [1, 2, 3, 4, 6, 8, 9] as const;
-type BatchSize = (typeof BATCH_OPTIONS)[number];
+type ImpositionResult = {
+  gene: ImpositionGene;
+  cols: number;
+  rows: number;
+  count: number;
+  wastePercent: number;
+  cutLines: number;
+  fitness: number;
+  cardW: number;
+  cardH: number;
+  printAreaW: number;
+  printAreaH: number;
+  offsetX: number;
+  offsetY: number;
+};
 
-function batchGrid(count: number): { cols: number; rows: number } {
-  if (count === 1) return { cols: 1, rows: 1 };
-  if (count === 2) return { cols: 2, rows: 1 };
-  if (count === 3) return { cols: 3, rows: 1 };
-  if (count === 4) return { cols: 2, rows: 2 };
-  if (count === 6) return { cols: 3, rows: 2 };
-  if (count === 8) return { cols: 4, rows: 2 };
-  if (count === 9) return { cols: 3, rows: 3 };
-  return { cols: 1, rows: 1 };
+function evalImpositionGene(
+  gene: ImpositionGene,
+  cardW: number,
+  cardH: number,
+  sheetW: number,
+  sheetH: number,
+  minBleedPx: number,
+): ImpositionResult {
+  const cW = gene.rotation === 0 ? cardW : cardH;
+  const cH = gene.rotation === 0 ? cardH : cardW;
+  const printW = sheetW - gene.marginLeft - gene.marginRight;
+  const printH = sheetH - gene.marginTop - gene.marginBottom;
+  if (printW <= cW * 0.5 || printH <= cH * 0.5) {
+    return {
+      gene,
+      cols: 0,
+      rows: 0,
+      count: 0,
+      wastePercent: 100,
+      cutLines: 0,
+      fitness: -9999,
+      cardW: cW,
+      cardH: cH,
+      printAreaW: printW,
+      printAreaH: printH,
+      offsetX: gene.marginLeft,
+      offsetY: gene.marginTop,
+    };
+  }
+  const cols = Math.max(1, Math.floor((printW + gene.gapX) / (cW + gene.gapX)));
+  const rows = Math.max(1, Math.floor((printH + gene.gapY) / (cH + gene.gapY)));
+  const count = cols * rows;
+  const usedW = cols * cW + (cols - 1) * gene.gapX;
+  const usedH = rows * cH + (rows - 1) * gene.gapY;
+  const usedArea = count * cW * cH;
+  const sheetArea = sheetW * sheetH;
+  const wastePercent = Math.max(0, ((sheetArea - usedArea) / sheetArea) * 100);
+  const cutLines = (cols > 1 ? cols - 1 : 0) + (rows > 1 ? rows - 1 : 0) + 4;
+
+  // FIX: card count is the dominant fitness signal; waste/cuts are secondary
+  let fitness = 0;
+  fitness += count * 500; // strongly prioritise more cards per sheet
+  fitness -= wastePercent * 1.5; // softer waste penalty
+  fitness -= cutLines * 4; // softer cut-line penalty
+
+  const gridBalance = 1 - Math.abs(cols - rows) / Math.max(cols, rows);
+  fitness += gridBalance * 10;
+  const hSymmetry =
+    1 -
+    Math.abs(gene.marginLeft - gene.marginRight) /
+      Math.max(gene.marginLeft + gene.marginRight, 1);
+  const vSymmetry =
+    1 -
+    Math.abs(gene.marginTop - gene.marginBottom) /
+      Math.max(gene.marginTop + gene.marginBottom, 1);
+  fitness += (hSymmetry + vSymmetry) * 15;
+  if (gene.gapX < minBleedPx) fitness -= (minBleedPx - gene.gapX) * 40;
+  if (gene.gapY < minBleedPx) fitness -= (minBleedPx - gene.gapY) * 40;
+  const MIN_MARGIN = 5;
+  if (gene.marginTop < MIN_MARGIN)
+    fitness -= (MIN_MARGIN - gene.marginTop) * 30;
+  if (gene.marginRight < MIN_MARGIN)
+    fitness -= (MIN_MARGIN - gene.marginRight) * 30;
+  if (gene.marginBottom < MIN_MARGIN)
+    fitness -= (MIN_MARGIN - gene.marginBottom) * 30;
+  if (gene.marginLeft < MIN_MARGIN)
+    fitness -= (MIN_MARGIN - gene.marginLeft) * 30;
+  const excessGapX = Math.max(0, gene.gapX - 20);
+  const excessGapY = Math.max(0, gene.gapY - 20);
+  fitness -= excessGapX * 5 + excessGapY * 5;
+  const idealOffsetX = gene.marginLeft + (printW - usedW) / 2;
+  const idealOffsetY = gene.marginTop + (printH - usedH) / 2;
+  return {
+    gene,
+    cols,
+    rows,
+    count,
+    wastePercent,
+    cutLines,
+    fitness,
+    cardW: cW,
+    cardH: cH,
+    printAreaW: printW,
+    printAreaH: printH,
+    offsetX: Math.round(idealOffsetX),
+    offsetY: Math.round(idealOffsetY),
+  };
+}
+
+function randomImpositionGene(allowRotation: boolean): ImpositionGene {
+  return {
+    gapX: Math.round(Math.random() * 20 + 2),
+    gapY: Math.round(Math.random() * 20 + 2),
+    marginTop: Math.round(Math.random() * 30 + 5),
+    marginRight: Math.round(Math.random() * 30 + 5),
+    marginBottom: Math.round(Math.random() * 30 + 5),
+    marginLeft: Math.round(Math.random() * 30 + 5),
+    rotation: (allowRotation && Math.random() > 0.5 ? 1 : 0) as 0 | 1,
+  };
+}
+
+function mutateGene(
+  g: ImpositionGene,
+  strength: number,
+  allowRotation: boolean,
+): ImpositionGene {
+  const r = () => (Math.random() - 0.5) * strength;
+  return {
+    gapX: Math.max(0, Math.round(g.gapX + r())),
+    gapY: Math.max(0, Math.round(g.gapY + r())),
+    marginTop: Math.max(0, Math.round(g.marginTop + r())),
+    marginRight: Math.max(0, Math.round(g.marginRight + r())),
+    marginBottom: Math.max(0, Math.round(g.marginBottom + r())),
+    marginLeft: Math.max(0, Math.round(g.marginLeft + r())),
+    rotation:
+      allowRotation && Math.random() < 0.05
+        ? ((g.rotation === 0 ? 1 : 0) as 0 | 1)
+        : g.rotation,
+  };
+}
+
+function crossoverGenes(a: ImpositionGene, b: ImpositionGene): ImpositionGene {
+  const t = () => Math.random() > 0.5;
+  return {
+    gapX: t() ? a.gapX : b.gapX,
+    gapY: t() ? a.gapY : b.gapY,
+    marginTop: t() ? a.marginTop : b.marginTop,
+    marginRight: t() ? a.marginRight : b.marginRight,
+    marginBottom: t() ? a.marginBottom : b.marginBottom,
+    marginLeft: t() ? a.marginLeft : b.marginLeft,
+    rotation: t() ? a.rotation : b.rotation,
+  };
+}
+
+type ImpositionGAParams = {
+  cardW: number;
+  cardH: number;
+  sheetW: number;
+  sheetH: number;
+  minBleedPx: number;
+  allowRotation: boolean;
+  onProgress: (best: ImpositionResult, gen: number, done: boolean) => void;
+};
+
+function runImpositionGA(params: ImpositionGAParams): () => void {
+  const {
+    cardW,
+    cardH,
+    sheetW,
+    sheetH,
+    minBleedPx,
+    allowRotation,
+    onProgress,
+  } = params;
+  const POP = 120,
+    GENS = 200;
+  let stopped = false;
+  const population: ImpositionGene[] = [];
+
+  // FIX: seed every plausible grid combination so the GA starts near optimal
+  const seedRotations: (0 | 1)[] = allowRotation ? [0, 1] : [0];
+  for (const rot of seedRotations) {
+    const cW2 = rot === 0 ? cardW : cardH;
+    const cH2 = rot === 0 ? cardH : cardW;
+    const maxCols = Math.ceil(sheetW / Math.max(cW2, 1));
+    const maxRows = Math.ceil(sheetH / Math.max(cH2, 1));
+    for (let sc = 1; sc <= maxCols; sc++) {
+      for (let sr = 1; sr <= maxRows; sr++) {
+        const gap = minBleedPx;
+        const totalW = sc * cW2 + (sc - 1) * gap;
+        const totalH = sr * cH2 + (sr - 1) * gap;
+        if (totalW > sheetW || totalH > sheetH) continue;
+        const marginH = Math.max(5, Math.floor((sheetW - totalW) / 2));
+        const marginV = Math.max(5, Math.floor((sheetH - totalH) / 2));
+        population.push({
+          gapX: gap,
+          gapY: gap,
+          marginTop: marginV,
+          marginRight: marginH,
+          marginBottom: marginV,
+          marginLeft: marginH,
+          rotation: rot,
+        });
+      }
+    }
+  }
+
+  // Also keep a few tight-margin seeds
+  population.push({
+    gapX: 5,
+    gapY: 5,
+    marginTop: 20,
+    marginRight: 15,
+    marginBottom: 20,
+    marginLeft: 15,
+    rotation: 0,
+  });
+
+  while (population.length < POP)
+    population.push(randomImpositionGene(allowRotation));
+
+  let gen = 0,
+    mutStrength = 12;
+  const tick = () => {
+    if (stopped) return;
+    const scored = population
+      .map((g) => ({
+        g,
+        r: evalImpositionGene(g, cardW, cardH, sheetW, sheetH, minBleedPx),
+      }))
+      .sort((a, b) => b.r.fitness - a.r.fitness);
+    const best = scored[0].r;
+    if (gen % 10 === 0 || gen === GENS - 1)
+      onProgress(best, gen, gen >= GENS - 1);
+    if (gen >= GENS - 1) return;
+    const eliteCount = Math.max(4, Math.floor(POP * 0.2));
+    const elite = scored.slice(0, eliteCount).map((x) => x.g);
+    if (gen % 20 === 0 && gen > 0) {
+      const topFew = scored.slice(0, 5).map((x) => x.r.fitness);
+      const spread = topFew[0] - topFew[4];
+      if (spread < 5) mutStrength = Math.min(20, mutStrength * 1.5);
+      else mutStrength = Math.max(1, mutStrength * 0.85);
+    }
+    const next: ImpositionGene[] = [...elite];
+    while (next.length < Math.floor(POP * 0.6)) {
+      const pA = elite[Math.floor(Math.random() * elite.length)],
+        pB = elite[Math.floor(Math.random() * eliteCount)];
+      next.push(crossoverGenes(pA, pB));
+    }
+    while (next.length < POP - 10) {
+      const base = elite[Math.floor(Math.random() * elite.length)];
+      next.push(mutateGene(base, mutStrength, allowRotation));
+    }
+    while (next.length < POP) next.push(randomImpositionGene(allowRotation));
+    population.splice(0, population.length, ...next);
+    gen++;
+    setTimeout(tick, 0);
+  };
+  setTimeout(tick, 0);
+  return () => {
+    stopped = true;
+  };
 }
 
 const IMAGE_EXTS = /\.(jpe?g|png|gif|webp|bmp|svg|tiff?|avif|ico)$/i;
@@ -385,13 +553,13 @@ function textShadowCSS(s: Shadow): string {
   if (!s.enabled && (!s.thickness || s.thickness === 0)) return "none";
   const parts: string[] = [];
   if (s.thickness && s.thickness > 0) {
-    const t = s.thickness;
-    const steps = Math.max(8, Math.round(t * 6));
+    const t = s.thickness,
+      steps = Math.max(8, Math.round(t * 6));
     for (let i = 0; i < steps; i++) {
       const angle = (i / steps) * 2 * Math.PI;
-      const tx = Math.round(Math.cos(angle) * t * 10) / 10;
-      const ty = Math.round(Math.sin(angle) * t * 10) / 10;
-      parts.push(`${tx}px ${ty}px 0px ${s.color}`);
+      parts.push(
+        `${Math.round(Math.cos(angle) * t * 10) / 10}px ${Math.round(Math.sin(angle) * t * 10) / 10}px 0px ${s.color}`,
+      );
     }
   }
   if (s.enabled) parts.push(`${s.x}px ${s.y}px ${s.blur}px ${s.color}`);
@@ -590,9 +758,7 @@ function useDragResize(
   return { handleMouseDown, handleResizeDown };
 }
 
-const PLACEHOLDER_SRC = `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#e0e0e0"/><rect width="40" height="40" fill="#c0c0c0"/><rect x="40" y="40" width="40" height="40" fill="#c0c0c0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#999">no photo</text></svg>`,
-)}`;
+const PLACEHOLDER_SRC = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#e0e0e0"/><rect width="40" height="40" fill="#c0c0c0"/><rect x="40" y="40" width="40" height="40" fill="#c0c0c0"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#999">no photo</text></svg>`)}`;
 
 function ImageEl({
   obj,
@@ -916,6 +1082,36 @@ function TextEl({
     </div>
   );
 }
+
+const GOOGLE_FONTS = [
+  { name: "Playfair Display", category: "Serif" },
+  { name: "Lora", category: "Serif" },
+  { name: "Merriweather", category: "Serif" },
+  { name: "EB Garamond", category: "Serif" },
+  { name: "Cormorant Garamond", category: "Serif" },
+  { name: "Libre Baskerville", category: "Serif" },
+  { name: "DM Sans", category: "Sans-serif" },
+  { name: "Nunito", category: "Sans-serif" },
+  { name: "Poppins", category: "Sans-serif" },
+  { name: "Raleway", category: "Sans-serif" },
+  { name: "Outfit", category: "Sans-serif" },
+  { name: "Plus Jakarta Sans", category: "Sans-serif" },
+  { name: "Rubik", category: "Sans-serif" },
+  { name: "Manrope", category: "Sans-serif" },
+  { name: "Syne", category: "Sans-serif" },
+  { name: "Cinzel", category: "Display" },
+  { name: "Bebas Neue", category: "Display" },
+  { name: "Oswald", category: "Display" },
+  { name: "Teko", category: "Display" },
+  { name: "Dancing Script", category: "Script" },
+  { name: "Great Vibes", category: "Script" },
+  { name: "Pacifico", category: "Script" },
+  { name: "Sacramento", category: "Script" },
+  { name: "JetBrains Mono", category: "Mono" },
+  { name: "Fira Code", category: "Mono" },
+  { name: "Source Code Pro", category: "Mono" },
+];
+const FONT_CATS = ["All", "Serif", "Sans-serif", "Display", "Script", "Mono"];
 
 function FontPicker({
   value,
@@ -1533,7 +1729,6 @@ function BorderPanel({
   );
 }
 
-// ── Reusable ToggleSwitch ──────────────────────────────────────────────────
 function ToggleSwitch({
   value,
   onChange,
@@ -1570,460 +1765,6 @@ function ToggleSwitch({
         }}
       />
     </button>
-  );
-}
-
-// ── Canvas Style Panel ─────────────────────────────────────────────────────
-function CanvasStylePanel({
-  style,
-  onChange,
-}: {
-  style: CanvasStyle;
-  onChange: (s: CanvasStyle) => void;
-}) {
-  const set = (k: keyof CanvasStyle, v: any) => onChange({ ...style, [k]: v });
-  const PRESET_BG_COLORS = [
-    "#ffffff",
-    "#f8f8f0",
-    "#1a1a2e",
-    "#0a0a10",
-    "#fef9ef",
-    "#e8f4f8",
-    "#fff0f0",
-    "#f0fff0",
-    "#2d2d2d",
-    "#000000",
-  ];
-  const CANVAS_BORDER_STYLES = ["solid", "dashed", "dotted"] as const;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-        padding: 12,
-        minWidth: 0,
-      }}
-    >
-      {/* Background Color */}
-      <div>
-        <SLabel>Background</SLabel>
-        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-          <div
-            style={{
-              position: "relative",
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.12)",
-              flexShrink: 0,
-            }}
-          >
-            <input
-              type="color"
-              value={style.background}
-              onChange={(e) => set("background", e.target.value)}
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                cursor: "pointer",
-                transform: "scale(1.5)",
-              }}
-            />
-          </div>
-          <input
-            value={style.background}
-            onChange={(e) => set("background", e.target.value)}
-            style={{
-              flex: 1,
-              padding: "5px 7px",
-              borderRadius: 6,
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "#f0ede8",
-              fontSize: 11,
-              fontFamily: "monospace",
-              outline: "none",
-            }}
-          />
-        </div>
-        {/* Color presets */}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {PRESET_BG_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => set("background", c)}
-              title={c}
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                background: c,
-                border:
-                  style.background === c
-                    ? "2px solid #e8ff47"
-                    : "1px solid rgba(255,255,255,0.15)",
-                cursor: "pointer",
-                flexShrink: 0,
-                transition: "transform 0.1s",
-                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.transform = "scale(1.15)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.transform = "scale(1)")
-              }
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Border Radius */}
-      <div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: 5,
-          }}
-        >
-          <SLabel>Corner Radius</SLabel>
-          <span style={{ fontSize: 9, color: "#e8ff47", fontWeight: 700 }}>
-            {style.borderRadius}px
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={60}
-          value={style.borderRadius}
-          onChange={(e) => set("borderRadius", Number(e.target.value))}
-          style={{ width: "100%", height: "3px", accentColor: "#e8ff47" }}
-        />
-        <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-          {[0, 4, 8, 16, 24].map((r) => (
-            <button
-              key={r}
-              onClick={() => set("borderRadius", r)}
-              style={{
-                flex: 1,
-                padding: "5px 2px",
-                borderRadius: r > 4 ? r : 4,
-                fontSize: 9,
-                cursor: "pointer",
-                border: "none",
-                background:
-                  style.borderRadius === r
-                    ? "rgba(232,255,71,0.15)"
-                    : "rgba(255,255,255,0.05)",
-                color:
-                  style.borderRadius === r
-                    ? "#e8ff47"
-                    : "rgba(240,237,232,0.4)",
-                fontWeight: 600,
-              }}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Canvas Border */}
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 6,
-          }}
-        >
-          <SLabel>Canvas Border</SLabel>
-          <ToggleSwitch
-            value={style.borderEnabled}
-            onChange={(v) => set("borderEnabled", v)}
-          />
-        </div>
-        {style.borderEnabled && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 7,
-              padding: "8px",
-              borderRadius: 7,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <div style={{ display: "flex", gap: 6 }}>
-              <div
-                style={{
-                  position: "relative",
-                  width: 24,
-                  height: 24,
-                  borderRadius: 5,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  flexShrink: 0,
-                }}
-              >
-                <input
-                  type="color"
-                  value={style.borderColor}
-                  onChange={(e) => set("borderColor", e.target.value)}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    transform: "scale(1.5)",
-                  }}
-                />
-              </div>
-              <input
-                value={style.borderColor}
-                onChange={(e) => set("borderColor", e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: "3px 6px",
-                  borderRadius: 5,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#f0ede8",
-                  fontSize: 10,
-                  fontFamily: "monospace",
-                  outline: "none",
-                }}
-              />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  width: 24,
-                  flexShrink: 0,
-                }}
-              >
-                W
-              </span>
-              <input
-                type="range"
-                min={1}
-                max={20}
-                value={style.borderWidth}
-                onChange={(e) => set("borderWidth", Number(e.target.value))}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  height: "3px",
-                  accentColor: "#e8ff47",
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#e8ff47",
-                  width: 26,
-                  textAlign: "right",
-                  flexShrink: 0,
-                }}
-              >
-                {style.borderWidth}px
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 3 }}>
-              {CANVAS_BORDER_STYLES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => set("borderStyle", s)}
-                  style={{
-                    flex: 1,
-                    padding: "3px 0",
-                    borderRadius: 4,
-                    fontSize: 8,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    border: "none",
-                    background:
-                      style.borderStyle === s
-                        ? "rgba(232,255,71,0.15)"
-                        : "rgba(255,255,255,0.05)",
-                    color:
-                      style.borderStyle === s
-                        ? "#e8ff47"
-                        : "rgba(240,237,232,0.4)",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Grid */}
-      <div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: style.showGrid ? 8 : 0,
-          }}
-        >
-          <SLabel>Grid Overlay</SLabel>
-          <ToggleSwitch
-            value={style.showGrid}
-            onChange={(v) => set("showGrid", v)}
-          />
-        </div>
-        {style.showGrid && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 7,
-              padding: "8px",
-              borderRadius: 7,
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  width: 24,
-                  flexShrink: 0,
-                }}
-              >
-                Size
-              </span>
-              <input
-                type="range"
-                min={5}
-                max={80}
-                value={style.gridSize}
-                onChange={(e) => set("gridSize", Number(e.target.value))}
-                style={{ flex: 1, height: "3px", accentColor: "#e8ff47" }}
-              />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#e8ff47",
-                  width: 26,
-                  textAlign: "right",
-                  flexShrink: 0,
-                }}
-              >
-                {style.gridSize}px
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <div
-                style={{
-                  position: "relative",
-                  width: 24,
-                  height: 24,
-                  borderRadius: 5,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  flexShrink: 0,
-                }}
-              >
-                <input
-                  type="color"
-                  value={
-                    style.gridColor.startsWith("r")
-                      ? "#000000"
-                      : style.gridColor
-                  }
-                  onChange={(e) => set("gridColor", e.target.value + "30")}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    transform: "scale(1.5)",
-                  }}
-                />
-              </div>
-              <div style={{ display: "flex", gap: 3 }}>
-                {[
-                  "rgba(0,0,0,0.06)",
-                  "rgba(0,0,0,0.12)",
-                  "rgba(255,255,255,0.08)",
-                  "rgba(99,179,237,0.12)",
-                  "rgba(232,255,71,0.1)",
-                ].map((c, i) => (
-                  <button
-                    key={i}
-                    onClick={() => set("gridColor", c)}
-                    title="Grid color preset"
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 4,
-                      background:
-                        c === "rgba(0,0,0,0.06)" || c === "rgba(0,0,0,0.12)"
-                          ? "#888"
-                          : c.includes("255,255,255")
-                            ? "#444"
-                            : c.includes("99,179")
-                              ? "#63b3ed"
-                              : "#e8ff47",
-                      border:
-                        style.gridColor === c
-                          ? "2px solid #e8ff47"
-                          : "1px solid rgba(255,255,255,0.12)",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                      opacity: 0.7,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Reset button */}
-      <button
-        onClick={() => onChange(DEFAULT_CANVAS_STYLE)}
-        style={{
-          width: "100%",
-          padding: "7px 0",
-          borderRadius: 7,
-          fontSize: 11,
-          fontWeight: 600,
-          cursor: "pointer",
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          color: "rgba(240,237,232,0.45)",
-          transition: "all 0.15s",
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = "rgba(255,255,255,0.08)")
-        }
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.background = "rgba(255,255,255,0.04)")
-        }
-      >
-        ↺ Reset Canvas Style
-      </button>
-    </div>
   );
 }
 
@@ -2473,35 +2214,243 @@ function DataImageInfo({
   );
 }
 
-function SizePicker({
-  current,
-  onSelect,
+function TemplateThumbnail({
+  objects,
+  canvasSize,
+  rows,
+  pageIndex,
+  dataImages,
+  width,
+  height,
+  rotate,
+}: {
+  objects: CanvasObject[];
+  canvasSize: CanvasSize;
+  rows: RowData[];
+  pageIndex: number;
+  dataImages: DataImageMap;
+  width: number;
+  height: number;
+  rotate: boolean;
+}) {
+  const scaleX = rotate ? height / canvasSize.width : width / canvasSize.width;
+  const scaleY = rotate
+    ? width / canvasSize.height
+    : height / canvasSize.height;
+  const bgImg = objects.find(
+    (o) => o.kind === "image" && (o as ImageObject).isBackground,
+  ) as ImageObject | undefined;
+
+  return (
+    <div
+      style={{
+        width,
+        height,
+        position: "relative",
+        overflow: "hidden",
+        background: "#fff",
+        transform: rotate ? `rotate(90deg)` : undefined,
+        transformOrigin: "center center",
+        borderRadius: 1,
+        flexShrink: 0,
+      }}
+    >
+      {bgImg && (
+        <img
+          src={bgImg.src}
+          alt=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "fill",
+            opacity: bgImg.opacity,
+          }}
+        />
+      )}
+      {objects
+        .filter((o) => !(o.kind === "image" && (o as ImageObject).isBackground))
+        .sort((a, b) => a.zIndex - b.zIndex)
+        .map((obj) => {
+          if (obj.kind === "image") {
+            const imgObj = obj as ImageObject;
+            const src = imgObj.isDataImage
+              ? resolveDataImageSrc(imgObj, rows, pageIndex, dataImages)
+              : imgObj.src;
+            return (
+              <img
+                key={obj.id}
+                src={src}
+                alt=""
+                style={{
+                  position: "absolute",
+                  left: obj.x * scaleX,
+                  top: obj.y * scaleY,
+                  width: obj.width * scaleX,
+                  height: obj.height * scaleY,
+                  objectFit: "fill",
+                  opacity: imgObj.opacity,
+                  borderRadius:
+                    (imgObj.borderRadius ?? 0) * Math.min(scaleX, scaleY),
+                }}
+              />
+            );
+          } else {
+            const f = obj as TextField;
+            const ti = pageIndex + f.columnOffset;
+            const text =
+              ti >= 0 && ti < rows.length
+                ? (rows[ti][f.column] ?? "")
+                : f.column;
+            const fs = Math.max(4, f.fontSize * Math.min(scaleX, scaleY));
+            return (
+              <div
+                key={obj.id}
+                style={{
+                  position: "absolute",
+                  left: obj.x * scaleX,
+                  top: obj.y * scaleY,
+                  width: obj.width * scaleX,
+                  height: obj.height * scaleY,
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent:
+                    f.textAlign === "right"
+                      ? "flex-end"
+                      : f.textAlign === "center"
+                        ? "center"
+                        : "flex-start",
+                  padding: "0 1px",
+                  boxSizing: "border-box",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: `'${f.fontFamily}', serif`,
+                    fontSize: fs,
+                    color: f.color,
+                    fontWeight: f.bold ? "bold" : "normal",
+                    fontStyle: f.italic ? "italic" : "normal",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {text}
+                </span>
+              </div>
+            );
+          }
+        })}
+    </div>
+  );
+}
+
+function ImpositionModal({
+  canvasSize,
+  totalCards,
+  objects,
+  rows,
+  pageIndex,
+  dataImages,
+  exportFormat,
+  onExportFormatChange,
+  onExport,
+  exportProgress,
   onClose,
 }: {
-  current: CanvasSize;
-  onSelect: (s: CanvasSize, l: string) => void;
+  canvasSize: CanvasSize;
+  totalCards: number;
+  objects: CanvasObject[];
+  rows: RowData[];
+  pageIndex: number;
+  dataImages: DataImageMap;
+  exportFormat: string;
+  onExportFormatChange: (f: string) => void;
+  onExport: () => void;
+  exportProgress: number | null;
   onClose: () => void;
 }) {
-  const [cw, setCw] = useState(String(current.width)),
-    [ch, setCh] = useState(String(current.height));
-  const [grp, setGrp] = useState("All");
-  const apply = () => {
-    const w = Math.max(100, Math.min(2000, parseInt(cw) || 960)),
-      h = Math.max(100, Math.min(2000, parseInt(ch) || 540));
-    onSelect({ width: w, height: h }, "Custom");
-  };
-  const allGroups = ["All", ...PRESET_GROUPS.map((g) => g.group)];
-  const items = PRESET_GROUPS.flatMap((g) =>
-    grp === "All" || g.group === grp ? g.items : [],
-  );
+  const [selectedSheet, setSelectedSheet] = useState(SHEET_PRESETS[0]);
+  const [allowRotation, setAllowRotation] = useState(true);
+  const [minBleedMm, setMinBleedMm] = useState(3);
+  const [gaRunning, setGaRunning] = useState(false);
+  const [gaGen, setGaGen] = useState(0);
+  const [bestResult, setBestResult] = useState<ImpositionResult | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
+  const MM_TO_PX = 2.835;
+  const minBleedPx = Math.round(minBleedMm * MM_TO_PX);
+  const totalPages = bestResult
+    ? Math.ceil(totalCards / bestResult.count)
+    : null;
+  const runGA = useCallback(() => {
+    if (stopRef.current) stopRef.current();
+    setGaRunning(true);
+    setGaGen(0);
+    setBestResult(null);
+    const stop = runImpositionGA({
+      cardW: canvasSize.width,
+      cardH: canvasSize.height,
+      sheetW: selectedSheet.w,
+      sheetH: selectedSheet.h,
+      minBleedPx,
+      allowRotation,
+      onProgress: (best, gen, done) => {
+        setBestResult(best);
+        setGaGen(gen);
+        if (done) {
+          setGaRunning(false);
+          stopRef.current = null;
+        }
+      },
+    });
+    stopRef.current = stop;
+  }, [canvasSize, selectedSheet, minBleedPx, allowRotation]);
+  useEffect(() => {
+    runGA();
+    return () => {
+      if (stopRef.current) stopRef.current();
+    };
+  }, []);
+  const runTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRun = useCallback(() => {
+    if (runTimer.current) clearTimeout(runTimer.current);
+    runTimer.current = setTimeout(runGA, 400);
+  }, [runGA]);
+  const PREVIEW_W = 220;
+  const previewScale = PREVIEW_W / selectedSheet.w;
+  const previewH = Math.round(selectedSheet.h * previewScale);
+  const cardPreviewW = bestResult
+    ? Math.round(bestResult.cardW * previewScale)
+    : Math.round(canvasSize.width * previewScale);
+  const cardPreviewH = bestResult
+    ? Math.round(bestResult.cardH * previewScale)
+    : Math.round(canvasSize.height * previewScale);
+  const gapPreviewX = bestResult
+    ? Math.round(bestResult.gene.gapX * previewScale)
+    : 3;
+  const gapPreviewY = bestResult
+    ? Math.round(bestResult.gene.gapY * previewScale)
+    : 3;
+  const offsetPreviewX = bestResult
+    ? Math.round(bestResult.offsetX * previewScale)
+    : 5;
+  const offsetPreviewY = bestResult
+    ? Math.round(bestResult.offsetY * previewScale)
+    : 5;
+
+  const isRotated = bestResult?.gene.rotation === 1;
+
   return (
     <div
       onClick={onClose}
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.75)",
-        zIndex: 400,
+        background: "rgba(0,0,0,0.82)",
+        zIndex: 500,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -2510,15 +2459,18 @@ function SizePicker({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#14141e",
+          background: "#12121c",
           border: "1px solid rgba(255,255,255,0.09)",
-          borderRadius: 14,
-          padding: 22,
-          width: 520,
-          maxHeight: "80vh",
+          borderRadius: 16,
+          padding: 24,
+          width: 680,
+          maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 40px 100px rgba(0,0,0,0.7)",
+          gap: 0,
+          boxShadow: "0 40px 120px rgba(0,0,0,0.8)",
+          animation: "popIn 0.18s ease",
+          overflow: "hidden",
         }}
       >
         <div
@@ -2526,232 +2478,833 @@ function SizePicker({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 14,
+            marginBottom: 20,
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#f0ede8" }}>
-            Canvas Size
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                background: "rgba(232,255,71,0.12)",
+                border: "1px solid rgba(232,255,71,0.3)",
+                borderRadius: 9,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 15,
+              }}
+            >
+              ⬚
+            </div>
+            <div>
+              <h2
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: "#f0ede8",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Print Imposition & Export
+              </h2>
+              <p
+                style={{
+                  fontSize: 10,
+                  color: "rgba(240,237,232,0.35)",
+                  marginTop: 1,
+                }}
+              >
+                GA-optimized card layout on print sheets
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
             style={{
               background: "none",
               border: "none",
-              color: "rgba(240,237,232,0.4)",
-              fontSize: 16,
+              color: "rgba(240,237,232,0.3)",
+              fontSize: 18,
               cursor: "pointer",
+              width: 28,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 6,
             }}
           >
             ✕
           </button>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 5,
-            marginBottom: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          {allGroups.map((g) => (
-            <button
-              key={g}
-              onClick={() => setGrp(g)}
-              style={{
-                padding: "3px 9px",
-                borderRadius: 5,
-                fontSize: 10,
-                fontWeight: 600,
-                cursor: "pointer",
-                border: "none",
-                background:
-                  grp === g
-                    ? "rgba(232,255,71,0.15)"
-                    : "rgba(255,255,255,0.05)",
-                color: grp === g ? "#e8ff47" : "rgba(240,237,232,0.45)",
-              }}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-        <div style={{ overflowY: "auto", flex: 1, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 20, flex: 1, overflow: "hidden" }}>
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4,1fr)",
-              gap: 6,
+              width: 220,
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              overflowY: "auto",
             }}
           >
-            {items.map((item) => {
-              const active =
-                current.width === item.w && current.height === item.h;
-              const asp = item.w / item.h,
-                mD = 28,
-                tw = asp >= 1 ? mD : Math.round(mD * asp),
-                th = asp < 1 ? mD : Math.round(mD / asp);
-              return (
-                <button
-                  key={item.label}
-                  onClick={() =>
-                    onSelect({ width: item.w, height: item.h }, item.label)
-                  }
+            <div>
+              <p
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(240,237,232,0.28)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 7,
+                }}
+              >
+                Sheet Size
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {SHEET_PRESETS.map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => {
+                      setSelectedSheet(s);
+                      scheduleRun();
+                    }}
+                    style={{
+                      padding: "6px 9px",
+                      borderRadius: 7,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      border: `1px solid ${selectedSheet.label === s.label ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.07)"}`,
+                      background:
+                        selectedSheet.label === s.label
+                          ? "rgba(232,255,71,0.08)"
+                          : "rgba(255,255,255,0.02)",
+                      color:
+                        selectedSheet.label === s.label
+                          ? "#e8ff47"
+                          : "rgba(240,237,232,0.6)",
+                    }}
+                  >
+                    <span>{s.label}</span>
+                    <span style={{ fontSize: 8, opacity: 0.45 }}>
+                      {s.w}×{s.h}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 6,
+                }}
+              >
+                <p
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "9px 5px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    border: `1.5px solid ${active ? "#e8ff47" : "rgba(255,255,255,0.07)"}`,
-                    background: active
-                      ? "rgba(232,255,71,0.07)"
-                      : "rgba(255,255,255,0.02)",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: "rgba(240,237,232,0.28)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Min Bleed Gap
+                </p>
+                <span
+                  style={{ fontSize: 9, color: "#e8ff47", fontWeight: 700 }}
+                >
+                  {minBleedMm}mm
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={0.5}
+                value={minBleedMm}
+                onChange={(e) => {
+                  setMinBleedMm(Number(e.target.value));
+                  scheduleRun();
+                }}
+                style={{ width: "100%", height: "3px", accentColor: "#e8ff47" }}
+              />
+              <div style={{ display: "flex", gap: 4, marginTop: 7 }}>
+                {[0, 2, 3, 5, 8].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setMinBleedMm(v);
+                      scheduleRun();
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "4px 2px",
+                      borderRadius: 5,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: "none",
+                      background:
+                        minBleedMm === v
+                          ? "rgba(232,255,71,0.15)"
+                          : "rgba(255,255,255,0.05)",
+                      color:
+                        minBleedMm === v ? "#e8ff47" : "rgba(240,237,232,0.4)",
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "9px 10px",
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "rgba(240,237,232,0.7)",
+                  }}
+                >
+                  Allow Rotation
+                </p>
+                <p
+                  style={{
+                    fontSize: 8,
+                    color: "rgba(240,237,232,0.3)",
+                    marginTop: 1,
+                  }}
+                >
+                  Try 90° card orientation
+                </p>
+              </div>
+              <ToggleSwitch
+                value={allowRotation}
+                onChange={(v) => {
+                  setAllowRotation(v);
+                  scheduleRun();
+                }}
+              />
+            </div>
+            <div
+              style={{
+                padding: "9px 10px",
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(240,237,232,0.28)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 6,
+                }}
+              >
+                Card
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
+                  <span
+                    style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}
+                  >
+                    Size
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "#f0ede8",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {canvasSize.width}×{canvasSize.height}px
+                  </span>
+                </div>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
+                  <span
+                    style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}
+                  >
+                    Total cards
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "#f0ede8",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {totalCards || "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={runGA}
+              disabled={gaRunning}
+              style={{
+                width: "100%",
+                padding: "8px 0",
+                borderRadius: 8,
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: gaRunning ? "not-allowed" : "pointer",
+                background: gaRunning
+                  ? "rgba(232,255,71,0.06)"
+                  : "rgba(232,255,71,0.12)",
+                border: `1px solid ${gaRunning ? "rgba(232,255,71,0.15)" : "rgba(232,255,71,0.35)"}`,
+                color: gaRunning ? "rgba(232,255,71,0.4)" : "#e8ff47",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 7,
+              }}
+            >
+              {gaRunning ? (
+                <>
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      border: "1.5px solid rgba(232,255,71,0.25)",
+                      borderTop: "1.5px solid #e8ff47",
+                      borderRadius: "50%",
+                      animation: "spin 0.6s linear infinite",
+                    }}
+                  />
+                  <span>Evolving… gen {gaGen}/200</span>
+                </>
+              ) : (
+                <>
+                  <span>↺</span>
+                  <span>Re-optimize</span>
+                </>
+              )}
+            </button>
+
+            <div
+              style={{
+                padding: "12px",
+                borderRadius: 10,
+                background: "rgba(232,255,71,0.04)",
+                border: "1px solid rgba(232,255,71,0.18)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(240,237,232,0.28)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                Export
+              </p>
+              <div style={{ display: "flex", gap: 4 }}>
+                {["PNG", "PDF"].map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => onExportFormatChange(f)}
+                    style={{
+                      flex: 1,
+                      padding: "5px 0",
+                      borderRadius: 6,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: `1px solid ${exportFormat === f ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      background:
+                        exportFormat === f
+                          ? "rgba(232,255,71,0.12)"
+                          : "rgba(255,255,255,0.04)",
+                      color:
+                        exportFormat === f
+                          ? "#e8ff47"
+                          : "rgba(240,237,232,0.4)",
+                    }}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={onExport}
+                disabled={exportProgress !== null}
+                style={{
+                  width: "100%",
+                  padding: "9px 0",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: exportProgress !== null ? "not-allowed" : "pointer",
+                  background: exportProgress !== null ? "#b8cc38" : "#e8ff47",
+                  border: "none",
+                  color: "#0a0a10",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 7,
+                  opacity: exportProgress !== null ? 0.7 : 1,
+                }}
+              >
+                {exportProgress !== null ? (
+                  <>
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        border: "1.5px solid rgba(0,0,0,0.2)",
+                        borderTop: "1.5px solid rgba(0,0,0,0.7)",
+                        borderRadius: "50%",
+                        animation: "spin 0.6s linear infinite",
+                      }}
+                    />
+                    <span>Exporting… {exportProgress}%</span>
+                  </>
+                ) : (
+                  <>
+                    <span>↓</span>
+                    <span>
+                      Export {exportFormat}
+                      {totalCards > 1 ? ` · ${totalCards} records` : ""}
+                    </span>
+                  </>
+                )}
+              </button>
+              {exportProgress !== null && (
+                <div
+                  style={{
+                    height: 3,
+                    background: "rgba(255,255,255,0.1)",
+                    borderRadius: 4,
                   }}
                 >
                   <div
                     style={{
-                      width: tw,
-                      height: th,
-                      borderRadius: 2,
-                      background: active
-                        ? "rgba(232,255,71,0.4)"
-                        : "rgba(255,255,255,0.13)",
+                      height: "100%",
+                      width: `${exportProgress}%`,
+                      background: "#e8ff47",
+                      borderRadius: 4,
+                      transition: "width 0.3s",
                     }}
                   />
-                  <span
+                </div>
+              )}
+            </div>
+          </div>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              overflow: "hidden",
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(240,237,232,0.28)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  marginBottom: 8,
+                }}
+              >
+                Sheet Preview
+              </p>
+              <div
+                style={{ display: "flex", alignItems: "flex-start", gap: 10 }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: PREVIEW_W,
+                    height: previewH,
+                    background: "#fff",
+                    borderRadius: 4,
+                    boxShadow:
+                      "0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)",
+                    flexShrink: 0,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      backgroundImage:
+                        "repeating-linear-gradient(45deg, rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 8px)",
+                      backgroundSize: "8px 8px",
+                    }}
+                  />
+                  {bestResult &&
+                    bestResult.count > 0 &&
+                    Array.from({
+                      length: bestResult.cols * bestResult.rows,
+                    }).map((_, i) => {
+                      const col = i % bestResult.cols,
+                        row = Math.floor(i / bestResult.cols);
+                      const x =
+                          offsetPreviewX + col * (cardPreviewW + gapPreviewX),
+                        y = offsetPreviewY + row * (cardPreviewH + gapPreviewY);
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            position: "absolute",
+                            left: x,
+                            top: y,
+                            width: cardPreviewW,
+                            height: cardPreviewH,
+                            overflow: "hidden",
+                            boxShadow: "0 0 0 0.5px rgba(232,255,71,0.5)",
+                          }}
+                        >
+                          {objects.length > 0 ? (
+                            <TemplateThumbnail
+                              objects={objects}
+                              canvasSize={canvasSize}
+                              rows={rows}
+                              pageIndex={Math.min(
+                                i,
+                                Math.max(0, rows.length - 1),
+                              )}
+                              dataImages={dataImages}
+                              width={isRotated ? cardPreviewH : cardPreviewW}
+                              height={isRotated ? cardPreviewW : cardPreviewH}
+                              rotate={isRotated}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                background: "rgba(232,255,71,0.18)",
+                                border: "1px solid rgba(232,255,71,0.6)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: Math.min(8, cardPreviewH * 0.25),
+                                  color: "rgba(0,0,0,0.3)",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {isRotated ? "↻" : ""}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {bestResult &&
+                    bestResult.cols > 1 &&
+                    bestResult.rows > 0 &&
+                    Array.from({ length: bestResult.cols - 1 }).map((_, i) => {
+                      const x =
+                        offsetPreviewX +
+                        (i + 1) * cardPreviewW +
+                        i * gapPreviewX +
+                        Math.round(gapPreviewX / 2);
+                      return (
+                        <div
+                          key={`v${i}`}
+                          style={{
+                            position: "absolute",
+                            left: x,
+                            top: 0,
+                            width: 1,
+                            height: "100%",
+                            background: "rgba(99,179,237,0.4)",
+                            pointerEvents: "none",
+                          }}
+                        />
+                      );
+                    })}
+                  {bestResult &&
+                    bestResult.rows > 1 &&
+                    bestResult.cols > 0 &&
+                    Array.from({ length: bestResult.rows - 1 }).map((_, i) => {
+                      const y =
+                        offsetPreviewY +
+                        (i + 1) * cardPreviewH +
+                        i * gapPreviewY +
+                        Math.round(gapPreviewY / 2);
+                      return (
+                        <div
+                          key={`h${i}`}
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: y,
+                            width: "100%",
+                            height: 1,
+                            background: "rgba(99,179,237,0.4)",
+                            pointerEvents: "none",
+                          }}
+                        />
+                      );
+                    })}
+                  {gaRunning && !bestResult && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(0,0,0,0.3)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 20,
+                          height: 20,
+                          border: "2px solid rgba(232,255,71,0.2)",
+                          borderTop: "2px solid #e8ff47",
+                          borderRadius: "50%",
+                          animation: "spin 0.7s linear infinite",
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 5 }}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <div
+                      style={{
+                        width: 12,
+                        height: 12,
+                        background: "rgba(232,255,71,0.18)",
+                        border: "1px solid rgba(232,255,71,0.6)",
+                        borderRadius: 2,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{ fontSize: 8, color: "rgba(240,237,232,0.4)" }}
+                    >
+                      Card slot
+                    </span>
+                  </div>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <div
+                      style={{
+                        width: 12,
+                        height: 2,
+                        background: "rgba(99,179,237,0.5)",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{ fontSize: 8, color: "rgba(240,237,232,0.4)" }}
+                    >
+                      Cut line
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {bestResult && bestResult.count > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <p
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: "rgba(240,237,232,0.28)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Optimized Result
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 6,
+                  }}
+                >
+                  {[
+                    [
+                      "Cards / sheet",
+                      `${bestResult.count} (${bestResult.cols}×${bestResult.rows})`,
+                      "#e8ff47",
+                    ],
+                    [
+                      "Paper waste",
+                      `${bestResult.wastePercent.toFixed(1)}%`,
+                      bestResult.wastePercent < 20
+                        ? "#4ade80"
+                        : bestResult.wastePercent < 40
+                          ? "#f6ad55"
+                          : "#f87171",
+                    ],
+                    [
+                      "Cut lines",
+                      `${bestResult.cutLines} cuts/sheet`,
+                      "rgba(240,237,232,0.7)",
+                    ],
+                    [
+                      "Total sheets",
+                      totalCards
+                        ? `${Math.ceil(totalCards / bestResult.count)} sheets`
+                        : "—",
+                      "rgba(240,237,232,0.7)",
+                    ],
+                    [
+                      "Gap H/V",
+                      `${bestResult.gene.gapX}×${bestResult.gene.gapY}px`,
+                      "rgba(240,237,232,0.5)",
+                    ],
+                    [
+                      "Rotation",
+                      bestResult.gene.rotation === 1
+                        ? "90° rotated"
+                        : "Natural",
+                      bestResult.gene.rotation === 1
+                        ? "#63b3ed"
+                        : "rgba(240,237,232,0.5)",
+                    ],
+                  ].map(([label, value, color]) => (
+                    <div
+                      key={label as string}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 8,
+                          color: "rgba(240,237,232,0.3)",
+                          marginBottom: 3,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {label}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: color as string,
+                        }}
+                      >
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 8,
+                    background: "rgba(232,255,71,0.04)",
+                    border: "1px solid rgba(232,255,71,0.15)",
+                  }}
+                >
+                  <p
                     style={{
                       fontSize: 9,
-                      fontWeight: 600,
-                      color: active ? "#e8ff47" : "rgba(240,237,232,0.7)",
-                      textAlign: "center",
-                      lineHeight: 1.3,
+                      color: "rgba(240,237,232,0.4)",
+                      lineHeight: 1.6,
                     }}
                   >
-                    {item.label}
-                  </span>
-                  <span
-                    style={{ fontSize: 8, color: "rgba(240,237,232,0.25)" }}
+                    Margins: T{bestResult.gene.marginTop} R
+                    {bestResult.gene.marginRight} B
+                    {bestResult.gene.marginBottom} L{bestResult.gene.marginLeft}
+                    px
+                    {bestResult.gene.rotation === 1 && (
+                      <span style={{ color: "#63b3ed" }}>
+                        {" "}
+                        · Cards rotated 90°
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : gaRunning ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <div style={{ textAlign: "center" }}>
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      border: "2px solid rgba(232,255,71,0.2)",
+                      borderTop: "2px solid #e8ff47",
+                      borderRadius: "50%",
+                      animation: "spin 0.7s linear infinite",
+                      margin: "0 auto 10px",
+                    }}
+                  />
+                  <p style={{ fontSize: 11, color: "rgba(240,237,232,0.3)" }}>
+                    Optimizing layout…
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 9,
+                      color: "rgba(240,237,232,0.15)",
+                      marginTop: 3,
+                    }}
                   >
-                    {item.w}×{item.h}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div
-          style={{
-            borderTop: "1px solid rgba(255,255,255,0.07)",
-            paddingTop: 12,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 7 }}>
-            <div style={{ flex: 1 }}>
-              <p
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  marginBottom: 4,
-                }}
-              >
-                Width
-              </p>
-              <input
-                type="number"
-                value={cw}
-                onChange={(e) => setCw(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 6,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#f0ede8",
-                  fontSize: 12,
-                  outline: "none",
-                }}
-              />
-            </div>
-            <span
-              style={{
-                color: "rgba(240,237,232,0.25)",
-                fontSize: 13,
-                paddingBottom: 6,
-              }}
-            >
-              ×
-            </span>
-            <div style={{ flex: 1 }}>
-              <p
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  marginBottom: 4,
-                }}
-              >
-                Height
-              </p>
-              <input
-                type="number"
-                value={ch}
-                onChange={(e) => setCh(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 6,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#f0ede8",
-                  fontSize: 12,
-                  outline: "none",
-                }}
-              />
-            </div>
-            <button
-              onClick={apply}
-              style={{
-                padding: "6px 14px",
-                borderRadius: 6,
-                background: "#e8ff47",
-                border: "none",
-                color: "#0a0a10",
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Apply
-            </button>
+                    Generation {gaGen} / 200
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Toggle({
-  value,
-  onChange,
-  label,
-}: {
-  value: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <span style={{ fontSize: 11, color: "rgba(240,237,232,0.55)" }}>
-        {label}
-      </span>
-      <ToggleSwitch value={value} onChange={onChange} />
     </div>
   );
 }
@@ -2808,119 +3361,255 @@ function KbdHint({ keys, label }: { keys: string[]; label: string }) {
   );
 }
 
-function BatchStepper({
-  value,
-  onChange,
-  totalRows,
+function ZoomControls({
+  zoom,
+  onZoom,
+  onReset,
+  onFit,
 }: {
-  value: BatchSize;
-  onChange: (v: BatchSize) => void;
-  totalRows: number;
+  zoom: number;
+  onZoom: (delta: number) => void;
+  onReset: () => void;
+  onFit: () => void;
 }) {
-  const idx = BATCH_OPTIONS.indexOf(value);
-  const prev = () => onChange(BATCH_OPTIONS[Math.max(0, idx - 1)]);
-  const next = () =>
-    onChange(BATCH_OPTIONS[Math.min(BATCH_OPTIONS.length - 1, idx + 1)]);
-  const { cols, rows } = batchGrid(value);
-  const pageCount = totalRows > 0 ? Math.ceil(totalRows / value) : "—";
   return (
     <div
       style={{
+        position: "absolute",
+        bottom: 20,
+        right: 20,
+        zIndex: 30,
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(12,12,20,0.92)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10,
+          overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        }}
+      >
+        {[
+          { label: "+", title: "Zoom In", delta: 0.1, size: 16 },
+          null,
+          { label: "−", title: "Zoom Out", delta: -0.1, size: 16 },
+          null,
+        ].map((btn, i) =>
+          btn === null ? (
+            i === 1 ? (
+              <button
+                key="pct"
+                onClick={onReset}
+                title="Reset Zoom"
+                style={{
+                  width: 32,
+                  height: 22,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "none",
+                  border: "none",
+                  color: "#e8ff47",
+                  cursor: "pointer",
+                  fontSize: 8,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                  borderBottom: "1px solid rgba(255,255,255,0.07)",
+                  padding: 0,
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "none")
+                }
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+            ) : null
+          ) : (
+            <button
+              key={btn.label}
+              onClick={() => onZoom(btn.delta)}
+              title={btn.title}
+              style={{
+                width: 32,
+                height: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "none",
+                border: "none",
+                color: "rgba(240,237,232,0.7)",
+                cursor: "pointer",
+                fontSize: btn.size,
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+              }
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              {btn.label}
+            </button>
+          ),
+        )}
+        <button
+          onClick={onFit}
+          title="Fit to Screen"
+          style={{
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "none",
+            border: "none",
+            color: "rgba(240,237,232,0.5)",
+            cursor: "pointer",
+            fontSize: 11,
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+          }
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          ⊡
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FloatingPageNav({
+  pageIndex,
+  totalPages,
+  onPageChange,
+  rows,
+}: {
+  pageIndex: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+  rows: RowData[];
+}) {
+  if (totalPages === 0) return null;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 20,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 30,
         display: "flex",
         alignItems: "center",
         gap: 6,
-        padding: "4px 8px",
-        borderRadius: 10,
-        background:
-          value > 1 ? "rgba(232,255,71,0.08)" : "rgba(255,255,255,0.06)",
-        border: `1px solid ${value > 1 ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.12)"}`,
+        padding: "8px 14px",
+        borderRadius: 16,
+        background: "rgba(12,12,20,0.92)",
+        backdropFilter: "blur(16px)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        boxShadow:
+          "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
+        animation: "slideUp 0.2s ease",
       }}
     >
-      <button
-        onClick={prev}
-        disabled={idx === 0}
-        style={{
-          width: 20,
-          height: 20,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 4,
-          background: "none",
-          border: "none",
-          color: idx === 0 ? "rgba(240,237,232,0.15)" : "rgba(240,237,232,0.7)",
-          cursor: idx === 0 ? "not-allowed" : "pointer",
-          fontSize: 11,
-        }}
-      >
-        ◂
-      </button>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${cols}, 1fr)`,
-          gridTemplateRows: `repeat(${rows}, 1fr)`,
-          gap: 2,
-          width: 26,
-          height: 18,
-        }}
-      >
-        {Array.from({ length: cols * rows }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              borderRadius: 1,
-              background:
-                value > 1 ? "rgba(232,255,71,0.7)" : "rgba(240,237,232,0.35)",
-            }}
-          />
-        ))}
-      </div>
-      <div style={{ lineHeight: 1.2 }}>
-        <div
+      {[
+        {
+          label: "⟨⟨",
+          action: () => onPageChange(0),
+          disabled: pageIndex === 0,
+          size: 9,
+        },
+        {
+          label: "‹",
+          action: () => onPageChange(Math.max(0, pageIndex - 1)),
+          disabled: pageIndex === 0,
+          size: 12,
+        },
+      ].map((btn, i) => (
+        <button
+          key={i}
+          onClick={btn.action}
+          disabled={btn.disabled}
           style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: value > 1 ? "#e8ff47" : "rgba(240,237,232,0.6)",
-            whiteSpace: "nowrap",
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: btn.disabled
+              ? "rgba(240,237,232,0.15)"
+              : "rgba(240,237,232,0.6)",
+            cursor: btn.disabled ? "not-allowed" : "pointer",
+            fontSize: btn.size,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          {value === 1 ? "1 per page" : `${value} per page`}
+          {btn.label}
+        </button>
+      ))}
+      <div style={{ textAlign: "center", minWidth: 90 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#f0ede8" }}>
+          Row {pageIndex + 1}{" "}
+          <span style={{ color: "rgba(240,237,232,0.3)" }}>
+            / {rows.length}
+          </span>
         </div>
-        {totalRows > 0 && (
-          <div
-            style={{
-              fontSize: 8,
-              color: "rgba(240,237,232,0.35)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {pageCount} page{pageCount === 1 ? "" : "s"} total
-          </div>
-        )}
+        <div
+          style={{ fontSize: 9, color: "rgba(240,237,232,0.35)", marginTop: 1 }}
+        >
+          {rows[pageIndex]
+            ? Object.values(rows[pageIndex]).filter(Boolean)[0]?.slice(0, 20)
+            : "—"}
+        </div>
       </div>
-      <button
-        onClick={next}
-        disabled={idx === BATCH_OPTIONS.length - 1}
-        style={{
-          width: 20,
-          height: 20,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 4,
-          background: "none",
-          border: "none",
-          color:
-            idx === BATCH_OPTIONS.length - 1
+      {[
+        {
+          label: "›",
+          action: () => onPageChange(Math.min(totalPages - 1, pageIndex + 1)),
+          disabled: pageIndex === totalPages - 1,
+          size: 12,
+        },
+        {
+          label: "⟩⟩",
+          action: () => onPageChange(totalPages - 1),
+          disabled: pageIndex === totalPages - 1,
+          size: 9,
+        },
+      ].map((btn, i) => (
+        <button
+          key={i}
+          onClick={btn.action}
+          disabled={btn.disabled}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 5,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: btn.disabled
               ? "rgba(240,237,232,0.15)"
-              : "rgba(240,237,232,0.7)",
-          cursor: idx === BATCH_OPTIONS.length - 1 ? "not-allowed" : "pointer",
-          fontSize: 11,
-        }}
-      >
-        ▸
-      </button>
+              : "rgba(240,237,232,0.6)",
+            cursor: btn.disabled ? "not-allowed" : "pointer",
+            fontSize: btn.size,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {btn.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -2939,82 +3628,66 @@ async function loadScript(src: string, globalKey: string): Promise<any> {
   });
 }
 
-async function renderBatchedPageToCanvas(
+async function renderSingleCard(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
   rows: RowData[],
-  pageRowStart: number,
-  batch: number,
+  rowIndex: number,
   dataImages: DataImageMap,
 ): Promise<HTMLCanvasElement> {
-  const { cols, rows: gridRows } = batchGrid(batch);
-  const pageW = canvasSize.width * cols,
-    pageH = canvasSize.height * gridRows;
   const page = document.createElement("div");
-  page.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${pageW}px;height:${pageH}px;overflow:hidden;background:#fff;`;
+  page.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;background:#fff;`;
   document.body.appendChild(page);
-  for (let slot = 0; slot < batch; slot++) {
-    const rowIdx = pageRowStart + slot;
-    if (rowIdx >= rows.length) break;
-    const rowData = rows[rowIdx];
-    const col = slot % cols,
-      row = Math.floor(slot / cols);
-    const ox = col * canvasSize.width,
-      oy = row * canvasSize.height;
-    const cell = document.createElement("div");
-    cell.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;`;
-    page.appendChild(cell);
-    const bgImg = objects.find(
-      (o) => o.kind === "image" && (o as ImageObject).isBackground,
-    ) as ImageObject | undefined;
-    if (bgImg) {
+  const bgImg = objects.find(
+    (o) => o.kind === "image" && (o as ImageObject).isBackground,
+  ) as ImageObject | undefined;
+  if (bgImg) {
+    const img = document.createElement("img");
+    img.src = bgImg.src;
+    img.style.cssText = `position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:${bgImg.opacity};`;
+    page.appendChild(img);
+  }
+  const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
+  for (const obj of sorted) {
+    if (obj.kind === "image") {
+      const imgObj = obj as ImageObject;
+      if (imgObj.isBackground) continue;
       const img = document.createElement("img");
-      img.src = bgImg.src;
-      img.style.cssText = `position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:${bgImg.opacity};`;
-      cell.appendChild(img);
-    }
-    const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
-    for (const obj of sorted) {
-      if (obj.kind === "image") {
-        const imgObj = obj as ImageObject;
-        if (imgObj.isBackground) continue;
-        const img = document.createElement("img");
-        img.src = imgObj.isDataImage
-          ? resolveDataImageSrc(imgObj, rows, rowIdx, dataImages)
-          : imgObj.src;
-        img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;border-radius:${imgObj.borderRadius ?? 0}px;box-sizing:border-box;${imgObj.border?.enabled ? `border:${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color};` : ""}`;
-        if (imgObj.shadow.enabled)
-          img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
-        cell.appendChild(img);
-      } else {
-        const f = obj as TextField;
-        const ti = rowIdx + f.columnOffset;
-        const text =
-          ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
-        const fs = shrinkFontSize(
-          text,
-          f.width,
-          f.height,
-          f.fontFamily,
-          f.fontSize,
-          f.bold,
-          f.italic,
-        );
-        const span = document.createElement("div");
-        span.textContent = text;
-        span.style.cssText = [
-          `position:absolute;left:${f.x}px;top:${f.y}px;width:${f.width}px;height:${f.height}px;overflow:hidden;`,
-          `font-family:'${f.fontFamily}',serif;font-size:${fs}px;color:${f.color};`,
-          `font-weight:${f.bold ? "bold" : "normal"};font-style:${f.italic ? "italic" : "normal"};`,
-          `text-align:${f.textAlign};display:flex;align-items:center;`,
-          `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
-          `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
-          f.shadow.enabled || (f.shadow.thickness && f.shadow.thickness > 0)
-            ? `text-shadow:${textShadowCSS(f.shadow)};`
-            : "",
-        ].join("");
-        cell.appendChild(span);
-      }
+      img.src = imgObj.isDataImage
+        ? resolveDataImageSrc(imgObj, rows, rowIndex, dataImages)
+        : imgObj.src;
+      img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;border-radius:${imgObj.borderRadius ?? 0}px;box-sizing:border-box;${imgObj.border?.enabled ? `border:${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color};` : ""}`;
+      if (imgObj.shadow.enabled)
+        img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
+      page.appendChild(img);
+    } else {
+      const f = obj as TextField;
+      const ti = rowIndex + f.columnOffset;
+      const text =
+        ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
+      const fs = shrinkFontSize(
+        text,
+        f.width,
+        f.height,
+        f.fontFamily,
+        f.fontSize,
+        f.bold,
+        f.italic,
+      );
+      const span = document.createElement("div");
+      span.textContent = text;
+      span.style.cssText = [
+        `position:absolute;left:${f.x}px;top:${f.y}px;width:${f.width}px;height:${f.height}px;overflow:hidden;`,
+        `font-family:'${f.fontFamily}',serif;font-size:${fs}px;color:${f.color};`,
+        `font-weight:${f.bold ? "bold" : "normal"};font-style:${f.italic ? "italic" : "normal"};`,
+        `text-align:${f.textAlign};display:flex;align-items:center;`,
+        `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
+        `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
+        f.shadow.enabled || (f.shadow.thickness && f.shadow.thickness > 0)
+          ? `text-shadow:${textShadowCSS(f.shadow)};`
+          : "",
+      ].join("");
+      page.appendChild(span);
     }
   }
   const imgs = page.querySelectorAll("img");
@@ -3036,8 +3709,8 @@ async function renderBatchedPageToCanvas(
     useCORS: true,
     allowTaint: true,
     scale: 2,
-    width: pageW,
-    height: pageH,
+    width: canvasSize.width,
+    height: canvasSize.height,
     x: 0,
     y: 0,
     scrollX: 0,
@@ -3066,36 +3739,28 @@ async function exportRecords(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
   rows: RowData[],
-  batch: number,
   dataImages: DataImageMap,
   onProgress: (pct: number) => void,
 ) {
   if (!rows.length) rows = [{}];
   onProgress(5);
-  const totalPages = Math.ceil(rows.length / batch);
+  const totalRows = rows.length;
   if (format === "PNG") {
-    for (let p = 0; p < totalPages; p++) {
-      const cv = await renderBatchedPageToCanvas(
+    for (let i = 0; i < totalRows; i++) {
+      const cv = await renderSingleCard(
         objects,
         canvasSize,
         rows,
-        p * batch,
-        batch,
+        i,
         dataImages,
       );
       await new Promise<void>((resolve) =>
         cv.toBlob((blob) => {
-          if (blob)
-            downloadBlob(
-              blob,
-              batch === 1
-                ? `record_${p + 1}.png`
-                : `page_${p + 1}_x${batch}.png`,
-            );
+          if (blob) downloadBlob(blob, `record_${i + 1}.png`);
           resolve();
         }, "image/png"),
       );
-      onProgress(Math.round(10 + (p / totalPages) * 90));
+      onProgress(Math.round(10 + (i / totalRows) * 90));
     }
   } else if (format === "PDF") {
     const jsPDF = await loadScript(
@@ -3103,19 +3768,15 @@ async function exportRecords(
       "jspdf",
     );
     const { jsPDF: JsPDF } = jsPDF;
-    const { cols, rows: gridRows } = batchGrid(batch);
-    const pageW = canvasSize.width * cols,
-      pageH = canvasSize.height * gridRows;
-    const pW = pageW * 0.264583,
-      pH = pageH * 0.264583;
+    const pW = canvasSize.width * 0.264583,
+      pH = canvasSize.height * 0.264583;
     let pdf: any = null;
-    for (let p = 0; p < totalPages; p++) {
-      const cv = await renderBatchedPageToCanvas(
+    for (let i = 0; i < totalRows; i++) {
+      const cv = await renderSingleCard(
         objects,
         canvasSize,
         rows,
-        p * batch,
-        batch,
+        i,
         dataImages,
       );
       const imgData = cv.toDataURL("image/png");
@@ -3127,7 +3788,7 @@ async function exportRecords(
         });
       else pdf.addPage([pW, pH], pW > pH ? "l" : "p");
       pdf.addImage(imgData, "PNG", 0, 0, pW, pH);
-      onProgress(Math.round(10 + (p / totalPages) * 88));
+      onProgress(Math.round(10 + (i / totalRows) * 88));
     }
     if (pdf) pdf.save("templify_export.pdf");
   }
@@ -3313,26 +3974,6 @@ function LayerItem({
             {offset > 0 ? `+${offset}` : offset}
           </span>
         )}
-        {isImg &&
-          imgObj!.isDataImage &&
-          !isBg &&
-          (imgObj!.columnOffset ?? 0) !== 0 && (
-            <span
-              style={{
-                fontSize: 8,
-                padding: "1px 4px",
-                borderRadius: 3,
-                background: "rgba(99,179,237,0.12)",
-                color: "#63b3ed",
-                fontWeight: 700,
-                flexShrink: 0,
-              }}
-            >
-              {(imgObj!.columnOffset ?? 0) > 0
-                ? `+${imgObj!.columnOffset}`
-                : imgObj!.columnOffset}
-            </span>
-          )}
       </div>
       <button
         onClick={(e) => {
@@ -3363,280 +4004,213 @@ function LayerItem({
   );
 }
 
-function FloatingPageNav({
-  pageIndex,
-  totalPages,
-  batchSize,
-  onPageChange,
-  onBatchChange,
-  rows,
+// ─── DimensionInputs ─────────────────────────────────────────────────────────
+// Uses local string state so the user can freely edit the text without every
+// intermediate keystroke triggering an AR-preserving resize commit.
+// The value is only committed on blur or Enter.
+function DimensionInputs({
+  selectedObj,
+  updateBgDimension,
+  updateObj,
 }: {
-  pageIndex: number;
-  totalPages: number;
-  batchSize: BatchSize;
-  onPageChange: (p: number) => void;
-  onBatchChange: (b: BatchSize) => void;
-  rows: RowData[];
+  selectedObj: CanvasObject;
+  updateBgDimension: (axis: "width" | "height", v: number) => void;
+  updateObj: (key: string, value: unknown) => void;
 }) {
-  if (totalPages === 0) return null;
-  const startRow = pageIndex * batchSize + 1,
-    endRow = Math.min((pageIndex + 1) * batchSize, rows.length);
-  return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 20,
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 30,
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 14px",
-        borderRadius: 16,
-        background: "rgba(12,12,20,0.92)",
-        backdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        boxShadow:
-          "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
-        animation: "slideUp 0.2s ease",
-      }}
-    >
-      <BatchStepper
-        value={batchSize}
-        onChange={onBatchChange}
-        totalRows={rows.length}
-      />
-      <div
-        style={{ width: 1, height: 28, background: "rgba(255,255,255,0.1)" }}
-      />
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {[
-          {
-            label: "⟨⟨",
-            action: () => onPageChange(0),
-            disabled: pageIndex === 0,
-            size: 9,
-          },
-          {
-            label: "‹",
-            action: () => onPageChange(Math.max(0, pageIndex - 1)),
-            disabled: pageIndex === 0,
-            size: 12,
-          },
-        ].map((btn, i) => (
-          <button
-            key={i}
-            onClick={btn.action}
-            disabled={btn.disabled}
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 5,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: btn.disabled
-                ? "rgba(240,237,232,0.15)"
-                : "rgba(240,237,232,0.6)",
-              cursor: btn.disabled ? "not-allowed" : "pointer",
-              fontSize: btn.size,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {btn.label}
-          </button>
-        ))}
-        <div style={{ textAlign: "center", minWidth: 90 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#f0ede8" }}>
-            Page {pageIndex + 1}{" "}
-            <span style={{ color: "rgba(240,237,232,0.3)" }}>
-              / {totalPages}
-            </span>
-          </div>
-          <div
-            style={{
-              fontSize: 9,
-              color: "rgba(240,237,232,0.35)",
-              marginTop: 1,
-            }}
-          >
-            Rows {startRow}–{endRow} of {rows.length}
-          </div>
-        </div>
-        {[
-          {
-            label: "›",
-            action: () => onPageChange(Math.min(totalPages - 1, pageIndex + 1)),
-            disabled: pageIndex === totalPages - 1,
-            size: 12,
-          },
-          {
-            label: "⟩⟩",
-            action: () => onPageChange(totalPages - 1),
-            disabled: pageIndex === totalPages - 1,
-            size: 9,
-          },
-        ].map((btn, i) => (
-          <button
-            key={i}
-            onClick={btn.action}
-            disabled={btn.disabled}
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 5,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: btn.disabled
-                ? "rgba(240,237,232,0.15)"
-                : "rgba(240,237,232,0.6)",
-              cursor: btn.disabled ? "not-allowed" : "pointer",
-              fontSize: btn.size,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+  const isImage = selectedObj.kind === "image";
 
-// ── Zoom Controls ──────────────────────────────────────────────────────────
-function ZoomControls({
-  zoom,
-  onZoom,
-  onReset,
-  onFit,
-}: {
-  zoom: number;
-  onZoom: (delta: number) => void;
-  onReset: () => void;
-  onFit: () => void;
-}) {
+  // Local draft strings – synced from props only when the object identity
+  // (id) changes, not on every render, so typing isn't interrupted.
+  const [wStr, setWStr] = useState(() => String(Math.round(selectedObj.width)));
+  const [hStr, setHStr] = useState(() =>
+    String(Math.round(selectedObj.height)),
+  );
+  const [xStr, setXStr] = useState(() => String(Math.round(selectedObj.x)));
+  const [yStr, setYStr] = useState(() => String(Math.round(selectedObj.y)));
+
+  // When a different object is selected, sync the displayed values.
+  const prevIdRef = useRef<number>(selectedObj.id);
+  useEffect(() => {
+    if (prevIdRef.current !== selectedObj.id) {
+      prevIdRef.current = selectedObj.id;
+      setWStr(String(Math.round(selectedObj.width)));
+      setHStr(String(Math.round(selectedObj.height)));
+      setXStr(String(Math.round(selectedObj.x)));
+      setYStr(String(Math.round(selectedObj.y)));
+    }
+  }, [selectedObj]);
+
+  // After a committed resize the actual object dimensions change (AR
+  // recalculation). Reflect the new height back into the H field so it stays
+  // in sync after the user commits W (and vice-versa).
+  const commitW = () => {
+    const v = parseInt(wStr, 10);
+    if (isFinite(v) && v > 0) {
+      if (isImage) updateBgDimension("width", v);
+      else updateObj("width", v);
+    } else {
+      setWStr(String(Math.round(selectedObj.width)));
+    }
+  };
+  const commitH = () => {
+    const v = parseInt(hStr, 10);
+    if (isFinite(v) && v > 0) {
+      if (isImage) updateBgDimension("height", v);
+      else updateObj("height", v);
+    } else {
+      setHStr(String(Math.round(selectedObj.height)));
+    }
+  };
+  const commitX = () => {
+    const v = parseInt(xStr, 10);
+    if (isFinite(v)) updateObj("x", v);
+    else setXStr(String(Math.round(selectedObj.x)));
+  };
+  const commitY = () => {
+    const v = parseInt(yStr, 10);
+    if (isFinite(v)) updateObj("y", v);
+    else setYStr(String(Math.round(selectedObj.y)));
+  };
+
+  const onKey =
+    (commit: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.currentTarget.blur();
+      }
+      if (e.key === "Escape") {
+        e.currentTarget.blur();
+      }
+    };
+
+  // After external changes (e.g. drag-resize), keep fields in sync when NOT focused.
+  const focusedField = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusedField.current !== "w")
+      setWStr(String(Math.round(selectedObj.width)));
+  }, [selectedObj.width]);
+  useEffect(() => {
+    if (focusedField.current !== "h")
+      setHStr(String(Math.round(selectedObj.height)));
+  }, [selectedObj.height]);
+  useEffect(() => {
+    if (focusedField.current !== "x")
+      setXStr(String(Math.round(selectedObj.x)));
+  }, [selectedObj.x]);
+  useEffect(() => {
+    if (focusedField.current !== "y")
+      setYStr(String(Math.round(selectedObj.y)));
+  }, [selectedObj.y]);
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "4px 7px",
+    borderRadius: 6,
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "#f0ede8",
+    fontSize: 11,
+    fontFamily: "monospace",
+    textAlign: "center",
+    outline: "none",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 9,
+    color: "rgba(240,237,232,0.25)",
+    marginBottom: 3,
+  };
+
   return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 20,
-        right: 20,
-        zIndex: 30,
-        display: "flex",
-        flexDirection: "column",
-        gap: 3,
-      }}
-    >
+    <div>
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
-          background: "rgba(12,12,20,0.92)",
-          backdropFilter: "blur(16px)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 10,
-          overflow: "hidden",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 7,
         }}
       >
-        <button
-          onClick={() => onZoom(0.1)}
-          title="Zoom In"
-          style={{
-            width: 32,
-            height: 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "none",
-            border: "none",
-            color: "rgba(240,237,232,0.7)",
-            cursor: "pointer",
-            fontSize: 16,
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
-          }
-          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-        >
-          +
-        </button>
-        <button
-          onClick={onReset}
-          title="Reset Zoom (100%)"
-          style={{
-            width: 32,
-            height: 22,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "none",
-            border: "none",
-            color: "#e8ff47",
-            cursor: "pointer",
-            fontSize: 8,
-            fontWeight: 700,
-            letterSpacing: "0.02em",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-            padding: 0,
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
-          }
-          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <button
-          onClick={() => onZoom(-0.1)}
-          title="Zoom Out"
-          style={{
-            width: 32,
-            height: 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "none",
-            border: "none",
-            color: "rgba(240,237,232,0.7)",
-            cursor: "pointer",
-            fontSize: 16,
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
-          }
-          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-        >
-          −
-        </button>
-        <button
-          onClick={onFit}
-          title="Fit to Screen"
-          style={{
-            width: 32,
-            height: 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "none",
-            border: "none",
-            color: "rgba(240,237,232,0.5)",
-            cursor: "pointer",
-            fontSize: 11,
-          }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
-          }
-          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-        >
-          ⊡
-        </button>
+        <SLabel>Size & Position</SLabel>
+        {isImage && (
+          <span
+            style={{
+              fontSize: 8,
+              color: "rgba(240,237,232,0.25)",
+              letterSpacing: "0.04em",
+            }}
+          >
+            🔒 AR locked
+          </span>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div>
+          <p style={labelStyle}>W</p>
+          <input
+            type="number"
+            value={wStr}
+            onChange={(e) => setWStr(e.target.value)}
+            onFocus={() => {
+              focusedField.current = "w";
+            }}
+            onBlur={() => {
+              focusedField.current = null;
+              commitW();
+            }}
+            onKeyDown={onKey(commitW)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <p style={labelStyle}>H</p>
+          <input
+            type="number"
+            value={hStr}
+            onChange={(e) => setHStr(e.target.value)}
+            onFocus={() => {
+              focusedField.current = "h";
+            }}
+            onBlur={() => {
+              focusedField.current = null;
+              commitH();
+            }}
+            onKeyDown={onKey(commitH)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <p style={labelStyle}>X</p>
+          <input
+            type="number"
+            value={xStr}
+            onChange={(e) => setXStr(e.target.value)}
+            onFocus={() => {
+              focusedField.current = "x";
+            }}
+            onBlur={() => {
+              focusedField.current = null;
+              commitX();
+            }}
+            onKeyDown={onKey(commitX)}
+            style={inputStyle}
+          />
+        </div>
+        <div>
+          <p style={labelStyle}>Y</p>
+          <input
+            type="number"
+            value={yStr}
+            onChange={(e) => setYStr(e.target.value)}
+            onFocus={() => {
+              focusedField.current = "y";
+            }}
+            onBlur={() => {
+              focusedField.current = null;
+              commitY();
+            }}
+            onKeyDown={onKey(commitY)}
+            style={inputStyle}
+          />
+        </div>
       </div>
     </div>
   );
@@ -3671,17 +4245,12 @@ export default function TemplifyEditor() {
     width: 960,
     height: 540,
   });
-  const [canvasStyle, setCanvasStyle] =
-    useState<CanvasStyle>(DEFAULT_CANVAS_STYLE);
-  const [activePreset, setActivePreset] = useState("16:9 HD");
-  const [showSizePicker, setShowSizePicker] = useState(false);
+  const [canvasScale, setCanvasScale] = useState<number>(1.0);
+  const [showImpositionModal, setShowImpositionModal] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
-  const [rightTab, setRightTab] = useState<"layers" | "style" | "canvas">(
-    "layers",
-  );
+  const [rightTab, setRightTab] = useState<"layers" | "style">("layers");
   const [imgDragOver, setImgDragOver] = useState(false);
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
@@ -3690,7 +4259,6 @@ export default function TemplifyEditor() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
-  const [batchSize, setBatchSize] = useState<BatchSize>(1);
   const [dataImages, setDataImages] = useState<DataImageMap>({});
   const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(null);
   const [dataImagesLoading, setDataImagesLoading] = useState(false);
@@ -3698,7 +4266,6 @@ export default function TemplifyEditor() {
     string[]
   >([]);
 
-  // ── Zoom & Pan state ──────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
@@ -3707,22 +4274,67 @@ export default function TemplifyEditor() {
   const canvasAreaRef = useRef<HTMLDivElement>(null);
 
   const nextZ = useRef(100);
-
-  const totalPages = rows.length > 0 ? Math.ceil(rows.length / batchSize) : 0;
-  const previewRowStart = pageIndex * batchSize;
+  const totalPages = rows.length;
   const currentRow = useMemo(() => {
     if (rows.length === 0) return null;
-    return rows[Math.min(previewRowStart, rows.length - 1)];
-  }, [rows, previewRowStart]);
+    return rows[Math.min(pageIndex, rows.length - 1)];
+  }, [rows, pageIndex]);
 
-  // Fit zoom to viewport
+  // FIX: guard effectiveCanvasSize against NaN — this is what caused the
+  // "NaN is an invalid value for the height css style property" error.
+  const effectiveCanvasSize = useMemo(() => {
+    const w = Math.round(canvasSize.width * canvasScale);
+    const h = Math.round(canvasSize.height * canvasScale);
+    return {
+      width: isFinite(w) && w > 0 ? w : 960,
+      height: isFinite(h) && h > 0 ? h : 540,
+    };
+  }, [canvasSize, canvasScale]);
+
+  const prevScaleRef = useRef<number>(1.0);
+  useEffect(() => {
+    const prev = prevScaleRef.current;
+    if (prev === canvasScale) return;
+    const ratio = canvasScale / prev;
+    prevScaleRef.current = canvasScale;
+    setObjects((p) =>
+      p.map((obj) => {
+        if (obj.kind === "image" && (obj as ImageObject).isBackground) {
+          return {
+            ...obj,
+            x: 0,
+            y: 0,
+            width: Math.round(canvasSize.width * canvasScale),
+            height: Math.round(canvasSize.height * canvasScale),
+          };
+        }
+        return {
+          ...obj,
+          x: Math.round(obj.x * ratio),
+          y: Math.round(obj.y * ratio),
+          width: Math.round(obj.width * ratio),
+          height: Math.round(obj.height * ratio),
+          ...(obj.kind === "field"
+            ? {
+                fontSize: Math.round(
+                  Math.max(6, (obj as TextField).fontSize * ratio),
+                ),
+              }
+            : {}),
+        } as CanvasObject;
+      }),
+    );
+  }, [canvasScale]);
+
   const computeFitZoom = useCallback(() => {
     if (!canvasAreaRef.current) return 1;
     const rect = canvasAreaRef.current.getBoundingClientRect();
-    const availW = rect.width - 80;
-    const availH = rect.height - 80;
-    return Math.min(1, availW / canvasSize.width, availH / canvasSize.height);
-  }, [canvasSize]);
+    return Math.min(
+      1,
+      (rect.width - 80) / effectiveCanvasSize.width,
+      (rect.height - 80) / effectiveCanvasSize.height,
+    );
+  }, [effectiveCanvasSize]);
 
   const fitToScreen = useCallback(() => {
     const z = computeFitZoom();
@@ -3731,12 +4343,10 @@ export default function TemplifyEditor() {
     setPanY(0);
   }, [computeFitZoom]);
 
-  // Fit on canvas size change or mount
   useEffect(() => {
     if (mounted) fitToScreen();
-  }, [canvasSize, mounted]);
+  }, [effectiveCanvasSize, mounted]);
 
-  // Mouse wheel zoom on canvas area
   useEffect(() => {
     const el = canvasAreaRef.current;
     if (!el) return;
@@ -3746,7 +4356,6 @@ export default function TemplifyEditor() {
         const delta = e.deltaY < 0 ? 0.08 : -0.08;
         setZoom((z) => Math.min(4, Math.max(0.1, z + delta)));
       } else {
-        // Scroll to pan
         setPanX((p) => p - e.deltaX);
         setPanY((p) => p - e.deltaY);
       }
@@ -3755,10 +4364,8 @@ export default function TemplifyEditor() {
     return () => el.removeEventListener("wheel", handler);
   }, [mounted]);
 
-  // Middle-mouse or space+drag panning
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Middle mouse or space held
       if (e.button === 1 || (e as any).spaceHeld) {
         e.preventDefault();
         isPanning.current = true;
@@ -3780,10 +4387,8 @@ export default function TemplifyEditor() {
     [panX, panY],
   );
 
-  // Space key to enable pan mode
   const spaceHeld = useRef(false);
   const [panCursor, setPanCursor] = useState(false);
-
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       if (e.code === "Space" && !spaceHeld.current) {
@@ -3840,7 +4445,7 @@ export default function TemplifyEditor() {
 
   useEffect(() => {
     if (totalPages > 0 && pageIndex >= totalPages) setPageIndex(totalPages - 1);
-  }, [batchSize, totalPages, pageIndex]);
+  }, [totalPages, pageIndex]);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -4007,8 +4612,8 @@ export default function TemplifyEditor() {
   const addDataPhotoObjectRef = useRef<(column: string) => void>(() => {});
   const addDataPhotoObject = useCallback(
     (column: string) => {
-      const W = Math.round(canvasSize.width * 0.3);
-      const H = Math.round(W * 1.2);
+      const W = Math.round(effectiveCanvasSize.width * 0.3),
+        H = Math.round(W * 1.2);
       const existing = objectsRef.current.filter(
         (o) =>
           o.kind === "image" &&
@@ -4020,8 +4625,12 @@ export default function TemplifyEditor() {
         id: Date.now(),
         src: PLACEHOLDER_SRC,
         name: `Photo · ${column}`,
-        x: Math.round((canvasSize.width - W) / 2) + existing.length * 20,
-        y: Math.round((canvasSize.height - H) / 2) + existing.length * 20,
+        x:
+          Math.round((effectiveCanvasSize.width - W) / 2) +
+          existing.length * 20,
+        y:
+          Math.round((effectiveCanvasSize.height - H) / 2) +
+          existing.length * 20,
         width: W,
         height: H,
         zIndex: nextZ.current++,
@@ -4040,7 +4649,7 @@ export default function TemplifyEditor() {
       setSelectedId(obj.id);
       setRightTab("style");
     },
-    [canvasSize, setObjects],
+    [effectiveCanvasSize, setObjects],
   );
   addDataPhotoObjectRef.current = addDataPhotoObject;
 
@@ -4120,36 +4729,46 @@ export default function TemplifyEditor() {
 
   const addImage = useCallback(
     (src: string, name: string, nw: number, nh: number) => {
-      const mW = Math.min(canvasSize.width * 0.85, 600),
-        s = mW / nw,
-        w = Math.round(nw * s),
-        h = Math.round(nh * s);
+      const MAX = 2000,
+        s = Math.min(1, MAX / nw, MAX / nh);
+      const newW = Math.round(nw * s),
+        newH = Math.round(nh * s);
+      setCanvasSize({ width: newW, height: newH });
+      prevScaleRef.current = canvasScale;
+
       const obj: ImageObject = {
         kind: "image",
         id: Date.now(),
         src,
         name,
-        x: Math.round((canvasSize.width - w) / 2),
-        y: Math.round((canvasSize.height - h) / 2),
-        width: w,
-        height: h,
+        x: 0,
+        y: 0,
+        width: Math.round(newW * canvasScale),
+        height: Math.round(newH * canvasScale),
         zIndex: nextZ.current++,
         opacity: 1,
         shadow: { ...DEFAULT_SHADOW },
         border: { ...DEFAULT_BORDER },
         borderRadius: 0,
-        isBackground: false,
+        isBackground: true,
         naturalWidth: nw,
         naturalHeight: nh,
         isDataImage: false,
         dataImageColumn: "",
         columnOffset: 0,
       };
-      setObjects((p) => [...p, obj]);
+      setObjects((p) => {
+        const without = p
+          .map((o) =>
+            o.kind === "image" && (o as ImageObject).isBackground ? null : o,
+          )
+          .filter(Boolean) as CanvasObject[];
+        return [...without, obj];
+      });
       setSelectedId(obj.id);
       setRightTab("style");
     },
-    [canvasSize, setObjects],
+    [canvasScale, setObjects],
   );
 
   const addField = useCallback(
@@ -4221,6 +4840,70 @@ export default function TemplifyEditor() {
     [setObjects],
   );
 
+  // FIX: updateBgDimension — guard against NaN/zero inputs and zero
+  // naturalWidth/naturalHeight before computing aspect ratios.
+  const updateBgDimension = useCallback(
+    (axis: "width" | "height", newVal: number) => {
+      // Reject empty / NaN / non-positive values immediately
+      if (!newVal || !isFinite(newVal) || newVal < 1) return;
+      const sid = selectedIdRef.current;
+      if (sid === null) return;
+      setObjects((p) =>
+        p.map((o) => {
+          if (o.id !== sid) return o;
+          const img = o as ImageObject;
+          if (!img.isBackground) {
+            // Non-background image: lock aspect ratio using current dimensions
+            const ar = img.width / Math.max(1, img.height);
+            if (axis === "width") {
+              const newH = Math.round(newVal / ar);
+              if (!isFinite(newH) || newH < 1) return o;
+              return { ...img, width: newVal, height: newH } as CanvasObject;
+            } else {
+              const newW = Math.round(newVal * ar);
+              if (!isFinite(newW) || newW < 1) return o;
+              return { ...img, width: newW, height: newVal } as CanvasObject;
+            }
+          }
+          // Background image: derive AR from naturalWidth/naturalHeight with
+          // a safe fallback to current pixel dimensions.
+          const arW = img.naturalWidth > 0 ? img.naturalWidth : img.width;
+          const arH = img.naturalHeight > 0 ? img.naturalHeight : img.height;
+          const ar = arW / Math.max(1, arH);
+          let newW = img.width,
+            newH = img.height;
+          if (axis === "width") {
+            newW = newVal;
+            newH = Math.round(newVal / ar);
+          } else {
+            newH = newVal;
+            newW = Math.round(newVal * ar);
+          }
+          if (!isFinite(newW) || !isFinite(newH) || newW < 1 || newH < 1)
+            return o;
+          const baseW = Math.round(newW / canvasScale);
+          const baseH = Math.round(newH / canvasScale);
+          if (!isFinite(baseW) || !isFinite(baseH) || baseW < 1 || baseH < 1)
+            return o;
+          // Side-effect: keep canvasSize in sync.  Doing it inside the
+          // updater avoids a stale-closure problem.
+          setCanvasSize({ width: baseW, height: baseH });
+          prevScaleRef.current = canvasScale;
+          return {
+            ...img,
+            x: 0,
+            y: 0,
+            width: newW,
+            height: newH,
+            naturalWidth: baseW,
+            naturalHeight: baseH,
+          } as CanvasObject;
+        }),
+      );
+    },
+    [setObjects, canvasScale],
+  );
+
   const setAsBackground = useCallback(
     (id: number, enable: boolean) => {
       setObjects((p) =>
@@ -4233,8 +4916,8 @@ export default function TemplifyEditor() {
               isBackground: true,
               x: 0,
               y: 0,
-              width: canvasSize.width,
-              height: canvasSize.height,
+              width: effectiveCanvasSize.width,
+              height: effectiveCanvasSize.height,
               zIndex: 0,
             };
           if (img.id === id && !enable) return { ...img, isBackground: false };
@@ -4243,7 +4926,7 @@ export default function TemplifyEditor() {
         }),
       );
     },
-    [setObjects, canvasSize],
+    [setObjects, effectiveCanvasSize],
   );
 
   const handleImageFiles = useCallback(
@@ -4321,9 +5004,8 @@ export default function TemplifyEditor() {
       await exportRecords(
         exportFormat,
         objects,
-        canvasSize,
+        effectiveCanvasSize,
         rows,
-        batchSize,
         dataImages,
         (pct) => setExportProgress(pct),
       );
@@ -4335,25 +5017,15 @@ export default function TemplifyEditor() {
   }, [
     exportFormat,
     objects,
-    canvasSize,
+    effectiveCanvasSize,
     rows,
-    batchSize,
     dataImages,
     exportProgress,
   ]);
 
-  // Canvas style derived values
-  const canvasShadow = canvasStyle.shadow
-    ? `0 20px ${Math.round(40 + canvasStyle.shadowIntensity * 0.4)}px rgba(0,0,0,${(canvasStyle.shadowIntensity / 100).toFixed(2)}),0 0 0 1px rgba(255,255,255,0.04)`
-    : "none";
-  const canvasBorder = canvasStyle.borderEnabled
-    ? `${canvasStyle.borderWidth}px ${canvasStyle.borderStyle} ${canvasStyle.borderColor}`
-    : "none";
-  const canvasGridBg = canvasStyle.showGrid
-    ? `linear-gradient(${canvasStyle.gridColor} 1px, transparent 1px), linear-gradient(90deg, ${canvasStyle.gridColor} 1px, transparent 1px)`
-    : undefined;
-
   if (!mounted) return null;
+
+  const SCALE_PRESETS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
   return (
     <div
@@ -4380,7 +5052,7 @@ export default function TemplifyEditor() {
         @keyframes popIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
       `}</style>
 
-      {exportProgress !== null && (
+      {exportProgress !== null && !showImpositionModal && (
         <div
           style={{
             position: "fixed",
@@ -4452,7 +5124,23 @@ export default function TemplifyEditor() {
         </div>
       )}
 
-      {/* ─── Header ─────────────────────────────────────────────────────── */}
+      {showImpositionModal && (
+        <ImpositionModal
+          canvasSize={effectiveCanvasSize}
+          totalCards={rows.length || 1}
+          objects={objects}
+          rows={rows}
+          pageIndex={pageIndex}
+          dataImages={dataImages}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
+          onExport={doExport}
+          exportProgress={exportProgress}
+          onClose={() => setShowImpositionModal(false)}
+        />
+      )}
+
+      {/* Header */}
       <header
         style={{
           display: "flex",
@@ -4467,35 +5155,33 @@ export default function TemplifyEditor() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Link href={"/"}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              <div
-                style={{
-                  width: 26,
-                  height: 26,
-                  background: "#e8ff47",
-                  borderRadius: 7,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  color: "#0a0a10",
-                }}
-              >
-                ✦
-              </div>
-              <span
-                style={{
-                  fontWeight: 700,
-                  fontSize: 13,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                Templify
-              </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                background: "#e8ff47",
+                borderRadius: 7,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                fontWeight: 900,
+                color: "#0a0a10",
+              }}
+            >
+              ✦
             </div>
-          </Link>
+            <span
+              style={{
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Templify
+            </span>
+          </div>
           <div
             style={{
               width: 1,
@@ -4547,129 +5233,74 @@ export default function TemplifyEditor() {
               ↪
             </button>
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <button
-            onClick={() => setShowSizePicker(true)}
+          <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 5,
-              padding: "4px 10px",
+              padding: "4px 9px",
               borderRadius: 7,
-              fontSize: 10,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "rgba(240,237,232,0.7)",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
             }}
           >
-            <span>⬚</span>
-            <span>{activePreset}</span>
             <span style={{ fontSize: 9, color: "rgba(240,237,232,0.3)" }}>
-              {canvasSize.width}×{canvasSize.height}
+              Canvas
             </span>
-          </button>
-          <div style={{ position: "relative" }}>
-            <div
+            <span
               style={{
-                display: "flex",
-                borderRadius: 7,
-                overflow: "hidden",
-                border: "1px solid rgba(232,255,71,0.4)",
+                fontSize: 10,
+                fontWeight: 600,
+                color: "rgba(240,237,232,0.6)",
+                fontFamily: "monospace",
               }}
             >
-              <button
-                onClick={doExport}
-                disabled={exportProgress !== null}
-                style={{
-                  padding: "4px 12px",
-                  background: "#e8ff47",
-                  color: "#0a0a10",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: exportProgress !== null ? "not-allowed" : "pointer",
-                  border: "none",
-                  opacity: exportProgress !== null ? 0.7 : 1,
-                }}
-              >
-                {exportProgress !== null
-                  ? `${exportProgress}%`
-                  : totalPages > 1
-                    ? `Export ${exportFormat} · ${totalPages}p`
-                    : `Export ${exportFormat}`}
-              </button>
-              <button
-                onClick={() => setShowExportMenu((p) => !p)}
-                style={{
-                  padding: "4px 7px",
-                  background: "#e8ff47",
-                  color: "#0a0a10",
-                  fontSize: 10,
-                  cursor: "pointer",
-                  border: "none",
-                  borderLeft: "1px solid rgba(0,0,0,0.15)",
-                }}
-              >
-                ▾
-              </button>
-            </div>
-            {showExportMenu && (
-              <div
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  marginTop: 3,
-                  background: "#1a1a26",
-                  border: "1px solid rgba(255,255,255,0.09)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  zIndex: 50,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
-                  minWidth: 100,
-                  animation: "slideIn 0.12s ease",
-                }}
-              >
-                {["PNG", "PDF"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => {
-                      setExportFormat(f);
-                      setShowExportMenu(false);
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "7px 12px",
-                      textAlign: "left",
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      border: "none",
-                      background: "transparent",
-                      color:
-                        exportFormat === f
-                          ? "#e8ff47"
-                          : "rgba(240,237,232,0.7)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    {f}
-                    {exportFormat === f && (
-                      <span style={{ fontSize: 9 }}>✓</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+              {effectiveCanvasSize.width}×{effectiveCanvasSize.height}px
+            </span>
           </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <button
+            onClick={() => setShowImpositionModal(true)}
+            title="Print Imposition & Export"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "0 14px",
+              height: 32,
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              background: "#e8ff47",
+              border: "none",
+              color: "#0a0a10",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#d4eb3f")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#e8ff47")}
+          >
+            <span style={{ fontSize: 12 }}>⬚</span>
+            <span>Print Imposition & Export</span>
+            <span
+              style={{
+                fontSize: 8,
+                background: "rgba(0,0,0,0.12)",
+                padding: "1px 5px",
+                borderRadius: 3,
+                letterSpacing: "0.04em",
+              }}
+            >
+              GA
+            </span>
+          </button>
         </div>
       </header>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* ─── Left panel ──────────────────────────────────────────────── */}
+        {/* Left panel */}
         <aside
           style={{
             width: 210,
@@ -4737,7 +5368,7 @@ export default function TemplifyEditor() {
                   Upload Image
                 </p>
                 <p style={{ fontSize: 9, color: "rgba(240,237,232,0.25)" }}>
-                  or drag & drop
+                  auto-resizes canvas
                 </p>
               </div>
               <input
@@ -4749,7 +5380,6 @@ export default function TemplifyEditor() {
               />
             </label>
           </div>
-
           <div
             style={{
               padding: 12,
@@ -4831,40 +5461,6 @@ export default function TemplifyEditor() {
                 <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
                   {rows.length} rows · {columns.length} cols
                 </p>
-                {autoDetectedImageColumns.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: 6,
-                      padding: "5px 6px",
-                      borderRadius: 6,
-                      background: "rgba(99,179,237,0.06)",
-                      border: "1px solid rgba(99,179,237,0.15)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: 8,
-                        color: "rgba(99,179,237,0.6)",
-                        marginBottom: 3,
-                        fontWeight: 700,
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      ✦ AUTO-DETECTED
-                    </p>
-                    <p
-                      style={{
-                        fontSize: 9,
-                        color: "rgba(99,179,237,0.8)",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {autoDetectedImageColumns.length} photo column
-                      {autoDetectedImageColumns.length > 1 ? "s" : ""} placed on
-                      canvas
-                    </p>
-                  </div>
-                )}
               </div>
             ) : (
               <label
@@ -4945,7 +5541,6 @@ export default function TemplifyEditor() {
               </p>
             )}
           </div>
-
           <DataImagesPanel
             dataImages={dataImages}
             dataImagesLabel={dataImagesLabel}
@@ -4959,7 +5554,6 @@ export default function TemplifyEditor() {
             }}
             onPlacePhoto={addDataPhotoObject}
           />
-
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
             <p
               style={{
@@ -5052,23 +5646,9 @@ export default function TemplifyEditor() {
                       </button>
                     );
                   })}
-                {columns.filter(
-                  (col) => !autoDetectedImageColumns.includes(col),
-                ).length === 0 && (
-                  <p
-                    style={{
-                      fontSize: 10,
-                      color: "rgba(240,237,232,0.2)",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    All columns are photo columns.
-                  </p>
-                )}
               </div>
             )}
           </div>
-
           <div
             style={{
               padding: 12,
@@ -5098,7 +5678,7 @@ export default function TemplifyEditor() {
           </div>
         </aside>
 
-        {/* ─── Canvas Area ─────────────────────────────────────────────── */}
+        {/* Canvas Area */}
         <main
           ref={canvasAreaRef}
           style={{
@@ -5119,7 +5699,6 @@ export default function TemplifyEditor() {
             handleSpacePanStart(e);
           }}
         >
-          {/* dot grid background */}
           <div
             style={{
               position: "absolute",
@@ -5130,8 +5709,6 @@ export default function TemplifyEditor() {
               backgroundSize: "22px 22px",
             }}
           />
-
-          {/* Scrollable+zoomable canvas container */}
           <div
             style={{
               position: "absolute",
@@ -5142,178 +5719,108 @@ export default function TemplifyEditor() {
               justifyContent: "center",
             }}
           >
-            {(() => {
-              const { cols: bCols, rows: bRows } = batchGrid(batchSize);
-              const totalW = canvasSize.width * bCols;
-              const totalH = canvasSize.height * bRows;
-              return (
-                <div
-                  style={{
-                    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-                    transformOrigin: "center center",
-                    flexShrink: 0,
-                    width: totalW,
-                    height: totalH,
-                    position: "relative",
-                  }}
-                >
-                  {Array.from({ length: batchSize }).map((_, slot) => {
-                    const rowIdx = previewRowStart + slot;
-                    const slotCol = slot % bCols;
-                    const slotRow = Math.floor(slot / bCols);
-                    const offsetX = slotCol * canvasSize.width;
-                    const offsetY = slotRow * canvasSize.height;
-                    const isFirstSlot = slot === 0;
-                    if (rowIdx >= rows.length && rows.length > 0) return null;
-
-                    return (
-                      <div
-                        key={slot}
-                        style={{
-                          position: "absolute",
-                          left: offsetX,
-                          top: offsetY,
-                          width: canvasSize.width,
-                          height: canvasSize.height,
-                        }}
-                      >
-                        {/* The canvas cell background */}
-                        <div
-                          id={isFirstSlot ? "templify-canvas" : undefined}
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            borderRadius: canvasStyle.borderRadius,
-                            background: canvasStyle.background,
-                            boxShadow: canvasShadow,
-                            border: canvasBorder,
-                            overflow: "hidden",
-                            backgroundImage: canvasGridBg,
-                            backgroundSize: canvasStyle.showGrid
-                              ? `${canvasStyle.gridSize}px ${canvasStyle.gridSize}px`
-                              : undefined,
-                          }}
-                        >
-                          {objects.length === 0 && isFirstSlot && (
-                            <div
-                              style={{
-                                position: "absolute",
-                                inset: 0,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: 8,
-                                pointerEvents: "none",
-                              }}
-                            >
-                              <div style={{ fontSize: 40, opacity: 0.07 }}>
-                                🖼
-                              </div>
-                              <p
-                                style={{
-                                  color: "rgba(10,10,16,0.18)",
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                }}
-                              >
-                                Upload a template to begin
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Slot label when batch > 1 */}
-                        {batchSize > 1 && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: 6,
-                              right: 8,
-                              fontSize: 9,
-                              fontWeight: 700,
-                              color: "rgba(0,0,0,0.25)",
-                              pointerEvents: "none",
-                              zIndex: 50,
-                              background: "rgba(255,255,255,0.6)",
-                              borderRadius: 4,
-                              padding: "1px 5px",
-                            }}
-                          >
-                            {rowIdx < rows.length ? `Row ${rowIdx + 1}` : "—"}
-                          </div>
-                        )}
-
-                        {/* Background image for this slot */}
-                        {bgImage && (
-                          <ImageEl
-                            key={`${bgImage.id}-slot${slot}`}
-                            obj={bgImage}
-                            selected={isFirstSlot && selectedId === bgImage.id}
-                            onSelect={isFirstSlot ? setSelectedId : () => {}}
-                            onDrag={isFirstSlot ? handleDrag : () => {}}
-                            onResize={isFirstSlot ? handleResize : () => {}}
-                            scale={zoom}
-                            rows={rows.length > 0 ? rows : [{}]}
-                            baseRowIndex={rowIdx}
-                            dataImages={dataImages}
-                          />
-                        )}
-
-                        {/* All non-background objects for this slot */}
-                        {objects
-                          .filter(
-                            (o) =>
-                              !(
-                                o.kind === "image" &&
-                                (o as ImageObject).isBackground
-                              ),
-                          )
-                          .map((obj) =>
-                            obj.kind === "image" ? (
-                              <ImageEl
-                                key={`${obj.id}-slot${slot}`}
-                                obj={obj as ImageObject}
-                                selected={isFirstSlot && selectedId === obj.id}
-                                onSelect={
-                                  isFirstSlot ? setSelectedId : () => {}
-                                }
-                                onDrag={isFirstSlot ? handleDrag : () => {}}
-                                onResize={isFirstSlot ? handleResize : () => {}}
-                                scale={zoom}
-                                rows={rows.length > 0 ? rows : [{}]}
-                                baseRowIndex={rowIdx}
-                                dataImages={dataImages}
-                              />
-                            ) : (
-                              <TextEl
-                                key={`${obj.id}-slot${slot}`}
-                                obj={obj as TextField}
-                                selected={isFirstSlot && selectedId === obj.id}
-                                onSelect={
-                                  isFirstSlot ? setSelectedId : () => {}
-                                }
-                                onDrag={isFirstSlot ? handleDrag : () => {}}
-                                onResize={isFirstSlot ? handleResize : () => {}}
-                                currentRow={
-                                  rows.length > 0
-                                    ? rows[Math.min(rowIdx, rows.length - 1)]
-                                    : null
-                                }
-                                rows={rows}
-                                scale={zoom}
-                              />
-                            ),
-                          )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+            <div
+              style={{
+                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                transformOrigin: "center center",
+                flexShrink: 0,
+                // FIX: use the already-guarded effectiveCanvasSize values;
+                // they can never be NaN or 0 thanks to the memo above.
+                width: effectiveCanvasSize.width,
+                height: effectiveCanvasSize.height,
+                position: "relative",
+              }}
+            >
+              <div
+                id="templify-canvas"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "#ffffff",
+                  boxShadow:
+                    "0 20px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)",
+                  overflow: "hidden",
+                }}
+              >
+                {objects.length === 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <div style={{ fontSize: 40, opacity: 0.07 }}>🖼</div>
+                    <p
+                      style={{
+                        color: "rgba(10,10,16,0.18)",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Upload a template to begin
+                    </p>
+                  </div>
+                )}
+              </div>
+              {bgImage && (
+                <ImageEl
+                  key={bgImage.id}
+                  obj={bgImage}
+                  selected={selectedId === bgImage.id}
+                  onSelect={setSelectedId}
+                  onDrag={handleDrag}
+                  onResize={handleResize}
+                  scale={zoom}
+                  rows={rows.length > 0 ? rows : [{}]}
+                  baseRowIndex={pageIndex}
+                  dataImages={dataImages}
+                />
+              )}
+              {objects
+                .filter(
+                  (o) =>
+                    !(o.kind === "image" && (o as ImageObject).isBackground),
+                )
+                .map((obj) =>
+                  obj.kind === "image" ? (
+                    <ImageEl
+                      key={obj.id}
+                      obj={obj as ImageObject}
+                      selected={selectedId === obj.id}
+                      onSelect={setSelectedId}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      scale={zoom}
+                      rows={rows.length > 0 ? rows : [{}]}
+                      baseRowIndex={pageIndex}
+                      dataImages={dataImages}
+                    />
+                  ) : (
+                    <TextEl
+                      key={obj.id}
+                      obj={obj as TextField}
+                      selected={selectedId === obj.id}
+                      onSelect={setSelectedId}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      currentRow={
+                        rows.length > 0
+                          ? rows[Math.min(pageIndex, rows.length - 1)]
+                          : null
+                      }
+                      rows={rows}
+                      scale={zoom}
+                    />
+                  ),
+                )}
+            </div>
           </div>
-
-          {/* Canvas size label */}
           <div
             style={{
               position: "absolute",
@@ -5326,23 +5833,15 @@ export default function TemplifyEditor() {
               whiteSpace: "nowrap",
             }}
           >
-            {canvasSize.width}×{canvasSize.height}px · {activePreset} ·{" "}
-            {Math.round(zoom * 100)}%
+            {effectiveCanvasSize.width}×{effectiveCanvasSize.height}px · Scale{" "}
+            {Math.round(canvasScale * 100)}% · Zoom {Math.round(zoom * 100)}%
           </div>
-
           <FloatingPageNav
             pageIndex={pageIndex}
             totalPages={totalPages}
-            batchSize={batchSize}
             onPageChange={setPageIndex}
-            onBatchChange={(b) => {
-              setBatchSize(b);
-              setPageIndex(0);
-            }}
             rows={rows}
           />
-
-          {/* ── Zoom Controls ── */}
           <ZoomControls
             zoom={zoom}
             onZoom={handleZoomDelta}
@@ -5355,7 +5854,7 @@ export default function TemplifyEditor() {
           />
         </main>
 
-        {/* ─── Right panel ────────────────────────────────────────────── */}
+        {/* Right panel */}
         <aside
           style={{
             width: 248,
@@ -5367,7 +5866,6 @@ export default function TemplifyEditor() {
             overflow: "hidden",
           }}
         >
-          {/* Tabs: Layers / Style / Canvas */}
           <div
             style={{
               display: "flex",
@@ -5375,7 +5873,7 @@ export default function TemplifyEditor() {
               flexShrink: 0,
             }}
           >
-            {(["layers", "style", "canvas"] as const).map((tab) => (
+            {(["layers", "style"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
@@ -5397,22 +5895,11 @@ export default function TemplifyEditor() {
                       : "2px solid transparent",
                 }}
               >
-                {tab === "layers"
-                  ? "Layers"
-                  : tab === "style"
-                    ? "Style"
-                    : "Canvas"}
+                {tab === "layers" ? "Layers" : "Style"}
               </button>
             ))}
           </div>
-
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {/* ── Canvas Tab ── */}
-            {rightTab === "canvas" && (
-              <CanvasStylePanel style={canvasStyle} onChange={setCanvasStyle} />
-            )}
-
-            {/* ── Layers Tab ── */}
             {rightTab === "layers" && (
               <div style={{ padding: 12 }}>
                 <p
@@ -5472,8 +5959,6 @@ export default function TemplifyEditor() {
                 </p>
               </div>
             )}
-
-            {/* ── Style Tab ── */}
             {rightTab === "style" && (
               <div
                 style={{
@@ -5485,19 +5970,103 @@ export default function TemplifyEditor() {
                   overflow: "hidden",
                 }}
               >
+                {/* Canvas Scale Section */}
+                <div
+                  style={{
+                    padding: "12px",
+                    borderRadius: 9,
+                    background: "rgba(232,255,71,0.03)",
+                    border: "1px solid rgba(232,255,71,0.1)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <SLabel>Canvas Scale</SLabel>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "#e8ff47",
+                      }}
+                    >
+                      {Math.round(canvasScale * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={25}
+                    max={300}
+                    step={5}
+                    value={Math.round(canvasScale * 100)}
+                    onChange={(e) =>
+                      setCanvasScale(Number(e.target.value) / 100)
+                    }
+                    style={{
+                      width: "100%",
+                      height: "3px",
+                      accentColor: "#e8ff47",
+                      marginBottom: 8,
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                    {SCALE_PRESETS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setCanvasScale(s)}
+                        style={{
+                          flex: 1,
+                          minWidth: 30,
+                          padding: "4px 2px",
+                          borderRadius: 5,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          border: "none",
+                          background:
+                            Math.abs(canvasScale - s) < 0.01
+                              ? "rgba(232,255,71,0.2)"
+                              : "rgba(255,255,255,0.05)",
+                          color:
+                            Math.abs(canvasScale - s) < 0.01
+                              ? "#e8ff47"
+                              : "rgba(240,237,232,0.4)",
+                        }}
+                      >
+                        {Math.round(s * 100)}%
+                      </button>
+                    ))}
+                  </div>
+                  <p
+                    style={{
+                      fontSize: 8,
+                      color: "rgba(240,237,232,0.2)",
+                      marginTop: 8,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Scales canvas + all objects proportionally. Base:{" "}
+                    {canvasSize.width}×{canvasSize.height}px →{" "}
+                    {effectiveCanvasSize.width}×{effectiveCanvasSize.height}px
+                  </p>
+                </div>
+
                 {!selectedObj ? (
                   <p
                     style={{
                       fontSize: 11,
                       color: "rgba(240,237,232,0.18)",
                       textAlign: "center",
-                      paddingBlock: 28,
+                      paddingBlock: 12,
                       lineHeight: 1.7,
                     }}
                   >
-                    Select an object
-                    <br />
-                    to edit its style.
+                    Select an object to edit its style.
                   </p>
                 ) : (
                   <>
@@ -5528,56 +6097,11 @@ export default function TemplifyEditor() {
                       </p>
                     </div>
 
-                    <div>
-                      <SLabel>Size & Position</SLabel>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          gap: 6,
-                        }}
-                      >
-                        {(
-                          [
-                            ["W", "width"],
-                            ["H", "height"],
-                            ["X", "x"],
-                            ["Y", "y"],
-                          ] as [string, string][]
-                        ).map(([l, k]) => (
-                          <div key={k}>
-                            <p
-                              style={{
-                                fontSize: 9,
-                                color: "rgba(240,237,232,0.25)",
-                                marginBottom: 3,
-                              }}
-                            >
-                              {l}
-                            </p>
-                            <input
-                              type="number"
-                              value={Math.round((selectedObj as any)[k])}
-                              onChange={(e) =>
-                                updateObj(k, Number(e.target.value))
-                              }
-                              style={{
-                                width: "100%",
-                                padding: "4px 7px",
-                                borderRadius: 6,
-                                background: "rgba(255,255,255,0.05)",
-                                border: "1px solid rgba(255,255,255,0.1)",
-                                color: "#f0ede8",
-                                fontSize: 11,
-                                fontFamily: "monospace",
-                                textAlign: "center",
-                                outline: "none",
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <DimensionInputs
+                      selectedObj={selectedObj}
+                      updateBgDimension={updateBgDimension}
+                      updateObj={updateObj}
+                    />
 
                     <div>
                       <SLabel>Layer Order</SLabel>
@@ -5639,7 +6163,6 @@ export default function TemplifyEditor() {
                         </button>
                       </div>
                     </div>
-
                     {selectedObj.kind === "image" &&
                       (() => {
                         const img = selectedObj as ImageObject;
@@ -5658,11 +6181,26 @@ export default function TemplifyEditor() {
                                 gap: 8,
                               }}
                             >
-                              <Toggle
-                                value={img.isBackground}
-                                onChange={(v) => setAsBackground(img.id, v)}
-                                label="Canvas Background"
-                              />
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: "rgba(240,237,232,0.55)",
+                                  }}
+                                >
+                                  Canvas Background
+                                </span>
+                                <ToggleSwitch
+                                  value={img.isBackground}
+                                  onChange={(v) => setAsBackground(img.id, v)}
+                                />
+                              </div>
                               {img.isBackground && (
                                 <div
                                   style={{
@@ -5689,43 +6227,6 @@ export default function TemplifyEditor() {
                                       {img.naturalWidth}×{img.naturalHeight}px
                                     </span>
                                   </p>
-                                  <button
-                                    onClick={() => {
-                                      const MAX = 2000,
-                                        nw = img.naturalWidth,
-                                        nh = img.naturalHeight,
-                                        s = Math.min(1, MAX / nw, MAX / nh);
-                                      setCanvasSize({
-                                        width: Math.round(nw * s),
-                                        height: Math.round(nh * s),
-                                      });
-                                      setObjects((p) =>
-                                        p.map((o) =>
-                                          o.id === img.id
-                                            ? ({
-                                                ...o,
-                                                width: Math.round(nw * s),
-                                                height: Math.round(nh * s),
-                                              } as CanvasObject)
-                                            : o,
-                                        ),
-                                      );
-                                      setActivePreset("Image Size");
-                                    }}
-                                    style={{
-                                      width: "100%",
-                                      padding: "4px 0",
-                                      borderRadius: 5,
-                                      fontSize: 9,
-                                      fontWeight: 600,
-                                      cursor: "pointer",
-                                      background: "rgba(232,255,71,0.07)",
-                                      border: "1px solid rgba(232,255,71,0.18)",
-                                      color: "#e8ff47",
-                                    }}
-                                  >
-                                    ↺ Re-sync Size
-                                  </button>
                                 </div>
                               )}
                             </div>
@@ -5735,13 +6236,11 @@ export default function TemplifyEditor() {
                                 dataImages={dataImages}
                                 rows={rows}
                                 baseRowIndex={Math.min(
-                                  previewRowStart,
+                                  pageIndex,
                                   rows.length - 1,
                                 )}
                               />
                             )}
-
-                            {/* Row Offset for data images — same as TextField */}
                             {!img.isBackground && img.isDataImage && (
                               <div>
                                 <SLabel>Row Offset</SLabel>
@@ -5814,22 +6313,6 @@ export default function TemplifyEditor() {
                                         {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
                                       </button>
                                     ))}
-                                    {Math.abs(img.columnOffset ?? 0) > 1 && (
-                                      <span
-                                        style={{
-                                          padding: "2px 7px",
-                                          borderRadius: 5,
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          background: "#e8ff47",
-                                          color: "#0a0a10",
-                                        }}
-                                      >
-                                        {(img.columnOffset ?? 0) > 0
-                                          ? `+${img.columnOffset}`
-                                          : img.columnOffset}
-                                      </span>
-                                    )}
                                   </div>
                                   <button
                                     onClick={() =>
@@ -5934,52 +6417,6 @@ export default function TemplifyEditor() {
                                     accentColor: "#e8ff47",
                                   }}
                                 />
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: 4,
-                                    marginTop: 6,
-                                  }}
-                                >
-                                  {[0, 4, 8, 16, 50].map((r) => {
-                                    const maxR = Math.round(
-                                      Math.min(img.width, img.height) / 2,
-                                    );
-                                    const actualR = r === 50 ? maxR : r;
-                                    return (
-                                      <button
-                                        key={r}
-                                        onClick={() =>
-                                          updateObj("borderRadius", actualR)
-                                        }
-                                        style={{
-                                          flex: 1,
-                                          padding: "5px 2px",
-                                          borderRadius:
-                                            actualR > 8 ? actualR : 4,
-                                          fontSize: 10,
-                                          cursor: "pointer",
-                                          border: "none",
-                                          background:
-                                            (img.borderRadius ?? 0) === actualR
-                                              ? "rgba(232,255,71,0.15)"
-                                              : "rgba(255,255,255,0.05)",
-                                          color:
-                                            (img.borderRadius ?? 0) === actualR
-                                              ? "#e8ff47"
-                                              : "rgba(240,237,232,0.4)",
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {r === 50
-                                          ? "⬤"
-                                          : r === 0
-                                            ? "▭"
-                                            : String(r)}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
                               </div>
                             )}
                             {!img.isBackground && (
@@ -5997,7 +6434,6 @@ export default function TemplifyEditor() {
                           </>
                         );
                       })()}
-
                     {selectedObj.kind === "field" &&
                       (() => {
                         const f = selectedObj as TextField;
@@ -6074,22 +6510,6 @@ export default function TemplifyEditor() {
                                       {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
                                     </button>
                                   ))}
-                                  {Math.abs(f.columnOffset) > 1 && (
-                                    <span
-                                      style={{
-                                        padding: "2px 7px",
-                                        borderRadius: 5,
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        background: "#e8ff47",
-                                        color: "#0a0a10",
-                                      }}
-                                    >
-                                      {f.columnOffset > 0
-                                        ? `+${f.columnOffset}`
-                                        : f.columnOffset}
-                                    </span>
-                                  )}
                                 </div>
                                 <button
                                   onClick={() =>
@@ -6379,7 +6799,6 @@ export default function TemplifyEditor() {
                           </>
                         );
                       })()}
-
                     <button
                       onClick={() => deleteObj(selectedObj.id)}
                       style={{
@@ -6409,8 +6828,6 @@ export default function TemplifyEditor() {
               </div>
             )}
           </div>
-
-          {/* Current page row preview */}
           {currentRow && (
             <div
               style={{
@@ -6431,8 +6848,7 @@ export default function TemplifyEditor() {
                   marginBottom: 7,
                 }}
               >
-                Page {pageIndex + 1} · Rows {previewRowStart + 1}–
-                {Math.min(previewRowStart + batchSize, rows.length)}
+                Row {pageIndex + 1} of {rows.length}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {Object.entries(currentRow).map(([k, v]) => (
@@ -6466,18 +6882,6 @@ export default function TemplifyEditor() {
           )}
         </aside>
       </div>
-
-      {showSizePicker && (
-        <SizePicker
-          current={canvasSize}
-          onSelect={(s, l) => {
-            setCanvasSize(s);
-            setActivePreset(l);
-            setShowSizePicker(false);
-          }}
-          onClose={() => setShowSizePicker(false)}
-        />
-      )}
     </div>
   );
 }
