@@ -1,4 +1,4 @@
-import type { Shadow, Border } from "../types";
+import type { Shadow, Border } from "../types/index";
 
 export const DEFAULT_SHADOW: Shadow = {
   enabled: false,
@@ -17,13 +17,30 @@ export const DEFAULT_BORDER: Border = {
 };
 
 export const SHEET_PRESETS = [
-  { label: "A4 Portrait", w: 595, h: 842 },
-  { label: "A4 Landscape", w: 842, h: 595 },
-  { label: "Letter", w: 612, h: 792 },
-  { label: "Legal", w: 612, h: 1008 },
-  { label: "A3 Portrait", w: 842, h: 1191 },
-  { label: "A3 Landscape", w: 1191, h: 842 },
-  { label: "Tabloid", w: 792, h: 1224 },
+  // ── ISO A series ──────────────────────────────────────────────────────────
+  { label: "A6", w: 397, h: 559 },
+  { label: "A5", w: 559, h: 794 },
+  { label: "A4", w: 794, h: 1123 },
+  { label: "A3", w: 1123, h: 1587 },
+  { label: "A2", w: 1587, h: 2245 },
+  { label: "A1", w: 2245, h: 3179 },
+
+  // ── ISO B series ──────────────────────────────────────────────────────────
+  { label: "B6", w: 472, h: 661 },
+  { label: "B5", w: 665, h: 945 },
+  { label: "B4", w: 945, h: 1334 },
+  { label: "B3", w: 1334, h: 1890 },
+
+  // ── US / North American ───────────────────────────────────────────────────
+  { label: "Letter", w: 816, h: 1056 },
+  { label: "Legal", w: 816, h: 1344 },
+  { label: "Tabloid", w: 1056, h: 1632 },
+  { label: "Executive", w: 696, h: 1008 },
+
+  // ── Square / specialty ────────────────────────────────────────────────────
+  { label: "Square S", w: 600, h: 600 },
+  { label: "Square M", w: 900, h: 900 },
+  { label: "Square L", w: 1200, h: 1200 },
 ];
 
 export const SCALE_PRESETS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -63,7 +80,14 @@ export const GOOGLE_FONTS = [
   { name: "Source Code Pro", category: "Mono" },
 ];
 
-export const FONT_CATS = ["All", "Serif", "Sans-serif", "Display", "Script", "Mono"];
+export const FONT_CATS = [
+  "All",
+  "Serif",
+  "Sans-serif",
+  "Display",
+  "Script",
+  "Mono",
+];
 
 export const TEXT_COLORS = [
   "#1a1a1a",

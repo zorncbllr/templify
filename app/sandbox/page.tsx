@@ -23,16 +23,60 @@ import {
 import { exportRecords } from "./utils/export";
 import { LayerItem, DimensionInputs } from "./components/LayerItem";
 import { ZoomControls, FloatingPageNav, KbdHint } from "./components/Controls";
-import {
-  ShadowPanel,
-  BorderPanel,
-  ToggleSwitch,
-} from "./components/StylePanels";
+import { ShadowPanel, BorderPanel } from "./components/StylePanels";
 import { ImpositionModal } from "./components/ImpositionModal";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { ImageEl, TextEl } from "./components/CanvasObjects";
 import { DataImageInfo, DataImagesPanel } from "./components/DataPanel";
 import { FontPicker } from "./components/FontPicker";
+
+// ─── Unified undo state ───────────────────────────────────────────────────────
+// Keeping canvasSize alongside objects means a single undo/redo call restores
+// both the layout AND the canvas dimensions together — no drift.
+interface EditorState {
+  objects: CanvasObject[];
+  canvasSize: CanvasSize;
+}
+
+// ─── Proportional remapping helper ───────────────────────────────────────────
+// When the canvas is resized (e.g. a new background image is dropped in, or the
+// user edits W/H directly), every non-background object should stay "in the same
+// relative position" on the new canvas.
+function remapObjects(
+  objects: CanvasObject[],
+  oldSize: CanvasSize,
+  newSize: CanvasSize,
+): CanvasObject[] {
+  if (oldSize.width === newSize.width && oldSize.height === newSize.height)
+    return objects;
+
+  const rx = newSize.width / Math.max(1, oldSize.width);
+  const ry = newSize.height / Math.max(1, oldSize.height);
+
+  return objects.map((o) => {
+    // Background images are pinned to 0,0 and sized to fill the canvas —
+    // they don't need remapping (their render size is derived elsewhere).
+    if (o.kind === "image" && (o as ImageObject).isBackground) return o;
+
+    return {
+      ...o,
+      x: Math.round(o.x * rx),
+      y: Math.round(o.y * ry),
+      width: Math.round(o.width * rx),
+      height: Math.round(o.height * ry),
+      // Keep fontSize proportional for text fields (use the average scale so
+      // text doesn't blow up on very non-uniform resizes).
+      ...(o.kind === "field"
+        ? {
+            fontSize: Math.max(
+              6,
+              Math.round((o as TextField).fontSize * ((rx + ry) / 2)),
+            ),
+          }
+        : {}),
+    } as CanvasObject;
+  });
+}
 
 function SLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -64,33 +108,116 @@ const TEXT_COLORS = [
 
 export default function TemplifyEditor() {
   const [mounted, setMounted] = useState(false);
+
+  // ─── Unified undo/redo for objects + canvasSize ───────────────────────────
   const {
-    state: objects,
-    setState: setObjectsRaw,
+    state: editorState,
+    setState: setEditorStateRaw,
     undo,
     redo,
     undoRef,
     redoRef,
     canUndo,
     canRedo,
-  } = useUndoRedo<CanvasObject[]>([]);
+  } = useUndoRedo<EditorState>({
+    objects: [],
+    canvasSize: { width: 960, height: 540 },
+  });
 
-  const setObjects = useCallback(
+  // Convenience destructure — read-only; always mutate via setEditorState.
+  const objects = editorState.objects;
+  const canvasSize = editorState.canvasSize;
+
+  // Wrap the raw setter so callers don't have to think about the shape.
+  // `live` = true → no undo snapshot (e.g. mid-drag); false (default) → snapshot.
+  const setEditorState = useCallback(
     (
-      u: CanvasObject[] | ((p: CanvasObject[]) => CanvasObject[]),
+      updater: EditorState | ((prev: EditorState) => EditorState),
       live = false,
     ) => {
-      setObjectsRaw(u as any, !live);
+      setEditorStateRaw(updater as any, !live);
     },
-    [setObjectsRaw],
+    [setEditorStateRaw],
   );
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Helpers that touch only one slice, kept for readability.
+  const setObjects = useCallback(
+    (
+      u: CanvasObject[] | ((prev: CanvasObject[]) => CanvasObject[]),
+      live = false,
+    ) => {
+      setEditorState(
+        (prev) => ({
+          ...prev,
+          objects: typeof u === "function" ? u(prev.objects) : u,
+        }),
+        live,
+      );
+    },
+    [setEditorState],
+  );
+
+  const setCanvasSize = useCallback(
+    (newSize: CanvasSize, live = false) => {
+      setEditorState((prev) => ({ ...prev, canvasSize: newSize }), live);
+    },
+    [setEditorState],
+  );
+
+  // ─── Multi-select state ───────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [primaryId, setPrimaryId] = useState<number | null>(null);
+  const selectedIdsRef = useRef<Set<number>>(new Set());
+  const primaryIdRef = useRef<number | null>(null);
+  selectedIdsRef.current = selectedIds;
+  primaryIdRef.current = primaryId;
+
+  const selectOne = useCallback((id: number | null) => {
+    if (id === null) {
+      setSelectedIds(new Set());
+      setPrimaryId(null);
+    } else {
+      setSelectedIds(new Set([id]));
+      setPrimaryId(id);
+    }
+  }, []);
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setPrimaryId(id);
+  }, []);
+
+  const rangeSelect = useCallback((id: number, sorted: CanvasObject[]) => {
+    const ids = sorted.map((o) => o.id);
+    const anchor = primaryIdRef.current ?? id;
+    const a = ids.indexOf(anchor);
+    const b = ids.indexOf(id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (a === -1 || b === -1) {
+        next.add(id);
+      } else {
+        const lo = Math.min(a, b),
+          hi = Math.max(a, b);
+        for (let i = lo; i <= hi; i++) next.add(ids[i]);
+      }
+      return next;
+    });
+    setPrimaryId(id);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setPrimaryId(null);
+  }, []);
+
+  // ─── Other state ──────────────────────────────────────────────────────────
   const [clipboard, setClipboard] = useState<CanvasObject | null>(null);
-  const [canvasSize, setCanvasSize] = useState<CanvasSize>({
-    width: 960,
-    height: 540,
-  });
   const [canvasScale, setCanvasScale] = useState<number>(1.0);
   const [showImpositionModal, setShowImpositionModal] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
@@ -117,8 +244,8 @@ export default function TemplifyEditor() {
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const canvasAreaRef = useRef<HTMLDivElement>(null);
-
   const nextZ = useRef(100);
+
   const totalPages = rows.length;
   const currentRow = useMemo(() => {
     if (rows.length === 0) return null;
@@ -134,41 +261,53 @@ export default function TemplifyEditor() {
     };
   }, [canvasSize, canvasScale]);
 
-  const prevScaleRef = useRef<number>(1.0);
-  useEffect(() => {
-    const prev = prevScaleRef.current;
-    if (prev === canvasScale) return;
-    const ratio = canvasScale / prev;
-    prevScaleRef.current = canvasScale;
-    setObjects((p) =>
-      p.map((obj) => {
-        if (obj.kind === "image" && (obj as ImageObject).isBackground) {
-          return {
-            ...obj,
-            x: 0,
-            y: 0,
-            width: Math.round(canvasSize.width * canvasScale),
-            height: Math.round(canvasSize.height * canvasScale),
-          };
-        }
-        return {
-          ...obj,
-          x: Math.round(obj.x * ratio),
-          y: Math.round(obj.y * ratio),
-          width: Math.round(obj.width * ratio),
-          height: Math.round(obj.height * ratio),
-          ...(obj.kind === "field"
-            ? {
-                fontSize: Math.round(
-                  Math.max(6, (obj as TextField).fontSize * ratio),
-                ),
-              }
-            : {}),
-        } as CanvasObject;
-      }),
-    );
-  }, [canvasScale]);
+  // ─── Derived selection helpers ────────────────────────────────────────────
+  const primaryObj = useMemo(
+    () =>
+      primaryId != null
+        ? (objects.find((o) => o.id === primaryId) ?? null)
+        : null,
+    [objects, primaryId],
+  );
+  const selectedObjs = useMemo(
+    () => objects.filter((o) => selectedIds.has(o.id)),
+    [objects, selectedIds],
+  );
+  const selectedId = primaryId;
+  const selectedObj = primaryObj;
+  const layersSorted = useMemo(
+    () => [...objects].sort((a, b) => b.zIndex - a.zIndex),
+    [objects],
+  );
+  const bgImage = useMemo(
+    () =>
+      objects.find(
+        (o) => o.kind === "image" && (o as ImageObject).isBackground,
+      ) as ImageObject | undefined,
+    [objects],
+  );
 
+  const allText =
+    selectedObjs.length > 0 && selectedObjs.every((o) => o.kind === "field");
+  const allImages =
+    selectedObjs.length > 0 &&
+    selectedObjs.every(
+      (o) => o.kind === "image" && !(o as ImageObject).isBackground,
+    );
+  const multiSelected = selectedIds.size > 1;
+  const anySelected = selectedIds.size > 0;
+
+  const clipboardRef = useRef<CanvasObject | null>(null);
+  const objectsRef = useRef<CanvasObject[]>([]);
+  clipboardRef.current = clipboard;
+  objectsRef.current = objects;
+
+  // Keep a ref to the latest canvasSize for use inside callbacks that close
+  // over stale values (e.g. keyboard handler).
+  const canvasSizeRef = useRef<CanvasSize>(canvasSize);
+  canvasSizeRef.current = canvasSize;
+
+  // ─── Viewport ─────────────────────────────────────────────────────────────
   const computeFitZoom = useCallback(() => {
     if (!canvasAreaRef.current) return 1;
     const rect = canvasAreaRef.current.getBoundingClientRect();
@@ -207,29 +346,6 @@ export default function TemplifyEditor() {
     return () => el.removeEventListener("wheel", handler);
   }, [mounted]);
 
-  const handleCanvasMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button === 1 || (e as any).spaceHeld) {
-        e.preventDefault();
-        isPanning.current = true;
-        panStart.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
-        const mv = (e: MouseEvent) => {
-          if (!isPanning.current) return;
-          setPanX(panStart.current.px + (e.clientX - panStart.current.x));
-          setPanY(panStart.current.py + (e.clientY - panStart.current.y));
-        };
-        const up = () => {
-          isPanning.current = false;
-          window.removeEventListener("mousemove", mv);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", mv);
-        window.addEventListener("mouseup", up);
-      }
-    },
-    [panX, panY],
-  );
-
   const spaceHeld = useRef(false);
   const [panCursor, setPanCursor] = useState(false);
   useEffect(() => {
@@ -257,13 +373,10 @@ export default function TemplifyEditor() {
     };
   }, []);
 
-  const handleSpacePanStart = useCallback(
-    (e: React.MouseEvent) => {
-      if (!spaceHeld.current) return;
-      e.preventDefault();
-      e.stopPropagation();
+  const startPan = useCallback(
+    (clientX: number, clientY: number) => {
       isPanning.current = true;
-      panStart.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
+      panStart.current = { x: clientX, y: clientY, px: panX, py: panY };
       const mv = (e: MouseEvent) => {
         if (!isPanning.current) return;
         setPanX(panStart.current.px + (e.clientX - panStart.current.x));
@@ -280,6 +393,26 @@ export default function TemplifyEditor() {
     [panX, panY],
   );
 
+  const handleCanvasMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        startPan(e.clientX, e.clientY);
+      }
+    },
+    [startPan],
+  );
+
+  const handleSpacePanStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (!spaceHeld.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startPan(e.clientX, e.clientY);
+    },
+    [startPan],
+  );
+
   const handleZoomDelta = useCallback((delta: number) => {
     setZoom((z) =>
       Math.min(4, Math.max(0.1, Math.round((z + delta) * 10) / 10)),
@@ -289,11 +422,9 @@ export default function TemplifyEditor() {
   useEffect(() => {
     if (totalPages > 0 && pageIndex >= totalPages) setPageIndex(totalPages - 1);
   }, [totalPages, pageIndex]);
-
   useEffect(() => {
     setMounted(true);
   }, []);
-
   useEffect(() => {
     const id = "gf-DM-Sans";
     if (!document.getElementById(id)) {
@@ -306,29 +437,7 @@ export default function TemplifyEditor() {
     }
   }, []);
 
-  const selectedObj = useMemo(
-    () => objects.find((o) => o.id === selectedId) ?? null,
-    [objects, selectedId],
-  );
-  const layersSorted = useMemo(
-    () => [...objects].sort((a, b) => b.zIndex - a.zIndex),
-    [objects],
-  );
-  const bgImage = useMemo(
-    () =>
-      objects.find(
-        (o) => o.kind === "image" && (o as ImageObject).isBackground,
-      ) as ImageObject | undefined,
-    [objects],
-  );
-
-  const selectedIdRef = useRef<number | null>(null);
-  const clipboardRef = useRef<CanvasObject | null>(null);
-  const objectsRef = useRef<CanvasObject[]>([]);
-  selectedIdRef.current = selectedId;
-  clipboardRef.current = clipboard;
-  objectsRef.current = objects;
-
+  // ─── Keyboard shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
     const dn = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -365,12 +474,34 @@ export default function TemplifyEditor() {
         fitToScreen();
         return;
       }
-      const sid = selectedIdRef.current;
-      const selObj = objectsRef.current.find((o) => o.id === sid) ?? null;
-      if ((e.key === "Delete" || e.key === "Backspace") && sid !== null) {
+
+      if (ctrl && e.key === "a") {
         e.preventDefault();
-        setObjects((p) => p.filter((o) => o.id !== sid));
-        setSelectedId(null);
+        const nonBg = objectsRef.current.filter(
+          (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
+        );
+        if (nonBg.length > 0) {
+          setSelectedIds(new Set(nonBg.map((o) => o.id)));
+          setPrimaryId(nonBg[0].id);
+          setRightTab("style");
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        clearSelection();
+        return;
+      }
+
+      const ids = selectedIdsRef.current;
+      const pid = primaryIdRef.current;
+      const selObjs = objectsRef.current.filter((o) => ids.has(o.id));
+      const selObj = objectsRef.current.find((o) => o.id === pid) ?? null;
+
+      if ((e.key === "Delete" || e.key === "Backspace") && ids.size > 0) {
+        e.preventDefault();
+        setObjects((p) => p.filter((o) => !ids.has(o.id)));
+        clearSelection();
         return;
       }
       if (ctrl && e.key === "c" && selObj) {
@@ -389,50 +520,47 @@ export default function TemplifyEditor() {
           zIndex: nextZ.current++,
         };
         setObjects((p) => [...p, n]);
-        setSelectedId(n.id);
+        selectOne(n.id);
         return;
       }
-      if (ctrl && e.key === "d" && selObj) {
+      if (ctrl && e.key === "d" && selObjs.length > 0) {
         e.preventDefault();
-        const d: CanvasObject = {
-          ...selObj,
-          id: Date.now(),
-          x: selObj.x + 20,
-          y: selObj.y + 20,
+        const dupes: CanvasObject[] = selObjs.map((o) => ({
+          ...o,
+          id: Date.now() + Math.random(),
+          x: o.x + 20,
+          y: o.y + 20,
           zIndex: nextZ.current++,
-        };
-        setObjects((p) => [...p, d]);
-        setSelectedId(d.id);
+        }));
+        setObjects((p) => [...p, ...dupes]);
+        setSelectedIds(new Set(dupes.map((d) => d.id)));
+        setPrimaryId(dupes[dupes.length - 1].id);
         return;
       }
-      if (ctrl && e.key === "b" && selObj?.kind === "field") {
+      if (ctrl && e.key === "b") {
         e.preventDefault();
         setObjects((p) =>
           p.map((o) =>
-            o.id === selObj.id
+            ids.has(o.id) && o.kind === "field"
               ? ({ ...o, bold: !(o as TextField).bold } as CanvasObject)
               : o,
           ),
         );
         return;
       }
-      if (ctrl && e.key === "i" && selObj?.kind === "field") {
+      if (ctrl && e.key === "i") {
         e.preventDefault();
         setObjects((p) =>
           p.map((o) =>
-            o.id === selObj.id
+            ids.has(o.id) && o.kind === "field"
               ? ({ ...o, italic: !(o as TextField).italic } as CanvasObject)
               : o,
           ),
         );
         return;
       }
-      if (e.key === "Escape") {
-        setSelectedId(null);
-        return;
-      }
       if (
-        sid !== null &&
+        ids.size > 0 &&
         ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
       ) {
         e.preventDefault();
@@ -443,7 +571,7 @@ export default function TemplifyEditor() {
           e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
         setObjects((p) =>
           p.map((o) =>
-            o.id === sid
+            ids.has(o.id)
               ? ({ ...o, x: o.x + dx, y: o.y + dy } as CanvasObject)
               : o,
           ),
@@ -452,12 +580,13 @@ export default function TemplifyEditor() {
     };
     window.addEventListener("keydown", dn, { capture: true });
     return () => window.removeEventListener("keydown", dn, { capture: true });
-  }, [fitToScreen]);
+  }, [fitToScreen, clearSelection, selectOne]);
 
+  // ─── Object mutations ─────────────────────────────────────────────────────
   const addDataPhotoObjectRef = useRef<(column: string) => void>(() => {});
   const addDataPhotoObject = useCallback(
     (column: string) => {
-      const W = Math.round(effectiveCanvasSize.width * 0.3);
+      const W = Math.round(canvasSize.width * 0.3);
       const H = Math.round(W * 1.2);
       const existing = objectsRef.current.filter(
         (o) =>
@@ -470,12 +599,8 @@ export default function TemplifyEditor() {
         id: Date.now(),
         src: PLACEHOLDER_SRC,
         name: `Photo · ${column}`,
-        x:
-          Math.round((effectiveCanvasSize.width - W) / 2) +
-          existing.length * 20,
-        y:
-          Math.round((effectiveCanvasSize.height - H) / 2) +
-          existing.length * 20,
+        x: Math.round((canvasSize.width - W) / 2) + existing.length * 20,
+        y: Math.round((canvasSize.height - H) / 2) + existing.length * 20,
         width: W,
         height: H,
         zIndex: nextZ.current++,
@@ -491,10 +616,10 @@ export default function TemplifyEditor() {
         columnOffset: 0,
       };
       setObjects((p) => [...p, obj]);
-      setSelectedId(obj.id);
+      selectOne(obj.id);
       setRightTab("style");
     },
-    [effectiveCanvasSize, setObjects],
+    [canvasSize, setObjects, selectOne],
   );
   addDataPhotoObjectRef.current = addDataPhotoObject;
 
@@ -572,47 +697,170 @@ export default function TemplifyEditor() {
     setDataImagesLoading(false);
   }, []);
 
+  // ─── addImage ─────────────────────────────────────────────────────────────
+  // When a new background image is added we:
+  //   1. Compute the new canvas size from the image dimensions.
+  //   2. Remap all existing non-background objects proportionally.
+  //   3. Commit everything as a single undoable snapshot.
   const addImage = useCallback(
     (src: string, name: string, nw: number, nh: number) => {
       const MAX = 2000,
         s = Math.min(1, MAX / nw, MAX / nh);
       const newW = Math.round(nw * s),
         newH = Math.round(nh * s);
-      setCanvasSize({ width: newW, height: newH });
-      prevScaleRef.current = canvasScale;
-      const obj: ImageObject = {
-        kind: "image",
-        id: Date.now(),
-        src,
-        name,
-        x: 0,
-        y: 0,
-        width: Math.round(newW * canvasScale),
-        height: Math.round(newH * canvasScale),
-        zIndex: nextZ.current++,
-        opacity: 1,
-        shadow: { ...DEFAULT_SHADOW },
-        border: { ...DEFAULT_BORDER },
-        borderRadius: 0,
-        isBackground: true,
-        naturalWidth: nw,
-        naturalHeight: nh,
-        isDataImage: false,
-        dataImageColumn: "",
-        columnOffset: 0,
-      };
-      setObjects((p) => {
-        const without = p
-          .map((o) =>
-            o.kind === "image" && (o as ImageObject).isBackground ? null : o,
-          )
-          .filter(Boolean) as CanvasObject[];
-        return [...without, obj];
+      const newSize: CanvasSize = { width: newW, height: newH };
+
+      setEditorState((prev) => {
+        // Replace old background, remap every other object to the new canvas.
+        const withoutBg = prev.objects.filter(
+          (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
+        );
+        const remapped = remapObjects(withoutBg, prev.canvasSize, newSize);
+
+        const bgObj: ImageObject = {
+          kind: "image",
+          id: Date.now(),
+          src,
+          name,
+          x: 0,
+          y: 0,
+          width: newW,
+          height: newH,
+          zIndex: nextZ.current++,
+          opacity: 1,
+          shadow: { ...DEFAULT_SHADOW },
+          border: { ...DEFAULT_BORDER },
+          borderRadius: 0,
+          isBackground: true,
+          naturalWidth: nw,
+          naturalHeight: nh,
+          isDataImage: false,
+          dataImageColumn: "",
+          columnOffset: 0,
+        };
+
+        return { objects: [...remapped, bgObj], canvasSize: newSize };
       });
-      setSelectedId(obj.id);
-      setRightTab("style");
+
+      // Select the new background after the state settles.
+      // We can't read the new id synchronously, so we defer selection to the
+      // next tick after React flushes.
+      setTimeout(() => {
+        const bg = objectsRef.current.find(
+          (o) => o.kind === "image" && (o as ImageObject).isBackground,
+        );
+        if (bg) {
+          selectOne(bg.id);
+          setRightTab("style");
+        }
+      }, 0);
     },
-    [canvasScale, setObjects],
+    [setEditorState, selectOne],
+  );
+
+  // ─── updateBgDimension ────────────────────────────────────────────────────
+  // User manually edits the W or H of the background image (= canvas size).
+  // We scale the new dimension while preserving aspect ratio, then remap all
+  // other objects to fit the new canvas.
+  // updateBgDimension receives values already in BASE pixels (unscaled).
+  // The caller (styleApplyPrimary) is responsible for dividing by canvasScale.
+  const updateBgDimension = useCallback(
+    (axis: "width" | "height", newVal: number) => {
+      if (!newVal || !isFinite(newVal) || newVal < 1) return;
+      const sid = primaryIdRef.current;
+      if (sid === null) return;
+
+      setEditorState((prev) => {
+        const target = prev.objects.find((o) => o.id === sid);
+        if (!target) return prev;
+
+        const img = target as ImageObject;
+
+        // ── Non-background image: just resize that object, no canvas change ──
+        if (!img.isBackground) {
+          const ar = img.width / Math.max(1, img.height);
+          let newW = img.width,
+            newH = img.height;
+          if (axis === "width") {
+            newW = newVal;
+            newH = Math.round(newVal / ar);
+          } else {
+            newH = newVal;
+            newW = Math.round(newVal * ar);
+          }
+          if (!isFinite(newH) || newH < 1 || !isFinite(newW) || newW < 1)
+            return prev;
+          return {
+            ...prev,
+            objects: prev.objects.map((o) =>
+              o.id === sid
+                ? ({ ...img, width: newW, height: newH } as CanvasObject)
+                : o,
+            ),
+          };
+        }
+
+        // ── Background image: derive new canvas size + remap all other objects ──
+        const arW = img.naturalWidth > 0 ? img.naturalWidth : img.width;
+        const arH = img.naturalHeight > 0 ? img.naturalHeight : img.height;
+        const ar = arW / Math.max(1, arH);
+
+        let baseW = img.width,
+          baseH = img.height;
+        if (axis === "width") {
+          baseW = newVal;
+          baseH = Math.round(newVal / ar);
+        } else {
+          baseH = newVal;
+          baseW = Math.round(newVal * ar);
+        }
+        if (!isFinite(baseW) || !isFinite(baseH) || baseW < 1 || baseH < 1)
+          return prev;
+
+        const newSize: CanvasSize = { width: baseW, height: baseH };
+
+        // Remap non-background objects proportionally.
+        const updatedObjects = prev.objects.map((o) => {
+          if (o.id === sid) {
+            // Update the background image dimensions to match the new canvas
+            // size. Do NOT overwrite naturalWidth/naturalHeight — those store
+            // the original image's true pixel dimensions and are used to
+            // compute the aspect ratio on every subsequent resize. Overwriting
+            // them would cause the AR to drift after the first manual edit.
+            return {
+              ...img,
+              x: 0,
+              y: 0,
+              width: baseW,
+              height: baseH,
+            } as CanvasObject;
+          }
+          if (o.kind === "image" && (o as ImageObject).isBackground) return o;
+          // Proportionally remap this object.
+          const rx = baseW / Math.max(1, prev.canvasSize.width);
+          const ry = baseH / Math.max(1, prev.canvasSize.height);
+          const remapped: CanvasObject = {
+            ...o,
+            x: Math.round(o.x * rx),
+            y: Math.round(o.y * ry),
+            width: Math.round(o.width * rx),
+            height: Math.round(o.height * ry),
+            ...(o.kind === "field"
+              ? {
+                  fontSize: Math.max(
+                    6,
+                    Math.round((o as TextField).fontSize * ((rx + ry) / 2)),
+                  ),
+                }
+              : {}),
+          };
+          return remapped;
+        });
+
+        return { objects: updatedObjects, canvasSize: newSize };
+      });
+    },
+    [setEditorState, canvasScale],
   );
 
   const addField = useCallback(
@@ -640,43 +888,77 @@ export default function TemplifyEditor() {
         textAlign: "left",
       };
       setObjects((p) => [...p, obj]);
-      setSelectedId(obj.id);
+      selectOne(obj.id);
       setRightTab("style");
     },
-    [setObjects],
+    [setObjects, selectOne],
   );
 
   const handleDrag = useCallback(
     (id: number, x: number, y: number, live: boolean) => {
-      setObjects((p) => p.map((o) => (o.id === id ? { ...o, x, y } : o)), live);
+      const bx = x / canvasScale,
+        by = y / canvasScale;
+      setObjects(
+        (p) => p.map((o) => (o.id === id ? { ...o, x: bx, y: by } : o)),
+        live,
+      );
     },
-    [setObjects],
+    [setObjects, canvasScale],
   );
 
   const handleResize = useCallback(
     (id: number, patch: Partial<CanvasObject>, live: boolean) => {
+      const basePatch: Partial<CanvasObject> = { ...patch };
+      (["x", "y", "width", "height"] as const).forEach((f) => {
+        if (f in basePatch)
+          (basePatch as any)[f] = (basePatch as any)[f] / canvasScale;
+      });
       setObjects(
         (p) =>
           p.map((o) =>
-            o.id === id ? ({ ...o, ...patch } as CanvasObject) : o,
+            o.id === id ? ({ ...o, ...basePatch } as CanvasObject) : o,
           ),
         live,
       );
     },
-    [setObjects],
+    [setObjects, canvasScale],
   );
 
   const deleteObj = useCallback(
     (id: number) => {
       setObjects((p) => p.filter((o) => o.id !== id));
-      setSelectedId((s) => (s === id ? null : s));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setPrimaryId((prev) => (prev === id ? null : prev));
+    },
+    [setObjects],
+  );
+
+  const deleteSelected = useCallback(() => {
+    const ids = selectedIdsRef.current;
+    setObjects((p) => p.filter((o) => !ids.has(o.id)));
+    clearSelection();
+  }, [setObjects, clearSelection]);
+
+  const updateSelected = useCallback(
+    (key: string, value: unknown) => {
+      const ids = selectedIdsRef.current;
+      if (ids.size === 0) return;
+      setObjects((p) =>
+        p.map((o) =>
+          ids.has(o.id) ? ({ ...o, [key]: value } as CanvasObject) : o,
+        ),
+      );
     },
     [setObjects],
   );
 
   const updateObj = useCallback(
     (key: string, value: unknown) => {
-      const sid = selectedIdRef.current;
+      const sid = primaryIdRef.current;
       if (sid === null) return;
       setObjects((p) =>
         p.map((o) =>
@@ -685,62 +967,6 @@ export default function TemplifyEditor() {
       );
     },
     [setObjects],
-  );
-
-  const updateBgDimension = useCallback(
-    (axis: "width" | "height", newVal: number) => {
-      if (!newVal || !isFinite(newVal) || newVal < 1) return;
-      const sid = selectedIdRef.current;
-      if (sid === null) return;
-      setObjects((p) =>
-        p.map((o) => {
-          if (o.id !== sid) return o;
-          const img = o as ImageObject;
-          if (!img.isBackground) {
-            const ar = img.width / Math.max(1, img.height);
-            if (axis === "width") {
-              const newH = Math.round(newVal / ar);
-              if (!isFinite(newH) || newH < 1) return o;
-              return { ...img, width: newVal, height: newH } as CanvasObject;
-            } else {
-              const newW = Math.round(newVal * ar);
-              if (!isFinite(newW) || newW < 1) return o;
-              return { ...img, width: newW, height: newVal } as CanvasObject;
-            }
-          }
-          const arW = img.naturalWidth > 0 ? img.naturalWidth : img.width;
-          const arH = img.naturalHeight > 0 ? img.naturalHeight : img.height;
-          const ar = arW / Math.max(1, arH);
-          let newW = img.width,
-            newH = img.height;
-          if (axis === "width") {
-            newW = newVal;
-            newH = Math.round(newVal / ar);
-          } else {
-            newH = newVal;
-            newW = Math.round(newVal * ar);
-          }
-          if (!isFinite(newW) || !isFinite(newH) || newW < 1 || newH < 1)
-            return o;
-          const baseW = Math.round(newW / canvasScale);
-          const baseH = Math.round(newH / canvasScale);
-          if (!isFinite(baseW) || !isFinite(baseH) || baseW < 1 || baseH < 1)
-            return o;
-          setCanvasSize({ width: baseW, height: baseH });
-          prevScaleRef.current = canvasScale;
-          return {
-            ...img,
-            x: 0,
-            y: 0,
-            width: newW,
-            height: newH,
-            naturalWidth: baseW,
-            naturalHeight: baseH,
-          } as CanvasObject;
-        }),
-      );
-    },
-    [setObjects, canvasScale],
   );
 
   const setAsBackground = useCallback(
@@ -755,8 +981,8 @@ export default function TemplifyEditor() {
               isBackground: true,
               x: 0,
               y: 0,
-              width: effectiveCanvasSize.width,
-              height: effectiveCanvasSize.height,
+              width: canvasSize.width,
+              height: canvasSize.height,
               zIndex: 0,
             };
           if (img.id === id && !enable) return { ...img, isBackground: false };
@@ -765,7 +991,7 @@ export default function TemplifyEditor() {
         }),
       );
     },
-    [setObjects, effectiveCanvasSize],
+    [setObjects, canvasSize],
   );
 
   const handleImageFiles = useCallback(
@@ -841,7 +1067,7 @@ export default function TemplifyEditor() {
       await exportRecords(
         exportFormat,
         objects,
-        effectiveCanvasSize,
+        canvasSize,
         rows,
         dataImages,
         (pct) => setExportProgress(pct),
@@ -851,16 +1077,105 @@ export default function TemplifyEditor() {
     } finally {
       setTimeout(() => setExportProgress(null), 800);
     }
-  }, [
-    exportFormat,
-    objects,
-    effectiveCanvasSize,
-    rows,
-    dataImages,
-    exportProgress,
-  ]);
+  }, [exportFormat, objects, canvasSize, rows, dataImages, exportProgress]);
 
   if (!mounted) return null;
+
+  const isBackgroundSelected =
+    selectedObj?.kind === "image" && (selectedObj as ImageObject).isBackground;
+
+  const scaleObj = (obj: CanvasObject): CanvasObject => {
+    const s = canvasScale;
+
+    // Helper: scale a shadow object's pixel dimensions.
+    const scaleShadow = (shadow: typeof DEFAULT_SHADOW) =>
+      shadow?.enabled
+        ? {
+            ...shadow,
+            x: shadow.x * s,
+            y: shadow.y * s,
+            blur: shadow.blur * s,
+            thickness: shadow.thickness * s,
+          }
+        : shadow;
+
+    if (obj.kind === "image" && (obj as ImageObject).isBackground) {
+      return {
+        ...obj,
+        x: 0,
+        y: 0,
+        width: Math.round(canvasSize.width * s),
+        height: Math.round(canvasSize.height * s),
+        // Background images can have opacity but no border/shadow/radius,
+        // so no extra scaling needed here.
+      };
+    }
+
+    if (obj.kind === "image") {
+      const img = obj as ImageObject;
+      return {
+        ...img,
+        x: img.x * s,
+        y: img.y * s,
+        width: img.width * s,
+        height: img.height * s,
+        // Scale all visual decoration proportionally.
+        borderRadius: (img.borderRadius ?? 0) * s,
+        border: img.border
+          ? { ...img.border, width: (img.border.width ?? 0) * s }
+          : img.border,
+        shadow: scaleShadow(img.shadow),
+      } as CanvasObject;
+    }
+
+    // Text field
+    const field = obj as TextField;
+    return {
+      ...field,
+      x: field.x * s,
+      y: field.y * s,
+      width: field.width * s,
+      height: field.height * s,
+      fontSize: Math.max(6, field.fontSize * s),
+      shadow: scaleShadow(field.shadow),
+    } as CanvasObject;
+  };
+
+  const stylePrimary = selectedObj;
+  const styleApply = (key: string, value: unknown) =>
+    updateSelected(key, value);
+
+  const styleApplyPrimary = (key: string, value: unknown) => {
+    // Width/height edits on the background image must go through updateBgDimension
+    // so that canvasSize updates and all other objects are remapped together.
+    if (
+      (key === "width" || key === "height") &&
+      typeof value === "number" &&
+      stylePrimary?.kind === "image" &&
+      (stylePrimary as ImageObject).isBackground
+    ) {
+      // DimensionInputs receives the unscaled bg object, so value is already
+      // in base pixels — pass it straight through with a clean integer round.
+      updateBgDimension(key, Math.round(value));
+      return;
+    }
+    const spatialKeys = ["x", "y", "width", "height"];
+    if (spatialKeys.includes(key) && typeof value === "number")
+      updateObj(key, value / canvasScale);
+    else updateObj(key, value);
+  };
+
+  const handleLayerClick = (e: React.MouseEvent, id: number) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey) rangeSelect(id, layersSorted);
+      else toggleSelect(id);
+    } else if (e.shiftKey) {
+      rangeSelect(id, layersSorted);
+    } else {
+      selectOne(id);
+    }
+    setRightTab("style");
+  };
 
   return (
     <div
@@ -882,12 +1197,9 @@ export default function TemplifyEditor() {
         .chip:hover{background:rgba(232,255,71,0.09)!important;border-color:rgba(232,255,71,0.3)!important;color:#e8ff47!important;}
         .undob:disabled{opacity:0.18;cursor:not-allowed!important;} .undob:not(:disabled):hover{background:rgba(255,255,255,0.08)!important;}
         button{font-family:'DM Sans',sans-serif;}
-        @keyframes spin{to{transform:rotate(360deg)}} @keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-        @keyframes popIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
 
-      {/* Export progress overlay */}
       {exportProgress !== null && !showImpositionModal && (
         <div
           style={{
@@ -962,7 +1274,7 @@ export default function TemplifyEditor() {
 
       {showImpositionModal && (
         <ImpositionModal
-          canvasSize={effectiveCanvasSize}
+          canvasSize={canvasSize}
           totalCards={rows.length || 1}
           objects={objects}
           rows={rows}
@@ -1091,9 +1403,39 @@ export default function TemplifyEditor() {
                 fontFamily: "monospace",
               }}
             >
-              {effectiveCanvasSize.width}×{effectiveCanvasSize.height}px
+              {canvasSize.width}×{canvasSize.height}px
             </span>
           </div>
+          {selectedIds.size > 1 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 7,
+                background: "rgba(232,255,71,0.08)",
+                border: "1px solid rgba(232,255,71,0.2)",
+              }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#e8ff47" }}>
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={clearSelection}
+                style={{
+                  fontSize: 9,
+                  color: "rgba(232,255,71,0.6)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
         <button
           onClick={() => setShowImpositionModal(true)}
@@ -1197,7 +1539,7 @@ export default function TemplifyEditor() {
                     marginBottom: 1,
                   }}
                 >
-                  Upload Image
+                  Select Template
                 </p>
                 <p style={{ fontSize: 9, color: "rgba(240,237,232,0.25)" }}>
                   auto-resizes canvas
@@ -1508,10 +1850,12 @@ export default function TemplifyEditor() {
             </p>
             <KbdHint keys={["Ctrl", "Z"]} label="Undo" />
             <KbdHint keys={["Ctrl", "Y"]} label="Redo" />
+            <KbdHint keys={["Ctrl", "A"]} label="Select All" />
             <KbdHint keys={["Ctrl", "D"]} label="Duplicate" />
+            <KbdHint keys={["Ctrl", "click"]} label="Multi-select" />
+            <KbdHint keys={["Ctrl", "Shift", "click"]} label="Range select" />
             <KbdHint keys={["Ctrl", "="]} label="Zoom In" />
             <KbdHint keys={["Ctrl", "-"]} label="Zoom Out" />
-            <KbdHint keys={["Ctrl", "0"]} label="Fit View" />
             <KbdHint keys={["Space", "drag"]} label="Pan" />
             <KbdHint keys={["Del"]} label="Delete" />
           </div>
@@ -1530,8 +1874,9 @@ export default function TemplifyEditor() {
             overflow: "hidden",
             cursor: panCursor ? "grab" : "default",
           }}
-          onClick={() => {
-            if (!isPanning.current) setSelectedId(null);
+          onClick={(e) => {
+            if (!isPanning.current && !(e.ctrlKey || e.metaKey))
+              clearSelection();
           }}
           onMouseDown={(e) => {
             handleCanvasMouseDown(e);
@@ -1560,7 +1905,7 @@ export default function TemplifyEditor() {
           >
             <div
               style={{
-                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                transform: `translate(${panX}px,${panY}px) scale(${zoom})`,
                 transformOrigin: "center center",
                 flexShrink: 0,
                 width: effectiveCanvasSize.width,
@@ -1575,7 +1920,7 @@ export default function TemplifyEditor() {
                   inset: 0,
                   background: "#ffffff",
                   boxShadow:
-                    "0 20px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)",
+                    "0 20px 60px rgba(0,0,0,0.9),0 0 0 1px rgba(255,255,255,0.04)",
                   overflow: "hidden",
                 }}
               >
@@ -1606,18 +1951,31 @@ export default function TemplifyEditor() {
                 )}
               </div>
               {bgImage && (
-                <ImageEl
+                <div
                   key={bgImage.id}
-                  obj={bgImage}
-                  selected={selectedId === bgImage.id}
-                  onSelect={setSelectedId}
-                  onDrag={handleDrag}
-                  onResize={handleResize}
-                  scale={zoom}
-                  rows={rows.length > 0 ? rows : [{}]}
-                  baseRowIndex={pageIndex}
-                  dataImages={dataImages}
-                />
+                  onClickCapture={(e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                      e.stopPropagation();
+                      toggleSelect(bgImage.id);
+                      setRightTab("style");
+                    }
+                  }}
+                >
+                  <ImageEl
+                    obj={scaleObj(bgImage) as ImageObject}
+                    selected={selectedIds.has(bgImage.id)}
+                    onSelect={(id) => {
+                      selectOne(id);
+                      setRightTab("style");
+                    }}
+                    onDrag={handleDrag}
+                    onResize={handleResize}
+                    scale={zoom}
+                    rows={rows.length > 0 ? rows : [{}]}
+                    baseRowIndex={pageIndex}
+                    dataImages={dataImages}
+                  />
+                </div>
               )}
               {objects
                 .filter(
@@ -1626,34 +1984,60 @@ export default function TemplifyEditor() {
                 )
                 .map((obj) =>
                   obj.kind === "image" ? (
-                    <ImageEl
+                    <div
                       key={obj.id}
-                      obj={obj as ImageObject}
-                      selected={selectedId === obj.id}
-                      onSelect={setSelectedId}
-                      onDrag={handleDrag}
-                      onResize={handleResize}
-                      scale={zoom}
-                      rows={rows.length > 0 ? rows : [{}]}
-                      baseRowIndex={pageIndex}
-                      dataImages={dataImages}
-                    />
+                      onClickCapture={(e) => {
+                        if (e.ctrlKey || e.metaKey) {
+                          e.stopPropagation();
+                          toggleSelect(obj.id);
+                          setRightTab("style");
+                        }
+                      }}
+                    >
+                      <ImageEl
+                        obj={scaleObj(obj) as ImageObject}
+                        selected={selectedIds.has(obj.id)}
+                        onSelect={(id) => {
+                          selectOne(id);
+                          setRightTab("style");
+                        }}
+                        onDrag={handleDrag}
+                        onResize={handleResize}
+                        scale={zoom}
+                        rows={rows.length > 0 ? rows : [{}]}
+                        baseRowIndex={pageIndex}
+                        dataImages={dataImages}
+                      />
+                    </div>
                   ) : (
-                    <TextEl
+                    <div
                       key={obj.id}
-                      obj={obj as TextField}
-                      selected={selectedId === obj.id}
-                      onSelect={setSelectedId}
-                      onDrag={handleDrag}
-                      onResize={handleResize}
-                      currentRow={
-                        rows.length > 0
-                          ? rows[Math.min(pageIndex, rows.length - 1)]
-                          : null
-                      }
-                      rows={rows}
-                      scale={zoom}
-                    />
+                      onClickCapture={(e) => {
+                        if (e.ctrlKey || e.metaKey) {
+                          e.stopPropagation();
+                          toggleSelect(obj.id);
+                          setRightTab("style");
+                        }
+                      }}
+                    >
+                      <TextEl
+                        obj={scaleObj(obj) as TextField}
+                        selected={selectedIds.has(obj.id)}
+                        onSelect={(id) => {
+                          selectOne(id);
+                          setRightTab("style");
+                        }}
+                        onDrag={handleDrag}
+                        onResize={handleResize}
+                        currentRow={
+                          rows.length > 0
+                            ? rows[Math.min(pageIndex, rows.length - 1)]
+                            : null
+                        }
+                        rows={rows}
+                        scale={zoom}
+                      />
+                    </div>
                   ),
                 )}
             </div>
@@ -1670,7 +2054,7 @@ export default function TemplifyEditor() {
               whiteSpace: "nowrap",
             }}
           >
-            {effectiveCanvasSize.width}×{effectiveCanvasSize.height}px · Scale{" "}
+            {canvasSize.width}×{canvasSize.height}px · Scale{" "}
             {Math.round(canvasScale * 100)}% · Zoom {Math.round(zoom * 100)}%
           </div>
           <FloatingPageNav
@@ -1738,6 +2122,7 @@ export default function TemplifyEditor() {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
+            {/* ── LAYERS TAB ─────────────────────────────────────────────── */}
             {rightTab === "layers" && (
               <div style={{ padding: 12 }}>
                 <p
@@ -1769,17 +2154,25 @@ export default function TemplifyEditor() {
                     style={{ display: "flex", flexDirection: "column", gap: 3 }}
                   >
                     {layersSorted.map((o) => (
-                      <LayerItem
+                      <div
                         key={o.id}
-                        obj={o}
-                        selected={selectedId === o.id}
-                        onSelect={() => {
-                          setSelectedId(o.id);
-                          setRightTab("style");
+                        onClick={(e) => handleLayerClick(e, o.id)}
+                        style={{
+                          outline: selectedIds.has(o.id)
+                            ? "1px solid rgba(232,255,71,0.4)"
+                            : "none",
+                          borderRadius: 7,
+                          cursor: "pointer",
                         }}
-                        onDelete={() => deleteObj(o.id)}
-                        dragHandlers={makeDragHandlers(o)}
-                      />
+                      >
+                        <LayerItem
+                          obj={o}
+                          selected={selectedIds.has(o.id)}
+                          onSelect={() => {}}
+                          onDelete={() => deleteObj(o.id)}
+                          dragHandlers={makeDragHandlers(o)}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -1793,11 +2186,14 @@ export default function TemplifyEditor() {
                 >
                   Top of list = front of canvas.
                   <br />
+                  Ctrl+click or Ctrl+Shift+click to multi-select.
+                  <br />
                   Drag ⠿ handle to reorder layers.
                 </p>
               </div>
             )}
 
+            {/* ── STYLE TAB ──────────────────────────────────────────────── */}
             {rightTab === "style" && (
               <div
                 style={{
@@ -1889,13 +2285,12 @@ export default function TemplifyEditor() {
                       lineHeight: 1.5,
                     }}
                   >
-                    Scales canvas + all objects. Base: {canvasSize.width}×
-                    {canvasSize.height}px → {effectiveCanvasSize.width}×
-                    {effectiveCanvasSize.height}px
+                    Scales canvas render size. Current base: {canvasSize.width}×
+                    {canvasSize.height}px
                   </p>
                 </div>
 
-                {!selectedObj ? (
+                {!anySelected ? (
                   <p
                     style={{
                       fontSize: 11,
@@ -1909,6 +2304,7 @@ export default function TemplifyEditor() {
                   </p>
                 ) : (
                   <>
+                    {/* Selection indicator */}
                     <div
                       style={{
                         padding: "7px 9px",
@@ -1917,173 +2313,430 @@ export default function TemplifyEditor() {
                         border: "1px solid rgba(232,255,71,0.12)",
                       }}
                     >
+                      {multiSelected ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: "#e8ff47",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {selectedIds.size} objects selected
+                          </p>
+                          <button
+                            onClick={clearSelection}
+                            style={{
+                              fontSize: 9,
+                              color: "rgba(232,255,71,0.5)",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            ✕ clear
+                          </button>
+                        </div>
+                      ) : stylePrimary ? (
+                        <p
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: "#e8ff47",
+                            fontFamily: "monospace",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {stylePrimary.kind === "image"
+                            ? (stylePrimary as ImageObject).isDataImage
+                              ? `📷 ${(stylePrimary as ImageObject).dataImageColumn || "Data Photo"}`
+                              : `🖼 ${(stylePrimary as ImageObject).name}`
+                            : `T  {{${(stylePrimary as TextField).column}}}`}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {multiSelected && (
                       <p
                         style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: "#e8ff47",
-                          fontFamily: "monospace",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
+                          fontSize: 9,
+                          color: "rgba(232,255,71,0.45)",
+                          lineHeight: 1.5,
                         }}
                       >
-                        {selectedObj.kind === "image"
-                          ? (selectedObj as ImageObject).isDataImage
-                            ? `📷 ${(selectedObj as ImageObject).dataImageColumn || "Data Photo"}`
-                            : `🖼 ${(selectedObj as ImageObject).name}`
-                          : `T  {{${(selectedObj as TextField).column}}}`}
+                        Style changes apply to all {selectedIds.size} selected
+                        objects. Position/size only affects the primary object.
                       </p>
-                    </div>
+                    )}
 
-                    <DimensionInputs
-                      selectedObj={selectedObj}
-                      updateBgDimension={updateBgDimension}
-                      updateObj={updateObj}
-                    />
+                    {!multiSelected && stylePrimary && (
+                      <DimensionInputs
+                        selectedObj={
+                          stylePrimary.kind === "image" &&
+                          (stylePrimary as ImageObject).isBackground
+                            ? stylePrimary // show base pixels for canvas/bg
+                            : scaleObj(stylePrimary) // show scaled pixels for other objects
+                        }
+                        updateBgDimension={updateBgDimension}
+                        updateObj={styleApplyPrimary}
+                      />
+                    )}
 
-                    {/* Layer order */}
-                    <div>
-                      <SLabel>Layer Order</SLabel>
-                      <div style={{ display: "flex", gap: 5 }}>
-                        <button
-                          onClick={() => {
-                            if (selectedId)
-                              setObjects((p) =>
-                                p.map((o) =>
-                                  o.id === selectedId
-                                    ? ({
-                                        ...o,
-                                        zIndex: nextZ.current++,
-                                      } as CanvasObject)
-                                    : o,
-                                ),
-                              );
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: "5px 0",
-                            borderRadius: 6,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            color: "rgba(240,237,232,0.6)",
-                          }}
-                        >
-                          ↑ Fwd
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (selectedId)
-                              setObjects((p) => {
-                                const m =
-                                  Math.min(...p.map((o) => o.zIndex)) - 1;
-                                return p.map((o) =>
-                                  o.id === selectedId
-                                    ? ({ ...o, zIndex: m } as CanvasObject)
-                                    : o,
+                    {!multiSelected && !isBackgroundSelected && anySelected && (
+                      <div>
+                        <SLabel>Layer Order</SLabel>
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <button
+                            onClick={() => {
+                              if (selectedId)
+                                setObjects((p) =>
+                                  p.map((o) =>
+                                    o.id === selectedId
+                                      ? ({
+                                          ...o,
+                                          zIndex: nextZ.current++,
+                                        } as CanvasObject)
+                                      : o,
+                                  ),
                                 );
-                              });
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: "5px 0",
-                            borderRadius: 6,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            color: "rgba(240,237,232,0.6)",
-                          }}
-                        >
-                          ↓ Back
-                        </button>
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "5px 0",
+                              borderRadius: 6,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              background: "rgba(255,255,255,0.04)",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              color: "rgba(240,237,232,0.6)",
+                            }}
+                          >
+                            ↑ Fwd
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (selectedId)
+                                setObjects((p) => {
+                                  const m =
+                                    Math.min(...p.map((o) => o.zIndex)) - 1;
+                                  return p.map((o) =>
+                                    o.id === selectedId
+                                      ? ({ ...o, zIndex: m } as CanvasObject)
+                                      : o,
+                                  );
+                                });
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "5px 0",
+                              borderRadius: 6,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              background: "rgba(255,255,255,0.04)",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              color: "rgba(240,237,232,0.6)",
+                            }}
+                          >
+                            ↓ Back
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Image-specific styles */}
-                    {selectedObj.kind === "image" &&
+                    {/* ── IMAGE STYLES ────────────────────────────────────── */}
+                    {(allImages ||
+                      (!multiSelected &&
+                        stylePrimary?.kind === "image" &&
+                        !(stylePrimary as ImageObject).isBackground)) &&
                       (() => {
-                        const img = selectedObj as ImageObject;
+                        const img = stylePrimary as ImageObject | null;
                         return (
                           <>
-                            <div
-                              style={{
-                                padding: "10px",
-                                borderRadius: 9,
-                                background: img.isBackground
-                                  ? "rgba(232,255,71,0.05)"
-                                  : "rgba(255,255,255,0.02)",
-                                border: `1px solid ${img.isBackground ? "rgba(232,255,71,0.18)" : "rgba(255,255,255,0.06)"}`,
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 8,
-                              }}
-                            >
+                            {!multiSelected &&
+                              img &&
+                              !img.isBackground &&
+                              img.isDataImage && (
+                                <DataImageInfo
+                                  obj={img}
+                                  dataImages={dataImages}
+                                  rows={rows}
+                                  baseRowIndex={Math.min(
+                                    pageIndex,
+                                    rows.length - 1,
+                                  )}
+                                />
+                              )}
+                            {!multiSelected &&
+                              img &&
+                              !img.isBackground &&
+                              img.isDataImage && (
+                                <div>
+                                  <SLabel>Row Offset</SLabel>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 5,
+                                      background: "rgba(255,255,255,0.03)",
+                                      border:
+                                        "1px solid rgba(255,255,255,0.08)",
+                                      borderRadius: 8,
+                                      padding: "5px 8px",
+                                    }}
+                                  >
+                                    <button
+                                      onClick={() =>
+                                        updateObj(
+                                          "columnOffset",
+                                          (img.columnOffset ?? 0) - 1,
+                                        )
+                                      }
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: 5,
+                                        background: "rgba(255,255,255,0.06)",
+                                        border:
+                                          "1px solid rgba(255,255,255,0.1)",
+                                        color: "rgba(240,237,232,0.6)",
+                                        cursor: "pointer",
+                                        fontSize: 13,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      −
+                                    </button>
+                                    <div
+                                      style={{
+                                        flex: 1,
+                                        display: "flex",
+                                        gap: 3,
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      {[-1, 0, 1].map((v) => (
+                                        <button
+                                          key={v}
+                                          onClick={() =>
+                                            updateObj("columnOffset", v)
+                                          }
+                                          style={{
+                                            padding: "2px 7px",
+                                            borderRadius: 5,
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            cursor: "pointer",
+                                            border: "none",
+                                            background:
+                                              (img.columnOffset ?? 0) === v
+                                                ? "#e8ff47"
+                                                : "rgba(255,255,255,0.06)",
+                                            color:
+                                              (img.columnOffset ?? 0) === v
+                                                ? "#0a0a10"
+                                                : "rgba(240,237,232,0.45)",
+                                          }}
+                                        >
+                                          {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        updateObj(
+                                          "columnOffset",
+                                          (img.columnOffset ?? 0) + 1,
+                                        )
+                                      }
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: 5,
+                                        background: "rgba(255,255,255,0.06)",
+                                        border:
+                                          "1px solid rgba(255,255,255,0.1)",
+                                        color: "rgba(240,237,232,0.6)",
+                                        cursor: "pointer",
+                                        fontSize: 13,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            <div>
                               <div
                                 style={{
                                   display: "flex",
-                                  alignItems: "center",
                                   justifyContent: "space-between",
+                                  marginBottom: 5,
                                 }}
                               >
+                                <SLabel>Opacity</SLabel>
                                 <span
                                   style={{
-                                    fontSize: 11,
-                                    color: "rgba(240,237,232,0.55)",
+                                    fontSize: 9,
+                                    color: "#e8ff47",
+                                    fontWeight: 700,
                                   }}
                                 >
-                                  Canvas Background
+                                  {Math.round((img?.opacity ?? 1) * 100)}%
                                 </span>
-                                <ToggleSwitch
-                                  value={img.isBackground}
-                                  onChange={(v) => setAsBackground(img.id, v)}
-                                />
                               </div>
-                              {img.isBackground && (
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                value={Math.round((img?.opacity ?? 1) * 100)}
+                                onChange={(e) =>
+                                  styleApply(
+                                    "opacity",
+                                    Number(e.target.value) / 100,
+                                  )
+                                }
+                                style={{
+                                  width: "100%",
+                                  height: "3px",
+                                  accentColor: "#e8ff47",
+                                }}
+                              />
+                            </div>
+                            {!img?.isBackground && (
+                              <div>
                                 <div
                                   style={{
-                                    paddingTop: 7,
-                                    borderTop:
-                                      "1px solid rgba(255,255,255,0.06)",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    marginBottom: 5,
                                   }}
                                 >
-                                  <p
+                                  <SLabel>Corner Radius</SLabel>
+                                  <span
                                     style={{
                                       fontSize: 9,
-                                      color: "rgba(240,237,232,0.38)",
-                                      lineHeight: 1.5,
-                                      marginBottom: 7,
+                                      color: "#e8ff47",
+                                      fontWeight: 700,
                                     }}
                                   >
-                                    Synced to{" "}
-                                    <span
-                                      style={{
-                                        color: "#e8ff47",
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      {img.naturalWidth}×{img.naturalHeight}px
-                                    </span>
-                                  </p>
+                                    {img?.borderRadius ?? 0}px
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-                            {!img.isBackground && img.isDataImage && (
-                              <DataImageInfo
-                                obj={img}
-                                dataImages={dataImages}
-                                rows={rows}
-                                baseRowIndex={Math.min(
-                                  pageIndex,
-                                  rows.length - 1,
-                                )}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={
+                                    img
+                                      ? Math.round(
+                                          Math.min(img.width, img.height) / 2,
+                                        )
+                                      : 100
+                                  }
+                                  value={img?.borderRadius ?? 0}
+                                  onChange={(e) =>
+                                    styleApply(
+                                      "borderRadius",
+                                      Number(e.target.value),
+                                    )
+                                  }
+                                  style={{
+                                    width: "100%",
+                                    height: "3px",
+                                    accentColor: "#e8ff47",
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {!img?.isBackground && (
+                              <BorderPanel
+                                border={img?.border ?? DEFAULT_BORDER}
+                                onChange={(b) => styleApply("border", b)}
                               />
                             )}
-                            {!img.isBackground && img.isDataImage && (
+                            {!img?.isBackground && (
+                              <ShadowPanel
+                                shadow={img?.shadow ?? DEFAULT_SHADOW}
+                                onChange={(s) => styleApply("shadow", s)}
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
+
+                    {/* Background image opacity only */}
+                    {!multiSelected &&
+                      stylePrimary?.kind === "image" &&
+                      (stylePrimary as ImageObject).isBackground &&
+                      (() => {
+                        const img = stylePrimary as ImageObject;
+                        return (
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                marginBottom: 5,
+                              }}
+                            >
+                              <SLabel>Opacity</SLabel>
+                              <span
+                                style={{
+                                  fontSize: 9,
+                                  color: "#e8ff47",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {Math.round(img.opacity * 100)}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={Math.round(img.opacity * 100)}
+                              onChange={(e) =>
+                                styleApply(
+                                  "opacity",
+                                  Number(e.target.value) / 100,
+                                )
+                              }
+                              style={{
+                                width: "100%",
+                                height: "3px",
+                                accentColor: "#e8ff47",
+                              }}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                    {/* ── TEXT STYLES ─────────────────────────────────────── */}
+                    {(allText ||
+                      (!multiSelected && stylePrimary?.kind === "field")) &&
+                      (() => {
+                        const f = stylePrimary as TextField | null;
+                        return (
+                          <>
+                            {!multiSelected && f && (
                               <div>
                                 <SLabel>Row Offset</SLabel>
                                 <div
@@ -2101,7 +2754,7 @@ export default function TemplifyEditor() {
                                     onClick={() =>
                                       updateObj(
                                         "columnOffset",
-                                        (img.columnOffset ?? 0) - 1,
+                                        f.columnOffset - 1,
                                       )
                                     }
                                     style={{
@@ -2143,11 +2796,11 @@ export default function TemplifyEditor() {
                                           cursor: "pointer",
                                           border: "none",
                                           background:
-                                            (img.columnOffset ?? 0) === v
+                                            f.columnOffset === v
                                               ? "#e8ff47"
                                               : "rgba(255,255,255,0.06)",
                                           color:
-                                            (img.columnOffset ?? 0) === v
+                                            f.columnOffset === v
                                               ? "#0a0a10"
                                               : "rgba(240,237,232,0.45)",
                                         }}
@@ -2160,7 +2813,7 @@ export default function TemplifyEditor() {
                                     onClick={() =>
                                       updateObj(
                                         "columnOffset",
-                                        (img.columnOffset ?? 0) + 1,
+                                        f.columnOffset + 1,
                                       )
                                     }
                                     style={{
@@ -2184,208 +2837,10 @@ export default function TemplifyEditor() {
                               </div>
                             )}
                             <div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  marginBottom: 5,
-                                }}
-                              >
-                                <SLabel>Opacity</SLabel>
-                                <span
-                                  style={{
-                                    fontSize: 9,
-                                    color: "#e8ff47",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {Math.round(img.opacity * 100)}%
-                                </span>
-                              </div>
-                              <input
-                                type="range"
-                                min={0}
-                                max={100}
-                                value={Math.round(img.opacity * 100)}
-                                onChange={(e) =>
-                                  updateObj(
-                                    "opacity",
-                                    Number(e.target.value) / 100,
-                                  )
-                                }
-                                style={{
-                                  width: "100%",
-                                  height: "3px",
-                                  accentColor: "#e8ff47",
-                                }}
-                              />
-                            </div>
-                            {!img.isBackground && (
-                              <div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    marginBottom: 5,
-                                  }}
-                                >
-                                  <SLabel>Corner Radius</SLabel>
-                                  <span
-                                    style={{
-                                      fontSize: 9,
-                                      color: "#e8ff47",
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {img.borderRadius ?? 0}px
-                                  </span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={Math.round(
-                                    Math.min(img.width, img.height) / 2,
-                                  )}
-                                  value={img.borderRadius ?? 0}
-                                  onChange={(e) =>
-                                    updateObj(
-                                      "borderRadius",
-                                      Number(e.target.value),
-                                    )
-                                  }
-                                  style={{
-                                    width: "100%",
-                                    height: "3px",
-                                    accentColor: "#e8ff47",
-                                  }}
-                                />
-                              </div>
-                            )}
-                            {!img.isBackground && (
-                              <BorderPanel
-                                border={img.border ?? DEFAULT_BORDER}
-                                onChange={(b) => updateObj("border", b)}
-                              />
-                            )}
-                            {!img.isBackground && (
-                              <ShadowPanel
-                                shadow={img.shadow}
-                                onChange={(s) => updateObj("shadow", s)}
-                              />
-                            )}
-                          </>
-                        );
-                      })()}
-
-                    {/* Text-specific styles */}
-                    {selectedObj.kind === "field" &&
-                      (() => {
-                        const f = selectedObj as TextField;
-                        return (
-                          <>
-                            <div>
-                              <SLabel>Row Offset</SLabel>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                  background: "rgba(255,255,255,0.03)",
-                                  border: "1px solid rgba(255,255,255,0.08)",
-                                  borderRadius: 8,
-                                  padding: "5px 8px",
-                                }}
-                              >
-                                <button
-                                  onClick={() =>
-                                    updateObj(
-                                      "columnOffset",
-                                      f.columnOffset - 1,
-                                    )
-                                  }
-                                  style={{
-                                    width: 22,
-                                    height: 22,
-                                    borderRadius: 5,
-                                    background: "rgba(255,255,255,0.06)",
-                                    border: "1px solid rgba(255,255,255,0.1)",
-                                    color: "rgba(240,237,232,0.6)",
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <div
-                                  style={{
-                                    flex: 1,
-                                    display: "flex",
-                                    gap: 3,
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  {[-1, 0, 1].map((v) => (
-                                    <button
-                                      key={v}
-                                      onClick={() =>
-                                        updateObj("columnOffset", v)
-                                      }
-                                      style={{
-                                        padding: "2px 7px",
-                                        borderRadius: 5,
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        cursor: "pointer",
-                                        border: "none",
-                                        background:
-                                          f.columnOffset === v
-                                            ? "#e8ff47"
-                                            : "rgba(255,255,255,0.06)",
-                                        color:
-                                          f.columnOffset === v
-                                            ? "#0a0a10"
-                                            : "rgba(240,237,232,0.45)",
-                                      }}
-                                    >
-                                      {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
-                                    </button>
-                                  ))}
-                                </div>
-                                <button
-                                  onClick={() =>
-                                    updateObj(
-                                      "columnOffset",
-                                      f.columnOffset + 1,
-                                    )
-                                  }
-                                  style={{
-                                    width: 22,
-                                    height: 22,
-                                    borderRadius: 5,
-                                    background: "rgba(255,255,255,0.06)",
-                                    border: "1px solid rgba(255,255,255,0.1)",
-                                    color: "rgba(240,237,232,0.6)",
-                                    cursor: "pointer",
-                                    fontSize: 13,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                            <div>
                               <SLabel>Font</SLabel>
                               <FontPicker
-                                value={f.fontFamily}
-                                onChange={(v) => updateObj("fontFamily", v)}
+                                value={f?.fontFamily ?? "Playfair Display"}
+                                onChange={(v) => styleApply("fontFamily", v)}
                               />
                             </div>
                             <div>
@@ -2405,16 +2860,16 @@ export default function TemplifyEditor() {
                                     fontWeight: 700,
                                   }}
                                 >
-                                  {f.fontSize}px
+                                  {f?.fontSize ?? 22}px
                                 </span>
                               </div>
                               <input
                                 type="range"
                                 min={6}
                                 max={120}
-                                value={f.fontSize}
+                                value={f?.fontSize ?? 22}
                                 onChange={(e) =>
-                                  updateObj("fontSize", Number(e.target.value))
+                                  styleApply("fontSize", Number(e.target.value))
                                 }
                                 style={{
                                   width: "100%",
@@ -2437,7 +2892,7 @@ export default function TemplifyEditor() {
                                   <button
                                     key={align}
                                     onClick={() =>
-                                      updateObj("textAlign", align)
+                                      styleApply("textAlign", align)
                                     }
                                     style={{
                                       flex: 1,
@@ -2448,10 +2903,10 @@ export default function TemplifyEditor() {
                                       alignItems: "center",
                                       justifyContent: "center",
                                       background:
-                                        f.textAlign === align
+                                        f?.textAlign === align
                                           ? "rgba(232,255,71,0.15)"
                                           : "rgba(255,255,255,0.04)",
-                                      border: `1px solid ${f.textAlign === align ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
+                                      border: `1px solid ${f?.textAlign === align ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
                                     }}
                                   >
                                     <svg
@@ -2459,7 +2914,7 @@ export default function TemplifyEditor() {
                                       height="10"
                                       viewBox="0 0 12 10"
                                       fill={
-                                        f.textAlign === align
+                                        f?.textAlign === align
                                           ? "#e8ff47"
                                           : "rgba(240,237,232,0.4)"
                                       }
@@ -2512,9 +2967,9 @@ export default function TemplifyEditor() {
                                 >
                                   <input
                                     type="color"
-                                    value={f.color}
+                                    value={f?.color ?? "#1a1a1a"}
                                     onChange={(e) =>
-                                      updateObj("color", e.target.value)
+                                      styleApply("color", e.target.value)
                                     }
                                     style={{
                                       position: "absolute",
@@ -2527,9 +2982,9 @@ export default function TemplifyEditor() {
                                   />
                                 </div>
                                 <input
-                                  value={f.color}
+                                  value={f?.color ?? "#1a1a1a"}
                                   onChange={(e) =>
-                                    updateObj("color", e.target.value)
+                                    styleApply("color", e.target.value)
                                   }
                                   style={{
                                     flex: 1,
@@ -2554,7 +3009,7 @@ export default function TemplifyEditor() {
                                 {TEXT_COLORS.map((c) => (
                                   <button
                                     key={c}
-                                    onClick={() => updateObj("color", c)}
+                                    onClick={() => styleApply("color", c)}
                                     style={{
                                       width: 20,
                                       height: 20,
@@ -2563,7 +3018,7 @@ export default function TemplifyEditor() {
                                       border: "none",
                                       cursor: "pointer",
                                       outline:
-                                        f.color === c
+                                        f?.color === c
                                           ? "2px solid #e8ff47"
                                           : "none",
                                       outlineOffset: 1,
@@ -2584,7 +3039,7 @@ export default function TemplifyEditor() {
                               <SLabel>Style</SLabel>
                               <div style={{ display: "flex", gap: 5 }}>
                                 <button
-                                  onClick={() => updateObj("bold", !f.bold)}
+                                  onClick={() => styleApply("bold", !f?.bold)}
                                   style={{
                                     flex: 1,
                                     padding: "6px 0",
@@ -2592,11 +3047,11 @@ export default function TemplifyEditor() {
                                     fontSize: 12,
                                     fontWeight: 700,
                                     cursor: "pointer",
-                                    background: f.bold
+                                    background: f?.bold
                                       ? "rgba(232,255,71,0.12)"
                                       : "rgba(255,255,255,0.04)",
-                                    border: `1px solid ${f.bold ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                                    color: f.bold
+                                    border: `1px solid ${f?.bold ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                    color: f?.bold
                                       ? "#e8ff47"
                                       : "rgba(240,237,232,0.5)",
                                   }}
@@ -2604,7 +3059,9 @@ export default function TemplifyEditor() {
                                   B
                                 </button>
                                 <button
-                                  onClick={() => updateObj("italic", !f.italic)}
+                                  onClick={() =>
+                                    styleApply("italic", !f?.italic)
+                                  }
                                   style={{
                                     flex: 1,
                                     padding: "6px 0",
@@ -2613,11 +3070,11 @@ export default function TemplifyEditor() {
                                     fontStyle: "italic",
                                     fontWeight: 600,
                                     cursor: "pointer",
-                                    background: f.italic
+                                    background: f?.italic
                                       ? "rgba(232,255,71,0.12)"
                                       : "rgba(255,255,255,0.04)",
-                                    border: `1px solid ${f.italic ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                                    color: f.italic
+                                    border: `1px solid ${f?.italic ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                    color: f?.italic
                                       ? "#e8ff47"
                                       : "rgba(240,237,232,0.5)",
                                   }}
@@ -2627,16 +3084,17 @@ export default function TemplifyEditor() {
                               </div>
                             </div>
                             <ShadowPanel
-                              shadow={f.shadow}
-                              onChange={(s) => updateObj("shadow", s)}
+                              shadow={f?.shadow ?? DEFAULT_SHADOW}
+                              onChange={(s) => styleApply("shadow", s)}
                               isText
                             />
                           </>
                         );
                       })()}
 
+                    {/* Delete */}
                     <button
-                      onClick={() => deleteObj(selectedObj.id)}
+                      onClick={deleteSelected}
                       style={{
                         width: "100%",
                         padding: "7px 0",
@@ -2657,7 +3115,9 @@ export default function TemplifyEditor() {
                           "rgba(239,68,68,0.07)")
                       }
                     >
-                      Remove object
+                      {multiSelected
+                        ? `Remove ${selectedIds.size} objects`
+                        : "Remove object"}
                     </button>
                   </>
                 )}
