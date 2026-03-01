@@ -9,7 +9,6 @@ import type {
 import { SHEET_PRESETS } from "../types/constants";
 import { runImpositionGA } from "../lib/impositionGA";
 import { TemplateThumbnail } from "./TemplateThumbnail";
-import { ToggleSwitch } from "./StylePanels";
 
 const PREVIEW_W = 340;
 const MM_TO_PX = 2.835;
@@ -56,8 +55,6 @@ export function ImpositionModal({
     if (stopRef.current) stopRef.current();
     setGaRunning(true);
     setGaGen(0);
-    // Don't clear bestResult here — keep showing the previous result while
-    // the new one computes so there's no flicker of an empty/unsolved state.
     const stop = runImpositionGA({
       cardW: canvasSize.width,
       cardH: canvasSize.height,
@@ -77,10 +74,6 @@ export function ImpositionModal({
     stopRef.current = stop;
   }, [canvasSize, selectedSheet, minBleedPx, allowRotation]);
 
-  // ─── Auto-run whenever any input changes (debounced) ─────────────────────
-  // A single effect with all relevant deps replaces the old mount-only effect
-  // + manual scheduleRun calls scattered across every onChange handler.
-  // 400 ms debounce prevents thrashing while the bleed slider is being dragged.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -90,9 +83,8 @@ export function ImpositionModal({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [runGA]); // runGA already encodes all deps: canvasSize, selectedSheet, minBleedPx, allowRotation
+  }, [runGA]);
 
-  // Stop any in-flight GA when the modal unmounts.
   useEffect(() => {
     return () => {
       if (stopRef.current) stopRef.current();
@@ -584,9 +576,6 @@ export function ImpositionModal({
                         offsetPreviewX + col * (cardPreviewW + gapPreviewX);
                       const y =
                         offsetPreviewY + row * (cardPreviewH + gapPreviewY);
-                      // i is the slot index on this sheet (0-based).
-                      // Only render slots that correspond to an actual record;
-                      // leave surplus slots (last sheet not full) as empty.
                       const hasRecord = totalCards === 0 || i < totalCards;
                       return (
                         <div
@@ -637,7 +626,6 @@ export function ImpositionModal({
                               </span>
                             </div>
                           ) : (
-                            // Empty slot — last sheet not fully filled
                             <div
                               style={{
                                 width: "100%",
@@ -701,9 +689,6 @@ export function ImpositionModal({
                       );
                     })}
 
-                  {/* Loader overlay — opaque on first run (no result yet),
-                       semi-transparent on re-runs so the stale result shows
-                       underneath instead of a blank flash. */}
                   {gaRunning && (
                     <div
                       style={{
@@ -715,8 +700,8 @@ export function ImpositionModal({
                         justifyContent: "center",
                         gap: 8,
                         background: bestResult
-                          ? "rgba(18,18,28,0.55)" // semi: stale result visible beneath
-                          : "rgba(18,18,28,0.96)", // opaque: nothing to show yet
+                          ? "rgba(18,18,28,0.55)"
+                          : "rgba(18,18,28,0.96)",
                         backdropFilter: "blur(1px)",
                         transition: "background 0.2s",
                       }}

@@ -27,25 +27,17 @@ export function TemplateThumbnail({
   height: number;
   rotate: boolean;
 }) {
-  // width/height are always the SLOT dimensions (post-rotation footprint).
-  // The card renders at its natural size, then CSS-rotated into the slot.
-  // For rotate=true: naturalW=height (card's own width), naturalH=width (card's own height).
   const naturalW = rotate ? height : width;
   const naturalH = rotate ? width : height;
 
   const scaleX = naturalW / canvasSize.width;
   const scaleY = naturalH / canvasSize.height;
 
-  // Correct CSS transform for clockwise 90° rotation into a portrait slot:
-  //   transform: translateX(naturalH) rotate(90deg), transformOrigin: top left
-  // Verified: card (0,naturalH) → slot (0,0), card (naturalW,0) → slot (naturalH,naturalW) ✓
-
   const bgImg = objects.find(
     (o) => o.kind === "image" && (o as ImageObject).isBackground,
   ) as ImageObject | undefined;
 
   return (
-    // Clip container — exactly the slot size so overflow is hidden
     <div
       style={{
         width,
