@@ -1,19 +1,156 @@
 import type { ImpositionGene, ImpositionResult } from "../types/index";
 
+/**
+ * Deterministic imposition solver.
+ *
+ * The optimal card layout on a sheet is a closed-form arithmetic problem —
+ * a genetic algorithm adds noise without benefit. We enumerate every valid
+ * (rotation × cols × rows) combination, score them, and return the best.
+ *
+ * runImpositionGA preserves the exact same async/callback API so no other
+ * file needs to change.
+ *
+ * Scoring (strict priority order):
+ *   1. Maximise cards per sheet   ← dominant
+ *   2. Minimise paper waste
+ *   3. Prefer fewer cut lines     ← tiebreaker
+ */
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type ImpositionGAParams = {
+  cardW: number;
+  cardH: number;
+  sheetW: number;
+  sheetH: number;
+  minBleedPx: number;
+  allowRotation: boolean;
+  onProgress: (best: ImpositionResult, gen: number, done: boolean) => void;
+};
+
+// ─── Build one candidate result ───────────────────────────────────────────────
+
+function makeResult(
+  cols: number,
+  rows: number,
+  rotation: 0 | 1,
+  gap: number,
+  cardW: number,
+  cardH: number,
+  sheetW: number,
+  sheetH: number,
+): ImpositionResult {
+  const cW = rotation === 0 ? cardW : cardH;
+  const cH = rotation === 0 ? cardH : cardW;
+
+  const usedW = cols * cW + (cols - 1) * gap;
+  const usedH = rows * cH + (rows - 1) * gap;
+
+  // Centre the grid — symmetric margins, extra pixel to right/bottom if odd
+  const marginLeft = Math.floor((sheetW - usedW) / 2);
+  const marginTop = Math.floor((sheetH - usedH) / 2);
+  const marginRight = sheetW - usedW - marginLeft;
+  const marginBottom = sheetH - usedH - marginTop;
+
+  const gene: ImpositionGene = {
+    gapX: gap,
+    gapY: gap,
+    marginTop,
+    marginRight,
+    marginBottom,
+    marginLeft,
+    rotation,
+  };
+
+  const count = cols * rows;
+  const usedArea = count * cW * cH;
+  const sheetArea = sheetW * sheetH;
+  const wastePercent = Math.max(0, ((sheetArea - usedArea) / sheetArea) * 100);
+  const cutLines = (cols > 1 ? cols - 1 : 0) + (rows > 1 ? rows - 1 : 0) + 4;
+
+  // Strict priority: cards >> waste >> cuts
+  const fitness = count * 1_000_000 - wastePercent * 100 - cutLines;
+
+  return {
+    gene,
+    cols,
+    rows,
+    count,
+    wastePercent,
+    cutLines,
+    fitness,
+    cardW: cW,
+    cardH: cH,
+    printAreaW: sheetW - marginLeft - marginRight,
+    printAreaH: sheetH - marginTop - marginBottom,
+    offsetX: marginLeft,
+    offsetY: marginTop,
+  };
+}
+
+// ─── Exhaustive solver ────────────────────────────────────────────────────────
+
+function solve(
+  cardW: number,
+  cardH: number,
+  sheetW: number,
+  sheetH: number,
+  minBleedPx: number,
+  allowRotation: boolean,
+): ImpositionResult {
+  const gap = Math.max(0, Math.round(minBleedPx));
+  const rotations: (0 | 1)[] = allowRotation ? [0, 1] : [0];
+  let best: ImpositionResult | null = null;
+
+  for (const rot of rotations) {
+    const cW = rot === 0 ? cardW : cardH;
+    const cH = rot === 0 ? cardH : cardW;
+
+    const maxCols = Math.floor((sheetW + gap) / (cW + gap));
+    const maxRows = Math.floor((sheetH + gap) / (cH + gap));
+    if (maxCols < 1 || maxRows < 1) continue;
+
+    for (let cols = 1; cols <= maxCols; cols++) {
+      for (let rows = 1; rows <= maxRows; rows++) {
+        const neededW = cols * cW + (cols - 1) * gap;
+        const neededH = rows * cH + (rows - 1) * gap;
+        if (neededW > sheetW || neededH > sheetH) continue;
+
+        const r = makeResult(
+          cols,
+          rows,
+          rot,
+          gap,
+          cardW,
+          cardH,
+          sheetW,
+          sheetH,
+        );
+        if (!best || r.fitness > best.fitness) best = r;
+      }
+    }
+  }
+
+  // Absolute fallback
+  return best ?? makeResult(1, 1, 0, gap, cardW, cardH, sheetW, sheetH);
+}
+
+// ─── evalImpositionGene (kept for any external callers) ──────────────────────
+
 export function evalImpositionGene(
   gene: ImpositionGene,
   cardW: number,
   cardH: number,
   sheetW: number,
   sheetH: number,
-  minBleedPx: number,
+  _minBleedPx: number,
 ): ImpositionResult {
   const cW = gene.rotation === 0 ? cardW : cardH;
   const cH = gene.rotation === 0 ? cardH : cardW;
   const printW = sheetW - gene.marginLeft - gene.marginRight;
   const printH = sheetH - gene.marginTop - gene.marginBottom;
 
-  if (printW <= cW * 0.5 || printH <= cH * 0.5) {
+  if (printW < cW || printH < cH) {
     return {
       gene,
       cols: 0,
@@ -24,8 +161,8 @@ export function evalImpositionGene(
       fitness: -9999,
       cardW: cW,
       cardH: cH,
-      printAreaW: printW,
-      printAreaH: printH,
+      printAreaW: Math.max(0, printW),
+      printAreaH: Math.max(0, printH),
       offsetX: gene.marginLeft,
       offsetY: gene.marginTop,
     };
@@ -40,44 +177,9 @@ export function evalImpositionGene(
   const sheetArea = sheetW * sheetH;
   const wastePercent = Math.max(0, ((sheetArea - usedArea) / sheetArea) * 100);
   const cutLines = (cols > 1 ? cols - 1 : 0) + (rows > 1 ? rows - 1 : 0) + 4;
-
-  let fitness = 0;
-  fitness += count * 500;
-  fitness -= wastePercent * 1.5;
-  fitness -= cutLines * 4;
-
-  const gridBalance = 1 - Math.abs(cols - rows) / Math.max(cols, rows);
-  fitness += gridBalance * 10;
-
-  const hSymmetry =
-    1 -
-    Math.abs(gene.marginLeft - gene.marginRight) /
-      Math.max(gene.marginLeft + gene.marginRight, 1);
-  const vSymmetry =
-    1 -
-    Math.abs(gene.marginTop - gene.marginBottom) /
-      Math.max(gene.marginTop + gene.marginBottom, 1);
-  fitness += (hSymmetry + vSymmetry) * 15;
-
-  if (gene.gapX < minBleedPx) fitness -= (minBleedPx - gene.gapX) * 40;
-  if (gene.gapY < minBleedPx) fitness -= (minBleedPx - gene.gapY) * 40;
-
-  const MIN_MARGIN = 5;
-  if (gene.marginTop < MIN_MARGIN)
-    fitness -= (MIN_MARGIN - gene.marginTop) * 30;
-  if (gene.marginRight < MIN_MARGIN)
-    fitness -= (MIN_MARGIN - gene.marginRight) * 30;
-  if (gene.marginBottom < MIN_MARGIN)
-    fitness -= (MIN_MARGIN - gene.marginBottom) * 30;
-  if (gene.marginLeft < MIN_MARGIN)
-    fitness -= (MIN_MARGIN - gene.marginLeft) * 30;
-
-  const excessGapX = Math.max(0, gene.gapX - 20);
-  const excessGapY = Math.max(0, gene.gapY - 20);
-  fitness -= excessGapX * 5 + excessGapY * 5;
-
-  const idealOffsetX = gene.marginLeft + (printW - usedW) / 2;
-  const idealOffsetY = gene.marginTop + (printH - usedH) / 2;
+  const fitness = count * 1_000_000 - wastePercent * 100 - cutLines;
+  const offsetX = Math.round(gene.marginLeft + (printW - usedW) / 2);
+  const offsetY = Math.round(gene.marginTop + (printH - usedH) / 2);
 
   return {
     gene,
@@ -91,65 +193,12 @@ export function evalImpositionGene(
     cardH: cH,
     printAreaW: printW,
     printAreaH: printH,
-    offsetX: Math.round(idealOffsetX),
-    offsetY: Math.round(idealOffsetY),
+    offsetX,
+    offsetY,
   };
 }
 
-function randomImpositionGene(allowRotation: boolean): ImpositionGene {
-  return {
-    gapX: Math.round(Math.random() * 20 + 2),
-    gapY: Math.round(Math.random() * 20 + 2),
-    marginTop: Math.round(Math.random() * 30 + 5),
-    marginRight: Math.round(Math.random() * 30 + 5),
-    marginBottom: Math.round(Math.random() * 30 + 5),
-    marginLeft: Math.round(Math.random() * 30 + 5),
-    rotation: (allowRotation && Math.random() > 0.5 ? 1 : 0) as 0 | 1,
-  };
-}
-
-function mutateGene(
-  g: ImpositionGene,
-  strength: number,
-  allowRotation: boolean,
-): ImpositionGene {
-  const r = () => (Math.random() - 0.5) * strength;
-  return {
-    gapX: Math.max(0, Math.round(g.gapX + r())),
-    gapY: Math.max(0, Math.round(g.gapY + r())),
-    marginTop: Math.max(0, Math.round(g.marginTop + r())),
-    marginRight: Math.max(0, Math.round(g.marginRight + r())),
-    marginBottom: Math.max(0, Math.round(g.marginBottom + r())),
-    marginLeft: Math.max(0, Math.round(g.marginLeft + r())),
-    rotation:
-      allowRotation && Math.random() < 0.05
-        ? ((g.rotation === 0 ? 1 : 0) as 0 | 1)
-        : g.rotation,
-  };
-}
-
-function crossoverGenes(a: ImpositionGene, b: ImpositionGene): ImpositionGene {
-  const t = () => Math.random() > 0.5;
-  return {
-    gapX: t() ? a.gapX : b.gapX,
-    gapY: t() ? a.gapY : b.gapY,
-    marginTop: t() ? a.marginTop : b.marginTop,
-    marginRight: t() ? a.marginRight : b.marginRight,
-    marginBottom: t() ? a.marginBottom : b.marginBottom,
-    marginLeft: t() ? a.marginLeft : b.marginLeft,
-    rotation: t() ? a.rotation : b.rotation,
-  };
-}
-
-export type ImpositionGAParams = {
-  cardW: number;
-  cardH: number;
-  sheetW: number;
-  sheetH: number;
-  minBleedPx: number;
-  allowRotation: boolean;
-  onProgress: (best: ImpositionResult, gen: number, done: boolean) => void;
-};
+// ─── Public API (identical signature — no callers need to change) ─────────────
 
 export function runImpositionGA(params: ImpositionGAParams): () => void {
   const {
@@ -161,98 +210,26 @@ export function runImpositionGA(params: ImpositionGAParams): () => void {
     allowRotation,
     onProgress,
   } = params;
-  const POP = 120,
-    GENS = 200;
-  let stopped = false;
-  const population: ImpositionGene[] = [];
+  let cancelled = false;
 
-  // Seed every plausible grid combination
-  const seedRotations: (0 | 1)[] = allowRotation ? [0, 1] : [0];
-  for (const rot of seedRotations) {
-    const cW2 = rot === 0 ? cardW : cardH;
-    const cH2 = rot === 0 ? cardH : cardW;
-    const maxCols = Math.ceil(sheetW / Math.max(cW2, 1));
-    const maxRows = Math.ceil(sheetH / Math.max(cH2, 1));
-    for (let sc = 1; sc <= maxCols; sc++) {
-      for (let sr = 1; sr <= maxRows; sr++) {
-        const gap = minBleedPx;
-        const totalW = sc * cW2 + (sc - 1) * gap;
-        const totalH = sr * cH2 + (sr - 1) * gap;
-        if (totalW > sheetW || totalH > sheetH) continue;
-        const marginH = Math.max(5, Math.floor((sheetW - totalW) / 2));
-        const marginV = Math.max(5, Math.floor((sheetH - totalH) / 2));
-        population.push({
-          gapX: gap,
-          gapY: gap,
-          marginTop: marginV,
-          marginRight: marginH,
-          marginBottom: marginV,
-          marginLeft: marginH,
-          rotation: rot,
-        });
-      }
-    }
-  }
+  setTimeout(() => {
+    if (cancelled) return;
+    const result = solve(
+      cardW,
+      cardH,
+      sheetW,
+      sheetH,
+      minBleedPx,
+      allowRotation,
+    );
+    onProgress(result, 1, false); // "computing…" frame
+    setTimeout(() => {
+      if (cancelled) return;
+      onProgress(result, 200, true); // done — result is already optimal
+    }, 0);
+  }, 0);
 
-  population.push({
-    gapX: 5,
-    gapY: 5,
-    marginTop: 20,
-    marginRight: 15,
-    marginBottom: 20,
-    marginLeft: 15,
-    rotation: 0,
-  });
-
-  while (population.length < POP)
-    population.push(randomImpositionGene(allowRotation));
-
-  let gen = 0,
-    mutStrength = 12;
-
-  const tick = () => {
-    if (stopped) return;
-    const scored = population
-      .map((g) => ({
-        g,
-        r: evalImpositionGene(g, cardW, cardH, sheetW, sheetH, minBleedPx),
-      }))
-      .sort((a, b) => b.r.fitness - a.r.fitness);
-
-    const best = scored[0].r;
-    if (gen % 10 === 0 || gen === GENS - 1)
-      onProgress(best, gen, gen >= GENS - 1);
-    if (gen >= GENS - 1) return;
-
-    const eliteCount = Math.max(4, Math.floor(POP * 0.2));
-    const elite = scored.slice(0, eliteCount).map((x) => x.g);
-
-    if (gen % 20 === 0 && gen > 0) {
-      const topFew = scored.slice(0, 5).map((x) => x.r.fitness);
-      const spread = topFew[0] - topFew[4];
-      if (spread < 5) mutStrength = Math.min(20, mutStrength * 1.5);
-      else mutStrength = Math.max(1, mutStrength * 0.85);
-    }
-
-    const next: ImpositionGene[] = [...elite];
-    while (next.length < Math.floor(POP * 0.6)) {
-      const pA = elite[Math.floor(Math.random() * elite.length)];
-      const pB = elite[Math.floor(Math.random() * eliteCount)];
-      next.push(crossoverGenes(pA, pB));
-    }
-    while (next.length < POP - 10) {
-      const base = elite[Math.floor(Math.random() * elite.length)];
-      next.push(mutateGene(base, mutStrength, allowRotation));
-    }
-    while (next.length < POP) next.push(randomImpositionGene(allowRotation));
-
-    population.splice(0, population.length, ...next);
-    gen++;
-    setTimeout(tick, 0);
-  };
-
-  setTimeout(tick, 0);
   return () => {
-    stopped = true;
+    cancelled = true;
   };
 }
