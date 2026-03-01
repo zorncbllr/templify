@@ -27,11 +27,15 @@ export function TemplateThumbnail({
   height: number;
   rotate: boolean;
 }) {
-  const naturalW = rotate ? height : width;
-  const naturalH = rotate ? width : height;
+  const scaleX = rotate ? height / canvasSize.width : width / canvasSize.width;
 
-  const scaleX = naturalW / canvasSize.width;
-  const scaleY = naturalH / canvasSize.height;
+  const scaleY = rotate
+    ? width / canvasSize.height
+    : height / canvasSize.height;
+
+  const renderScale = Math.min(scaleX, scaleY);
+  const cardDivW = rotate ? height : width;
+  const cardDivH = rotate ? width : height;
 
   const bgImg = objects.find(
     (o) => o.kind === "image" && (o as ImageObject).isBackground,
@@ -47,16 +51,15 @@ export function TemplateThumbnail({
         flexShrink: 0,
       }}
     >
-      {/* Card rendered at natural size, then rotated + translated into the slot */}
       <div
         style={{
-          width: naturalW,
-          height: naturalH,
+          width: cardDivW,
+          height: cardDivH,
           position: "absolute",
           top: 0,
           left: 0,
           transform: rotate
-            ? `translateX(${naturalH}px) rotate(90deg)`
+            ? `translateX(${width}px) rotate(90deg)`
             : undefined,
           transformOrigin: "top left",
           background: "#fff",
@@ -77,6 +80,7 @@ export function TemplateThumbnail({
             }}
           />
         )}
+
         {objects
           .filter(
             (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
@@ -109,8 +113,7 @@ export function TemplateThumbnail({
                     height: obj.height * scaleY,
                     objectFit: "fill",
                     opacity: imgObj.opacity,
-                    borderRadius:
-                      (imgObj.borderRadius ?? 0) * Math.min(scaleX, scaleY),
+                    borderRadius: (imgObj.borderRadius ?? 0) * renderScale,
                   }}
                 />
               );
@@ -121,7 +124,11 @@ export function TemplateThumbnail({
                 ti >= 0 && ti < rows.length
                   ? (rows[ti][f.column] ?? "")
                   : f.column;
-              const fs = Math.max(4, f.fontSize * Math.min(scaleX, scaleY));
+
+              // f.fontSize is stored in base (un-scaled by canvasScale) pixels,
+              // matching canvasSize. renderScale converts it to thumbnail pixels.
+              const fs = Math.max(4, f.fontSize * renderScale);
+
               return (
                 <div
                   key={obj.id}
