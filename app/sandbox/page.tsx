@@ -1165,7 +1165,7 @@ export default function TemplifyEditor() {
     else updateObj(key, value);
   };
 
-  const handleLayerClick = (e: React.MouseEvent, id: number) => {
+  const handleModifierSelect = (e: React.MouseEvent, id: number) => {
     if (e.ctrlKey || e.metaKey) {
       if (e.shiftKey) rangeSelect(id, layersSorted);
       else toggleSelect(id);
@@ -1175,6 +1175,18 @@ export default function TemplifyEditor() {
       selectOne(id);
     }
     setRightTab("style");
+  };
+
+  const handleLayerClick = (e: React.MouseEvent, id: number) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey) rangeSelect(id, layersSorted);
+      else toggleSelect(id);
+    } else if (e.shiftKey) {
+      rangeSelect(id, layersSorted);
+    } else {
+      selectOne(id);
+      setRightTab("style");
+    }
   };
 
   return (
@@ -1951,23 +1963,10 @@ export default function TemplifyEditor() {
                 )}
               </div>
               {bgImage && (
-                <div
-                  key={bgImage.id}
-                  onClickCapture={(e) => {
-                    if (e.ctrlKey || e.metaKey) {
-                      e.stopPropagation();
-                      toggleSelect(bgImage.id);
-                      setRightTab("style");
-                    }
-                  }}
-                >
                   <ImageEl
                     obj={scaleObj(bgImage) as ImageObject}
                     selected={selectedIds.has(bgImage.id)}
-                    onSelect={(id) => {
-                      selectOne(id);
-                      setRightTab("style");
-                    }}
+                    onSelect={(id, e) => handleModifierSelect(e, id)}
                     onDrag={handleDrag}
                     onResize={handleResize}
                     scale={zoom}
@@ -1975,7 +1974,6 @@ export default function TemplifyEditor() {
                     baseRowIndex={pageIndex}
                     dataImages={dataImages}
                   />
-                </div>
               )}
               {objects
                 .filter(
@@ -1984,23 +1982,11 @@ export default function TemplifyEditor() {
                 )
                 .map((obj) =>
                   obj.kind === "image" ? (
-                    <div
-                      key={obj.id}
-                      onClickCapture={(e) => {
-                        if (e.ctrlKey || e.metaKey) {
-                          e.stopPropagation();
-                          toggleSelect(obj.id);
-                          setRightTab("style");
-                        }
-                      }}
-                    >
                       <ImageEl
+                        key={obj.id}
                         obj={scaleObj(obj) as ImageObject}
                         selected={selectedIds.has(obj.id)}
-                        onSelect={(id) => {
-                          selectOne(id);
-                          setRightTab("style");
-                        }}
+                        onSelect={(id, e) => handleModifierSelect(e, id)}
                         onDrag={handleDrag}
                         onResize={handleResize}
                         scale={zoom}
@@ -2008,25 +1994,12 @@ export default function TemplifyEditor() {
                         baseRowIndex={pageIndex}
                         dataImages={dataImages}
                       />
-                    </div>
                   ) : (
-                    <div
-                      key={obj.id}
-                      onClickCapture={(e) => {
-                        if (e.ctrlKey || e.metaKey) {
-                          e.stopPropagation();
-                          toggleSelect(obj.id);
-                          setRightTab("style");
-                        }
-                      }}
-                    >
                       <TextEl
+                        key={obj.id}
                         obj={scaleObj(obj) as TextField}
                         selected={selectedIds.has(obj.id)}
-                        onSelect={(id) => {
-                          selectOne(id);
-                          setRightTab("style");
-                        }}
+                        onSelect={(id, e) => handleModifierSelect(e, id)}
                         onDrag={handleDrag}
                         onResize={handleResize}
                         currentRow={
@@ -2037,7 +2010,6 @@ export default function TemplifyEditor() {
                         rows={rows}
                         scale={zoom}
                       />
-                    </div>
                   ),
                 )}
             </div>

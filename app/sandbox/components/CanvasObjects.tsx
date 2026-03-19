@@ -27,7 +27,7 @@ export function ImageEl({
 }: {
   obj: ImageObject;
   selected: boolean;
-  onSelect: (id: number) => void;
+  onSelect: (id: number, e: React.MouseEvent) => void;
   onDrag: (id: number, x: number, y: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   scale: number;
@@ -230,7 +230,7 @@ export function ImageEl({
               ? `📷 ${obj.dataImageColumn || "Data Photo"}`
               : `🖼 ${obj.name}`}
           </div>
-          <SelectionHandles onDown={handleResizeDown} />
+          <SelectionHandles onDown={handleResizeDown} scale={scale} />
         </>
       )}
     </div>
@@ -251,7 +251,7 @@ export function TextEl({
 }: {
   obj: TextField;
   selected: boolean;
-  onSelect: (id: number) => void;
+  onSelect: (id: number, e: React.MouseEvent) => void;
   onDrag: (id: number, x: number, y: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   currentRow: RowData | null;
@@ -351,7 +351,7 @@ export function TextEl({
           {rawText}
         </span>
       </div>
-      {selected && <SelectionHandles onDown={handleResizeDown} />}
+      {selected && <SelectionHandles onDown={handleResizeDown} scale={scale} />}
     </div>
   );
 }

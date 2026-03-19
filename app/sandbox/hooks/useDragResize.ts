@@ -3,7 +3,7 @@ import type { CanvasObject, HandleKey, TextField } from "../types/index";
 
 export function useDragResize(
   obj: CanvasObject,
-  onSelect: (id: number) => void,
+  onSelect: (id: number, e: React.MouseEvent) => void,
   onDrag: (id: number, x: number, y: number, live: boolean) => void,
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void,
   scale: number,
@@ -19,7 +19,7 @@ export function useDragResize(
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("[data-handle]")) return;
     e.stopPropagation();
-    onSelect(obj.id);
+    onSelect(obj.id, e);
     drag.current = { sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y };
 
     const mv = (e: MouseEvent) => {
@@ -50,7 +50,7 @@ export function useDragResize(
   const handleResizeDown = (h: HandleKey, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    onSelect(obj.id);
+    onSelect(obj.id, e);
     resize.current = {
       h,
       sx: e.clientX,
