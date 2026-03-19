@@ -4,41 +4,56 @@ import type { CanvasObject, HandleKey, TextField } from "../types/index";
 export function useDragResize(
   obj: CanvasObject,
   onSelect: (id: number, e: React.MouseEvent) => void,
-  onDrag: (id: number, x: number, y: number, live: boolean) => void,
+  onDrag: (id: number, dx: number, dy: number, live: boolean) => void,
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void,
   scale: number,
+  onClickUp?: (id: number) => void,
 ) {
   const drag = useRef<{
     sx: number;
     sy: number;
-    ox: number;
-    oy: number;
+    lastDx: number;
+    lastDy: number;
+    didMove: boolean;
+    hadModifier: boolean;
   } | null>(null);
   const resize = useRef<any>(null);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("[data-handle]")) return;
     e.stopPropagation();
+    const hadModifier = e.ctrlKey || e.metaKey || e.shiftKey;
     onSelect(obj.id, e);
-    drag.current = { sx: e.clientX, sy: e.clientY, ox: obj.x, oy: obj.y };
+    drag.current = {
+      sx: e.clientX, sy: e.clientY,
+      lastDx: 0, lastDy: 0,
+      didMove: false, hadModifier,
+    };
 
     const mv = (e: MouseEvent) => {
       if (!drag.current) return;
-      onDrag(
-        obj.id,
-        drag.current.ox + (e.clientX - drag.current.sx) / scale,
-        drag.current.oy + (e.clientY - drag.current.sy) / scale,
-        true,
-      );
+      const dx = (e.clientX - drag.current.sx) / scale;
+      const dy = (e.clientY - drag.current.sy) / scale;
+      const ddx = dx - drag.current.lastDx;
+      const ddy = dy - drag.current.lastDy;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) drag.current.didMove = true;
+      drag.current.lastDx = dx;
+      drag.current.lastDy = dy;
+      onDrag(obj.id, ddx, ddy, true);
     };
     const up = (e: MouseEvent) => {
-      if (drag.current)
-        onDrag(
-          obj.id,
-          drag.current.ox + (e.clientX - drag.current.sx) / scale,
-          drag.current.oy + (e.clientY - drag.current.sy) / scale,
-          false,
-        );
+      if (drag.current) {
+        const dx = (e.clientX - drag.current.sx) / scale;
+        const dy = (e.clientY - drag.current.sy) / scale;
+        const ddx = dx - drag.current.lastDx;
+        const ddy = dy - drag.current.lastDy;
+        onDrag(obj.id, ddx, ddy, false);
+        // Plain click (no drag, no modifier) on an already-selected object
+        // in a multi-selection → deselect others.
+        if (!drag.current.didMove && !drag.current.hadModifier && onClickUp) {
+          onClickUp(obj.id);
+        }
+      }
       drag.current = null;
       window.removeEventListener("mousemove", mv);
       window.removeEventListener("mouseup", up);

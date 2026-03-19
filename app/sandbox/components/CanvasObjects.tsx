@@ -24,16 +24,18 @@ export function ImageEl({
   rows,
   baseRowIndex,
   dataImages,
+  onClickUp,
 }: {
   obj: ImageObject;
   selected: boolean;
   onSelect: (id: number, e: React.MouseEvent) => void;
-  onDrag: (id: number, x: number, y: number, live: boolean) => void;
+  onDrag: (id: number, dx: number, dy: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   scale: number;
   rows: RowData[];
   baseRowIndex: number;
   dataImages: DataImageMap;
+  onClickUp?: (id: number) => void;
 }) {
   const resolvedSrc = resolveDataImageSrc(
     obj.isDataImage,
@@ -51,6 +53,7 @@ export function ImageEl({
     onDrag,
     onResize,
     scale,
+    onClickUp,
   );
 
   if (obj.isBackground) {
@@ -248,15 +251,17 @@ export function TextEl({
   currentRow,
   rows,
   scale,
+  onClickUp,
 }: {
   obj: TextField;
   selected: boolean;
   onSelect: (id: number, e: React.MouseEvent) => void;
-  onDrag: (id: number, x: number, y: number, live: boolean) => void;
+  onDrag: (id: number, dx: number, dy: number, live: boolean) => void;
   onResize: (id: number, p: Partial<CanvasObject>, live: boolean) => void;
   currentRow: RowData | null;
   rows: RowData[];
   scale: number;
+  onClickUp?: (id: number) => void;
 }) {
   const { handleMouseDown, handleResizeDown } = useDragResize(
     obj,
@@ -264,6 +269,7 @@ export function TextEl({
     onDrag,
     onResize,
     scale,
+    onClickUp,
   );
 
   const rawText = useMemo(() => {

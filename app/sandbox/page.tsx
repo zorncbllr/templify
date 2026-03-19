@@ -219,7 +219,8 @@ export default function TemplifyEditor() {
 
   // ─── Other state ──────────────────────────────────────────────────────────
   const [clipboard, setClipboard] = useState<CanvasObject | null>(null);
-  const [canvasScale, setCanvasScale] = useState<number>(1.0);
+  const [canvasScaleDisplay, setCanvasScaleDisplay] = useState<number>(100);
+  const scaleSliderRef = useRef<number>(100);
   const [showImpositionModal, setShowImpositionModal] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
@@ -253,14 +254,7 @@ export default function TemplifyEditor() {
     return rows[Math.min(pageIndex, rows.length - 1)];
   }, [rows, pageIndex]);
 
-  const effectiveCanvasSize = useMemo(() => {
-    const w = Math.round(canvasSize.width * canvasScale);
-    const h = Math.round(canvasSize.height * canvasScale);
-    return {
-      width: isFinite(w) && w > 0 ? w : 960,
-      height: isFinite(h) && h > 0 ? h : 540,
-    };
-  }, [canvasSize, canvasScale]);
+  const effectiveCanvasSize = canvasSize;
 
   // ─── Derived selection helpers ────────────────────────────────────────────
   const primaryObj = useMemo(
@@ -743,6 +737,10 @@ export default function TemplifyEditor() {
         return { objects: [...remapped, bgObj], canvasSize: newSize };
       });
 
+      // Reset scale tracking since the canvas was resized by new background
+      scaleSliderRef.current = 100;
+      setCanvasScaleDisplay(100);
+
       // Select the new background after the state settles.
       // We can't read the new id synchronously, so we defer selection to the
       // next tick after React flushes.
@@ -759,12 +757,56 @@ export default function TemplifyEditor() {
     [setEditorState, selectOne],
   );
 
+  // ─── resizeCanvas ───────────────────────────────────────────────────────
+  // Permanently resize the canvas and proportionally remap all objects.
+  // Computes from the current state using ratio between old and new scale,
+  // so no stale snapshot is needed.
+  const resizeCanvas = useCallback(
+    (newScalePercent: number) => {
+      const oldScale = scaleSliderRef.current;
+      if (newScalePercent === oldScale) return;
+
+      setEditorState((prev) => {
+        const ratio = newScalePercent / oldScale;
+
+        const newSize: CanvasSize = {
+          width: Math.max(1, Math.round(prev.canvasSize.width * ratio)),
+          height: Math.max(1, Math.round(prev.canvasSize.height * ratio)),
+        };
+
+        const updatedObjects = remapObjects(
+          prev.objects,
+          prev.canvasSize,
+          newSize,
+        );
+
+        // Also update background image dimensions to match
+        const finalObjects = updatedObjects.map((o) => {
+          if (o.kind === "image" && (o as ImageObject).isBackground) {
+            return {
+              ...o,
+              x: 0,
+              y: 0,
+              width: newSize.width,
+              height: newSize.height,
+            } as CanvasObject;
+          }
+          return o;
+        });
+
+        return { objects: finalObjects, canvasSize: newSize };
+      });
+
+      scaleSliderRef.current = newScalePercent;
+      setCanvasScaleDisplay(newScalePercent);
+    },
+    [setEditorState],
+  );
+
   // ─── updateBgDimension ────────────────────────────────────────────────────
   // User manually edits the W or H of the background image (= canvas size).
   // We scale the new dimension while preserving aspect ratio, then remap all
   // other objects to fit the new canvas.
-  // updateBgDimension receives values already in BASE pixels (unscaled).
-  // The caller (styleApplyPrimary) is responsible for dividing by canvasScale.
   const updateBgDimension = useCallback(
     (axis: "width" | "height", newVal: number) => {
       if (!newVal || !isFinite(newVal) || newVal < 1) return;
@@ -860,8 +902,12 @@ export default function TemplifyEditor() {
 
         return { objects: updatedObjects, canvasSize: newSize };
       });
+
+      // Reset scale tracking since the canvas was manually resized
+      scaleSliderRef.current = 100;
+      setCanvasScaleDisplay(100);
     },
-    [setEditorState, canvasScale],
+    [setEditorState],
   );
 
   const addField = useCallback(
@@ -896,33 +942,71 @@ export default function TemplifyEditor() {
   );
 
   const handleDrag = useCallback(
-    (id: number, x: number, y: number, live: boolean) => {
-      const bx = x / canvasScale,
-        by = y / canvasScale;
-      setObjects(
-        (p) => p.map((o) => (o.id === id ? { ...o, x: bx, y: by } : o)),
-        live,
-      );
-    },
-    [setObjects, canvasScale],
-  );
-
-  const handleResize = useCallback(
-    (id: number, patch: Partial<CanvasObject>, live: boolean) => {
-      const basePatch: Partial<CanvasObject> = { ...patch };
-      (["x", "y", "width", "height"] as const).forEach((f) => {
-        if (f in basePatch)
-          (basePatch as any)[f] = (basePatch as any)[f] / canvasScale;
-      });
+    (id: number, dx: number, dy: number, live: boolean) => {
+      const ids = selectedIdsRef.current;
+      // If the dragged object is part of a multi-selection, move all selected objects
+      const moveIds = ids.has(id) && ids.size > 1 ? ids : new Set([id]);
       setObjects(
         (p) =>
           p.map((o) =>
-            o.id === id ? ({ ...o, ...basePatch } as CanvasObject) : o,
+            moveIds.has(o.id)
+              ? { ...o, x: o.x + dx, y: o.y + dy }
+              : o,
           ),
         live,
       );
     },
-    [setObjects, canvasScale],
+    [setObjects],
+  );
+
+  const handleResize = useCallback(
+    (id: number, patch: Partial<CanvasObject>, live: boolean) => {
+      const ids = selectedIdsRef.current;
+      const isMulti = ids.has(id) && ids.size > 1;
+
+      setObjects(
+        (p) => {
+          if (!isMulti) {
+            return p.map((o) =>
+              o.id === id ? ({ ...o, ...patch } as CanvasObject) : o,
+            );
+          }
+
+          // Find the primary object to compute scale ratios
+          const primary = p.find((o) => o.id === id);
+          if (!primary) return p;
+
+          const sx = patch.width != null ? patch.width / primary.width : 1;
+          const sy = patch.height != null ? patch.height / primary.height : 1;
+          // How much the primary's origin shifted (for handles like nw, n, w)
+          const odx = patch.x != null ? patch.x - primary.x : 0;
+          const ody = patch.y != null ? patch.y - primary.y : 0;
+
+          return p.map((o) => {
+            if (o.id === id) return { ...o, ...patch } as CanvasObject;
+            if (!ids.has(o.id)) return o;
+
+            // Scale other selected objects proportionally
+            const relX = o.x - primary.x;
+            const relY = o.y - primary.y;
+            const updated: any = {
+              ...o,
+              x: Math.round(primary.x + odx + relX * sx),
+              y: Math.round(primary.y + ody + relY * sy),
+              width: Math.round(o.width * sx),
+              height: Math.round(o.height * sy),
+            };
+            if (o.kind === "field" && (o as TextField).fontSize) {
+              const avgScale = (sx + sy) / 2;
+              updated.fontSize = Math.max(6, Math.round((o as TextField).fontSize * avgScale));
+            }
+            return updated as CanvasObject;
+          });
+        },
+        live,
+      );
+    },
+    [setObjects],
   );
 
   const deleteObj = useCallback(
@@ -1087,63 +1171,6 @@ export default function TemplifyEditor() {
   const isBackgroundSelected =
     selectedObj?.kind === "image" && (selectedObj as ImageObject).isBackground;
 
-  const scaleObj = (obj: CanvasObject): CanvasObject => {
-    const s = canvasScale;
-
-    // Helper: scale a shadow object's pixel dimensions.
-    const scaleShadow = (shadow: typeof DEFAULT_SHADOW) =>
-      shadow?.enabled
-        ? {
-            ...shadow,
-            x: shadow.x * s,
-            y: shadow.y * s,
-            blur: shadow.blur * s,
-            thickness: shadow.thickness * s,
-          }
-        : shadow;
-
-    if (obj.kind === "image" && (obj as ImageObject).isBackground) {
-      return {
-        ...obj,
-        x: 0,
-        y: 0,
-        width: Math.round(canvasSize.width * s),
-        height: Math.round(canvasSize.height * s),
-        // Background images can have opacity but no border/shadow/radius,
-        // so no extra scaling needed here.
-      };
-    }
-
-    if (obj.kind === "image") {
-      const img = obj as ImageObject;
-      return {
-        ...img,
-        x: img.x * s,
-        y: img.y * s,
-        width: img.width * s,
-        height: img.height * s,
-        // Scale all visual decoration proportionally.
-        borderRadius: (img.borderRadius ?? 0) * s,
-        border: img.border
-          ? { ...img.border, width: (img.border.width ?? 0) * s }
-          : img.border,
-        shadow: scaleShadow(img.shadow),
-      } as CanvasObject;
-    }
-
-    // Text field
-    const field = obj as TextField;
-    return {
-      ...field,
-      x: field.x * s,
-      y: field.y * s,
-      width: field.width * s,
-      height: field.height * s,
-      fontSize: Math.max(6, field.fontSize * s),
-      shadow: scaleShadow(field.shadow),
-    } as CanvasObject;
-  };
-
   const stylePrimary = selectedObj;
   const styleApply = (key: string, value: unknown) =>
     updateSelected(key, value);
@@ -1157,15 +1184,10 @@ export default function TemplifyEditor() {
       stylePrimary?.kind === "image" &&
       (stylePrimary as ImageObject).isBackground
     ) {
-      // DimensionInputs receives the unscaled bg object, so value is already
-      // in base pixels — pass it straight through with a clean integer round.
       updateBgDimension(key, Math.round(value));
       return;
     }
-    const spatialKeys = ["x", "y", "width", "height"];
-    if (spatialKeys.includes(key) && typeof value === "number")
-      updateObj(key, value / canvasScale);
-    else updateObj(key, value);
+    updateObj(key, value);
   };
 
   const handleModifierSelect = (e: React.MouseEvent, id: number) => {
@@ -1174,6 +1196,10 @@ export default function TemplifyEditor() {
       else toggleSelect(id);
     } else if (e.shiftKey) {
       rangeSelect(id, layersSorted);
+    } else if (selectedIdsRef.current.has(id) && selectedIdsRef.current.size > 1) {
+      // Clicking an already-selected object in a multi-selection:
+      // don't deselect others yet — allow multi-drag. The deselect-to-single
+      // happens on mouseUp if the user didn't drag (handled in useDragResize).
     } else {
       selectOne(id);
     }
@@ -1967,7 +1993,7 @@ export default function TemplifyEditor() {
               </div>
               {bgImage && (
                   <ImageEl
-                    obj={scaleObj(bgImage) as ImageObject}
+                    obj={bgImage}
                     selected={selectedIds.has(bgImage.id)}
                     onSelect={(id, e) => handleModifierSelect(e, id)}
                     onDrag={handleDrag}
@@ -1987,7 +2013,7 @@ export default function TemplifyEditor() {
                   obj.kind === "image" ? (
                       <ImageEl
                         key={obj.id}
-                        obj={scaleObj(obj) as ImageObject}
+                        obj={obj as ImageObject}
                         selected={selectedIds.has(obj.id)}
                         onSelect={(id, e) => handleModifierSelect(e, id)}
                         onDrag={handleDrag}
@@ -1996,11 +2022,12 @@ export default function TemplifyEditor() {
                         rows={rows.length > 0 ? rows : [{}]}
                         baseRowIndex={pageIndex}
                         dataImages={dataImages}
+                        onClickUp={selectOne}
                       />
                   ) : (
                       <TextEl
                         key={obj.id}
-                        obj={scaleObj(obj) as TextField}
+                        obj={obj as TextField}
                         selected={selectedIds.has(obj.id)}
                         onSelect={(id, e) => handleModifierSelect(e, id)}
                         onDrag={handleDrag}
@@ -2012,6 +2039,7 @@ export default function TemplifyEditor() {
                         }
                         rows={rows}
                         scale={zoom}
+                        onClickUp={selectOne}
                       />
                   ),
                 )}
@@ -2030,7 +2058,7 @@ export default function TemplifyEditor() {
             }}
           >
             {canvasSize.width}×{canvasSize.height}px · Scale{" "}
-            {Math.round(canvasScale * 100)}% · Zoom {Math.round(zoom * 100)}%
+            {canvasScaleDisplay}% · Zoom {Math.round(zoom * 100)}%
           </div>
           <FloatingPageNav
             pageIndex={pageIndex}
@@ -2205,7 +2233,7 @@ export default function TemplifyEditor() {
                         color: "#e8ff47",
                       }}
                     >
-                      {Math.round(canvasScale * 100)}%
+                      {canvasScaleDisplay}%
                     </span>
                   </div>
                   <input
@@ -2213,9 +2241,14 @@ export default function TemplifyEditor() {
                     min={25}
                     max={300}
                     step={5}
-                    value={Math.round(canvasScale * 100)}
+                    value={canvasScaleDisplay}
                     onChange={(e) =>
-                      setCanvasScale(Number(e.target.value) / 100)
+                      setCanvasScaleDisplay(Number(e.target.value))
+                    }
+                    onPointerUp={(e) =>
+                      resizeCanvas(
+                        Number((e.target as HTMLInputElement).value),
+                      )
                     }
                     style={{
                       width: "100%",
@@ -2225,32 +2258,35 @@ export default function TemplifyEditor() {
                     }}
                   />
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                    {SCALE_PRESETS.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setCanvasScale(s)}
-                        style={{
-                          flex: 1,
-                          minWidth: 30,
-                          padding: "4px 2px",
-                          borderRadius: 5,
-                          fontSize: 9,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          border: "none",
-                          background:
-                            Math.abs(canvasScale - s) < 0.01
-                              ? "rgba(232,255,71,0.2)"
-                              : "rgba(255,255,255,0.05)",
-                          color:
-                            Math.abs(canvasScale - s) < 0.01
-                              ? "#e8ff47"
-                              : "rgba(240,237,232,0.4)",
-                        }}
-                      >
-                        {Math.round(s * 100)}%
-                      </button>
-                    ))}
+                    {SCALE_PRESETS.map((s) => {
+                      const pct = Math.round(s * 100);
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => resizeCanvas(pct)}
+                          style={{
+                            flex: 1,
+                            minWidth: 30,
+                            padding: "4px 2px",
+                            borderRadius: 5,
+                            fontSize: 9,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            border: "none",
+                            background:
+                              canvasScaleDisplay === pct
+                                ? "rgba(232,255,71,0.2)"
+                                : "rgba(255,255,255,0.05)",
+                            color:
+                              canvasScaleDisplay === pct
+                                ? "#e8ff47"
+                                : "rgba(240,237,232,0.4)",
+                          }}
+                        >
+                          {pct}%
+                        </button>
+                      );
+                    })}
                   </div>
                   <p
                     style={{
@@ -2260,8 +2296,7 @@ export default function TemplifyEditor() {
                       lineHeight: 1.5,
                     }}
                   >
-                    Scales canvas render size. Current base: {canvasSize.width}×
-                    {canvasSize.height}px
+                    Canvas: {canvasSize.width}×{canvasSize.height}px
                   </p>
                 </div>
 
@@ -2360,7 +2395,7 @@ export default function TemplifyEditor() {
                           stylePrimary.kind === "image" &&
                           (stylePrimary as ImageObject).isBackground
                             ? stylePrimary // show base pixels for canvas/bg
-                            : scaleObj(stylePrimary) // show scaled pixels for other objects
+                            : stylePrimary
                         }
                         updateBgDimension={updateBgDimension}
                         updateObj={styleApplyPrimary}

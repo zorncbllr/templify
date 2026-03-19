@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type {
   CanvasObject,
   CanvasSize,
@@ -7,6 +8,7 @@ import type {
   TextField,
 } from "../types/index";
 import { resolveDataImageSrc } from "../utils/data";
+import { shrinkFontSize, textShadowCSS, shadowCSS } from "../utils/rendering";
 
 export function TemplateThumbnail({
   objects,
@@ -27,19 +29,27 @@ export function TemplateThumbnail({
   height: number;
   rotate: boolean;
 }) {
-  const scaleX = rotate ? height / canvasSize.width : width / canvasSize.width;
-
-  const scaleY = rotate
-    ? width / canvasSize.height
-    : height / canvasSize.height;
-
-  const renderScale = Math.min(scaleX, scaleY);
-  const cardDivW = rotate ? height : width;
-  const cardDivH = rotate ? width : height;
+  // Compute a uniform scale to fit the canvas into the thumbnail container.
+  const targetW = rotate ? height : width;
+  const targetH = rotate ? width : height;
+  const renderScale = Math.min(
+    targetW / canvasSize.width,
+    targetH / canvasSize.height,
+  );
 
   const bgImg = objects.find(
     (o) => o.kind === "image" && (o as ImageObject).isBackground,
   ) as ImageObject | undefined;
+
+  const sorted = useMemo(
+    () =>
+      [...objects]
+        .filter(
+          (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
+        )
+        .sort((a, b) => a.zIndex - b.zIndex),
+    [objects],
+  );
 
   return (
     <div
@@ -51,19 +61,24 @@ export function TemplateThumbnail({
         flexShrink: 0,
       }}
     >
+      {/* Render at full canvasSize, then scale down with CSS transform */}
       <div
         style={{
-          width: cardDivW,
-          height: cardDivH,
+          width: canvasSize.width,
+          height: canvasSize.height,
           position: "absolute",
           top: 0,
           left: 0,
-          transform: rotate
-            ? `translateX(${width}px) rotate(90deg)`
-            : undefined,
+          transform: [
+            rotate
+              ? `translateX(${width}px) rotate(90deg)`
+              : undefined,
+            `scale(${renderScale})`,
+          ]
+            .filter(Boolean)
+            .join(" "),
           transformOrigin: "top left",
           background: "#fff",
-          borderRadius: 1,
         }}
       >
         {bgImg && (
@@ -81,94 +96,127 @@ export function TemplateThumbnail({
           />
         )}
 
-        {objects
-          .filter(
-            (o) => !(o.kind === "image" && (o as ImageObject).isBackground),
-          )
-          .sort((a, b) => a.zIndex - b.zIndex)
-          .map((obj) => {
-            if (obj.kind === "image") {
-              const imgObj = obj as ImageObject;
-              const src = imgObj.isDataImage
-                ? resolveDataImageSrc(
-                    imgObj.isDataImage,
-                    imgObj.dataImageColumn,
-                    imgObj.columnOffset,
-                    imgObj.src,
-                    rows,
-                    pageIndex,
-                    dataImages,
-                  )
-                : imgObj.src;
-              return (
+        {sorted.map((obj) => {
+          if (obj.kind === "image") {
+            const imgObj = obj as ImageObject;
+            const src = imgObj.isDataImage
+              ? resolveDataImageSrc(
+                  imgObj.isDataImage,
+                  imgObj.dataImageColumn,
+                  imgObj.columnOffset,
+                  imgObj.src,
+                  rows,
+                  pageIndex,
+                  dataImages,
+                )
+              : imgObj.src;
+
+            return (
+              <div
+                key={obj.id}
+                style={{
+                  position: "absolute",
+                  left: obj.x,
+                  top: obj.y,
+                  width: obj.width,
+                  height: obj.height,
+                  overflow: "hidden",
+                  borderRadius: imgObj.borderRadius ?? 0,
+                  filter: imgObj.shadow?.enabled
+                    ? `drop-shadow(${shadowCSS(imgObj.shadow)})`
+                    : undefined,
+                }}
+              >
                 <img
-                  key={obj.id}
                   src={src}
                   alt=""
                   style={{
-                    position: "absolute",
-                    left: obj.x * scaleX,
-                    top: obj.y * scaleY,
-                    width: obj.width * scaleX,
-                    height: obj.height * scaleY,
+                    width: "100%",
+                    height: "100%",
                     objectFit: "fill",
+                    display: "block",
                     opacity: imgObj.opacity,
-                    borderRadius: (imgObj.borderRadius ?? 0) * renderScale,
                   }}
                 />
-              );
-            } else {
-              const f = obj as TextField;
-              const ti = pageIndex + f.columnOffset;
-              const text =
-                ti >= 0 && ti < rows.length
-                  ? (rows[ti][f.column] ?? "")
-                  : f.column;
-
-              // f.fontSize is stored in base (un-scaled by canvasScale) pixels,
-              // matching canvasSize. renderScale converts it to thumbnail pixels.
-              const fs = Math.max(4, f.fontSize * renderScale);
-
-              return (
-                <div
-                  key={obj.id}
-                  style={{
-                    position: "absolute",
-                    left: obj.x * scaleX,
-                    top: obj.y * scaleY,
-                    width: obj.width * scaleX,
-                    height: obj.height * scaleY,
-                    overflow: "hidden",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent:
-                      f.textAlign === "right"
-                        ? "flex-end"
-                        : f.textAlign === "center"
-                          ? "center"
-                          : "flex-start",
-                    padding: "0 1px",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <span
+                {imgObj.border?.enabled && (
+                  <div
                     style={{
-                      fontFamily: `'${f.fontFamily}', serif`,
-                      fontSize: fs,
-                      color: f.color,
-                      fontWeight: f.bold ? "bold" : "normal",
-                      fontStyle: f.italic ? "italic" : "normal",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      lineHeight: 1.2,
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: imgObj.borderRadius ?? 0,
+                      border: `${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color}`,
+                      boxSizing: "border-box",
+                      pointerEvents: "none",
                     }}
-                  >
-                    {text}
-                  </span>
-                </div>
-              );
-            }
-          })}
+                  />
+                )}
+              </div>
+            );
+          }
+
+          const f = obj as TextField;
+          const ti = pageIndex + f.columnOffset;
+          const text =
+            ti >= 0 && ti < rows.length
+              ? (rows[ti][f.column] ?? "")
+              : f.column;
+
+          const fs = shrinkFontSize(
+            text,
+            f.width,
+            f.height,
+            f.fontFamily,
+            f.fontSize,
+            f.bold,
+            f.italic,
+          );
+
+          return (
+            <div
+              key={obj.id}
+              style={{
+                position: "absolute",
+                left: obj.x,
+                top: obj.y,
+                width: obj.width,
+                height: obj.height,
+                overflow: "visible",
+                display: "flex",
+                alignItems: "center",
+                justifyContent:
+                  f.textAlign === "right"
+                    ? "flex-end"
+                    : f.textAlign === "center"
+                      ? "center"
+                      : "flex-start",
+                padding: "0 3px",
+                boxSizing: "border-box",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline",
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                  overflow: "visible",
+                  fontFamily: `'${f.fontFamily}', serif`,
+                  fontSize: fs,
+                  color: f.color,
+                  fontWeight: f.bold ? "bold" : "normal",
+                  fontStyle: f.italic ? "italic" : "normal",
+                  textAlign: f.textAlign,
+                  textShadow:
+                    f.shadow.enabled ||
+                    (f.shadow.thickness && f.shadow.thickness > 0)
+                      ? textShadowCSS(f.shadow)
+                      : "none",
+                }}
+              >
+                {text}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -277,7 +277,7 @@ export function DimensionInputs({
               letterSpacing: "0.04em",
             }}
           >
-            🔒 AR locked
+            AR locked
           </span>
         )}
       </div>
