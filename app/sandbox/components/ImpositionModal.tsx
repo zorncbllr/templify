@@ -9,6 +9,7 @@ import type {
 import { SHEET_PRESETS } from "../types/constants";
 import { runImpositionGA } from "../lib/impositionGA";
 import { TemplateThumbnail } from "./TemplateThumbnail";
+import { IconGrid, IconClose, IconArrowDown, IconRotate } from "@/components/Icons";
 
 const PREVIEW_W = 520;
 const MM_TO_PX = 2.835;
@@ -203,7 +204,7 @@ export function ImpositionModal({
                 fontSize: 15,
               }}
             >
-              ⬚
+              <IconGrid size={15} />
             </div>
             <div>
               <h2
@@ -243,7 +244,7 @@ export function ImpositionModal({
               borderRadius: 6,
             }}
           >
-            ✕
+            <IconClose size={14} />
           </button>
         </div>
 
@@ -678,7 +679,7 @@ export function ImpositionModal({
                   </>
                 ) : (
                   <>
-                    <span>↓</span>
+                    <IconArrowDown size={12} />
                     <span>
                       Export {exportFormat}
                       {totalCards > 1 ? ` · ${totalCards} records` : ""}
@@ -814,7 +815,7 @@ export function ImpositionModal({
                                   fontWeight: 700,
                                 }}
                               >
-                                {isRotated ? "↻" : ""}
+                                {isRotated ? <IconRotate size={Math.min(8, cardPreviewH * 0.25)} /> : ""}
                               </span>
                             </div>
                           ) : (

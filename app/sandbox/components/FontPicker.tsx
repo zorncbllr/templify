@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { GOOGLE_FONTS, FONT_CATS } from "../types/constants";
+import { IconChevronDown } from "@/components/Icons";
 
 export function FontPicker({
   value,
@@ -59,7 +60,7 @@ export function FontPicker({
         }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
-        <span style={{ fontSize: 10, opacity: 0.4, fontFamily: "DM Sans,sans-serif", flexShrink: 0, marginLeft: 4 }}>▾</span>
+        <IconChevronDown size={10} style={{ opacity: 0.4, flexShrink: 0, marginLeft: 4 }} />
       </button>
 
       {open && (

@@ -1,4 +1,5 @@
 import type { RowData } from "../types/index";
+import { IconMinus, IconFitScreen, IconChevronsLeft, IconChevronLeft, IconChevronRight, IconChevronsRight } from "@/components/Icons";
 
 // ─── ZoomControls ─────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ export function ZoomControls({
           }
           onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
         >
-          −
+          <IconMinus size={14} />
         </button>
 
         <button
@@ -132,7 +133,7 @@ export function ZoomControls({
           }
           onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
         >
-          ⊡
+          <IconFitScreen size={14} />
         </button>
       </div>
     </div>
@@ -177,16 +178,14 @@ export function FloatingPageNav({
     >
       {[
         {
-          label: "⟨⟨",
+          icon: <IconChevronsLeft size={11} />,
           action: () => onPageChange(0),
           disabled: pageIndex === 0,
-          size: 9,
         },
         {
-          label: "‹",
+          icon: <IconChevronLeft size={11} />,
           action: () => onPageChange(Math.max(0, pageIndex - 1)),
           disabled: pageIndex === 0,
-          size: 12,
         },
       ].map((btn, i) => (
         <button
@@ -203,13 +202,12 @@ export function FloatingPageNav({
               ? "rgba(240,237,232,0.15)"
               : "rgba(240,237,232,0.6)",
             cursor: btn.disabled ? "not-allowed" : "pointer",
-            fontSize: btn.size,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          {btn.label}
+          {btn.icon}
         </button>
       ))}
 
@@ -231,16 +229,14 @@ export function FloatingPageNav({
 
       {[
         {
-          label: "›",
+          icon: <IconChevronRight size={11} />,
           action: () => onPageChange(Math.min(totalPages - 1, pageIndex + 1)),
           disabled: pageIndex === totalPages - 1,
-          size: 12,
         },
         {
-          label: "⟩⟩",
+          icon: <IconChevronsRight size={11} />,
           action: () => onPageChange(totalPages - 1),
           disabled: pageIndex === totalPages - 1,
-          size: 9,
         },
       ].map((btn, i) => (
         <button
@@ -257,13 +253,12 @@ export function FloatingPageNav({
               ? "rgba(240,237,232,0.15)"
               : "rgba(240,237,232,0.6)",
             cursor: btn.disabled ? "not-allowed" : "pointer",
-            fontSize: btn.size,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          {btn.label}
+          {btn.icon}
         </button>
       ))}
     </div>

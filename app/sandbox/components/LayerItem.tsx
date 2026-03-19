@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { CanvasObject, ImageObject, TextField } from "../types/index";
+import { IconCamera, IconImage, IconDragHandle, IconClose } from "@/components/Icons";
 
 // ─── LayerItem ────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ export function LayerItem({
   const imgObj = isImg ? (obj as ImageObject) : null;
   const label = isImg
     ? imgObj!.isDataImage
-      ? `📷 ${imgObj!.dataImageColumn || "Data Photo"}`
+      ? imgObj!.dataImageColumn || "Data Photo"
       : imgObj!.name
     : `{{${(obj as TextField).column}}}`;
   const isBg = isImg && imgObj!.isBackground;
@@ -62,10 +63,10 @@ export function LayerItem({
         <span
           style={{ fontSize: 9, color: "rgba(240,237,232,0.2)", flexShrink: 0 }}
         >
-          ⠿
+          <IconDragHandle size={10} />
         </span>
         <span style={{ fontSize: 11, flexShrink: 0 }}>
-          {isImg ? (imgObj!.isDataImage ? "📷" : "🖼") : "T"}
+          {isImg ? (imgObj!.isDataImage ? <IconCamera size={12} /> : <IconImage size={12} />) : "T"}
         </span>
         <span
           style={{
@@ -148,7 +149,7 @@ export function LayerItem({
           (e.currentTarget.style.color = "rgba(240,237,232,0.2)")
         }
       >
-        ✕
+        <IconClose size={10} />
       </button>
     </div>
   );
@@ -160,10 +161,12 @@ export function DimensionInputs({
   selectedObj,
   updateBgDimension,
   updateObj,
+  hidePosition,
 }: {
   selectedObj: CanvasObject;
   updateBgDimension: (axis: "width" | "height", v: number) => void;
   updateObj: (key: string, value: unknown) => void;
+  hidePosition?: boolean;
 }) {
   const isImage = selectedObj.kind === "image";
   const [wStr, setWStr] = useState(() => String(Math.round(selectedObj.width)));
@@ -285,15 +288,33 @@ export function DimensionInputs({
         {[
           { label: "W", str: wStr, set: setWStr, commit: commitW, field: "w" },
           { label: "H", str: hStr, set: setHStr, commit: commitH, field: "h" },
-          { label: "X", str: xStr, set: setXStr, commit: commitX, field: "x" },
-          { label: "Y", str: yStr, set: setYStr, commit: commitY, field: "y" },
+          ...(!hidePosition
+            ? [
+                { label: "X", str: xStr, set: setXStr, commit: commitX, field: "x" },
+                { label: "Y", str: yStr, set: setYStr, commit: commitY, field: "y" },
+              ]
+            : []),
         ].map(({ label, str, set, commit, field }) => (
           <div key={field}>
             <p style={labelStyle}>{label}</p>
             <input
               type="number"
               value={str}
-              onChange={(e) => set(e.target.value)}
+              onChange={(e) => {
+                set(e.target.value);
+                // Spinner buttons (up/down arrows) fire onChange without
+                // blur/Enter — commit immediately so the change applies.
+                if (focusedField.current !== field) {
+                  const v = parseInt(e.target.value, 10);
+                  if (isFinite(v) && v > 0) {
+                    if (field === "w") {
+                      isImage ? updateBgDimension("width", v) : updateObj("width", v);
+                    } else if (field === "h") {
+                      isImage ? updateBgDimension("height", v) : updateObj("height", v);
+                    }
+                  }
+                }
+              }}
               onFocus={() => {
                 focusedField.current = field;
               }}

@@ -8,6 +8,7 @@ import type {
 import { PLACEHOLDER_SRC } from "../types/constants";
 import { resolveDataImageSrc } from "../utils/data";
 import { ToggleSwitch } from "./StylePanels";
+import { IconCamera, IconClose, IconCheck } from "@/components/Icons";
 
 // ─── DataImagesPanel ──────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export function DataImagesPanel({
                 minWidth: 0,
               }}
             >
-              <span style={{ flexShrink: 0 }}>📷</span>
+              <span style={{ flexShrink: 0 }}><IconCamera size={12} /></span>
               <span
                 style={{
                   fontSize: 10,
@@ -125,7 +126,7 @@ export function DataImagesPanel({
                   fontSize: 11,
                 }}
               >
-                ✕
+                <IconClose size={10} />
               </button>
             </div>
           </div>
@@ -171,7 +172,7 @@ export function DataImagesPanel({
               }}
             />
           ) : (
-            <span style={{ fontSize: 18 }}>📷</span>
+            <IconCamera size={18} />
           )}
           <div style={{ textAlign: "center" }}>
             <p
@@ -251,7 +252,7 @@ export function DataImagesPanel({
                       minWidth: 0,
                     }}
                   >
-                    <span style={{ fontSize: 10, flexShrink: 0 }}>📷</span>
+                    <span style={{ fontSize: 10, flexShrink: 0 }}><IconCamera size={10} /></span>
                     <span
                       style={{
                         fontFamily: "monospace",
@@ -404,7 +405,7 @@ export function DataImageInfo({
               />
               <div>
                 <p style={{ fontSize: 9, color: "#63b3ed", fontWeight: 600 }}>
-                  ✓ Match found
+                  <IconCheck size={10} /> Match found
                 </p>
                 <p
                   style={{
@@ -440,7 +441,7 @@ export function DataImageInfo({
                   flexShrink: 0,
                 }}
               >
-                <span style={{ fontSize: 14, opacity: 0.3 }}>📷</span>
+                <IconCamera size={14} style={{ opacity: 0.3 }} />
               </div>
               <div>
                 <p style={{ fontSize: 9, color: "#f6ad55", fontWeight: 600 }}>

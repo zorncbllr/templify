@@ -12,7 +12,6 @@ import type {
 import {
   DEFAULT_SHADOW,
   DEFAULT_BORDER,
-  SCALE_PRESETS,
   IMAGE_EXTS,
   PLACEHOLDER_SRC,
 } from "./types/constants";
@@ -30,6 +29,11 @@ import { useUndoRedo } from "./hooks/useUndoRedo";
 import { ImageEl, TextEl } from "./components/CanvasObjects";
 import { DataImageInfo, DataImagesPanel } from "./components/DataPanel";
 import { FontPicker } from "./components/FontPicker";
+import {
+  IconSparkle, IconUndo, IconClose, IconGrid, IconImage,
+  IconBarChart, IconCamera, IconDragHandle, IconArrowDown, IconArrowUp, IconMinus,
+  IconCheckCircle, IconFolder,
+} from "@/components/Icons";
 
 // ─── Unified undo state ───────────────────────────────────────────────────────
 // Keeping canvasSize alongside objects means a single undo/redo call restores
@@ -219,8 +223,6 @@ export default function TemplifyEditor() {
 
   // ─── Other state ──────────────────────────────────────────────────────────
   const [clipboard, setClipboard] = useState<CanvasObject | null>(null);
-  const [canvasScaleDisplay, setCanvasScaleDisplay] = useState<number>(100);
-  const scaleSliderRef = useRef<number>(100);
   const [showImpositionModal, setShowImpositionModal] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [exportFormat, setExportFormat] = useState("PNG");
@@ -737,10 +739,6 @@ export default function TemplifyEditor() {
         return { objects: [...remapped, bgObj], canvasSize: newSize };
       });
 
-      // Reset scale tracking since the canvas was resized by new background
-      scaleSliderRef.current = 100;
-      setCanvasScaleDisplay(100);
-
       // Select the new background after the state settles.
       // We can't read the new id synchronously, so we defer selection to the
       // next tick after React flushes.
@@ -757,52 +755,6 @@ export default function TemplifyEditor() {
     [setEditorState, selectOne],
   );
 
-  // ─── resizeCanvas ───────────────────────────────────────────────────────
-  // Permanently resize the canvas and proportionally remap all objects.
-  // Computes from the current state using ratio between old and new scale,
-  // so no stale snapshot is needed.
-  const resizeCanvas = useCallback(
-    (newScalePercent: number) => {
-      const oldScale = scaleSliderRef.current;
-      if (newScalePercent === oldScale) return;
-
-      setEditorState((prev) => {
-        const ratio = newScalePercent / oldScale;
-
-        const newSize: CanvasSize = {
-          width: Math.max(1, Math.round(prev.canvasSize.width * ratio)),
-          height: Math.max(1, Math.round(prev.canvasSize.height * ratio)),
-        };
-
-        const updatedObjects = remapObjects(
-          prev.objects,
-          prev.canvasSize,
-          newSize,
-        );
-
-        // Also update background image dimensions to match
-        const finalObjects = updatedObjects.map((o) => {
-          if (o.kind === "image" && (o as ImageObject).isBackground) {
-            return {
-              ...o,
-              x: 0,
-              y: 0,
-              width: newSize.width,
-              height: newSize.height,
-            } as CanvasObject;
-          }
-          return o;
-        });
-
-        return { objects: finalObjects, canvasSize: newSize };
-      });
-
-      scaleSliderRef.current = newScalePercent;
-      setCanvasScaleDisplay(newScalePercent);
-    },
-    [setEditorState],
-  );
-
   // ─── updateBgDimension ────────────────────────────────────────────────────
   // User manually edits the W or H of the background image (= canvas size).
   // We scale the new dimension while preserving aspect ratio, then remap all
@@ -810,11 +762,15 @@ export default function TemplifyEditor() {
   const updateBgDimension = useCallback(
     (axis: "width" | "height", newVal: number) => {
       if (!newVal || !isFinite(newVal) || newVal < 1) return;
-      const sid = primaryIdRef.current;
-      if (sid === null) return;
 
       setEditorState((prev) => {
-        const target = prev.objects.find((o) => o.id === sid);
+        const sid = primaryIdRef.current;
+        // Fall back to the background image when nothing is selected
+        const target = sid !== null
+          ? prev.objects.find((o) => o.id === sid)
+          : prev.objects.find(
+              (o) => o.kind === "image" && (o as ImageObject).isBackground,
+            );
         if (!target) return prev;
 
         const img = target as ImageObject;
@@ -836,7 +792,7 @@ export default function TemplifyEditor() {
           return {
             ...prev,
             objects: prev.objects.map((o) =>
-              o.id === sid
+              o.id === target.id
                 ? ({ ...img, width: newW, height: newH } as CanvasObject)
                 : o,
             ),
@@ -864,7 +820,7 @@ export default function TemplifyEditor() {
 
         // Remap non-background objects proportionally.
         const updatedObjects = prev.objects.map((o) => {
-          if (o.id === sid) {
+          if (o.id === target.id) {
             // Update the background image dimensions to match the new canvas
             // size. Do NOT overwrite naturalWidth/naturalHeight — those store
             // the original image's true pixel dimensions and are used to
@@ -903,9 +859,6 @@ export default function TemplifyEditor() {
         return { objects: updatedObjects, canvasSize: newSize };
       });
 
-      // Reset scale tracking since the canvas was manually resized
-      scaleSliderRef.current = 100;
-      setCanvasScaleDisplay(100);
     },
     [setEditorState],
   );
@@ -1277,7 +1230,7 @@ export default function TemplifyEditor() {
                   }}
                 />
               ) : (
-                <span style={{ fontSize: 24 }}>✅</span>
+                <IconCheckCircle size={24} color="#4ade80" />
               )}
             </div>
             <p
@@ -1359,7 +1312,7 @@ export default function TemplifyEditor() {
                 color: "#0a0a10",
               }}
             >
-              ✦
+              <IconSparkle size={12} />
             </div>
             <span
               style={{
@@ -1398,7 +1351,7 @@ export default function TemplifyEditor() {
                 justifyContent: "center",
               }}
             >
-              ↩
+              <IconUndo size={13} />
             </button>
             <button
               className="undob"
@@ -1419,7 +1372,7 @@ export default function TemplifyEditor() {
                 justifyContent: "center",
               }}
             >
-              ↪
+              <IconUndo size={13} style={{ transform: "scaleX(-1)" }} />
             </button>
           </div>
           <div
@@ -1473,7 +1426,7 @@ export default function TemplifyEditor() {
                   padding: 0,
                 }}
               >
-                ✕
+                <IconClose size={10} />
               </button>
             </div>
           )}
@@ -1497,7 +1450,7 @@ export default function TemplifyEditor() {
           onMouseEnter={(e) => (e.currentTarget.style.background = "#d4eb3f")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#e8ff47")}
         >
-          <span style={{ fontSize: 12 }}>⬚</span>
+          <IconGrid size={12} />
           <span>Print Imposition & Export</span>
           <span
             style={{
@@ -1570,7 +1523,7 @@ export default function TemplifyEditor() {
                 border: `1.5px dashed ${imgDragOver ? "#e8ff47" : "rgba(232,255,71,0.22)"}`,
               }}
             >
-              <div style={{ fontSize: 22 }}>🖼</div>
+              <IconImage size={22} />
               <div style={{ textAlign: "center" }}>
                 <p
                   style={{
@@ -1640,7 +1593,7 @@ export default function TemplifyEditor() {
                       minWidth: 0,
                     }}
                   >
-                    <span style={{ color: "#e8ff47", flexShrink: 0 }}>📊</span>
+                    <span style={{ color: "#e8ff47", flexShrink: 0 }}><IconBarChart size={12} /></span>
                     <span
                       style={{
                         fontSize: 10,
@@ -1718,7 +1671,7 @@ export default function TemplifyEditor() {
                     }}
                   />
                 ) : (
-                  <span style={{ fontSize: 18 }}>📂</span>
+                  <IconFolder size={18} />
                 )}
                 <div style={{ textAlign: "center" }}>
                   <p
@@ -1978,7 +1931,7 @@ export default function TemplifyEditor() {
                       pointerEvents: "none",
                     }}
                   >
-                    <div style={{ fontSize: 40, opacity: 0.07 }}>🖼</div>
+                    <IconImage size={40} style={{ opacity: 0.07 }} />
                     <p
                       style={{
                         color: "rgba(10,10,16,0.18)",
@@ -2057,8 +2010,7 @@ export default function TemplifyEditor() {
               whiteSpace: "nowrap",
             }}
           >
-            {canvasSize.width}×{canvasSize.height}px · Scale{" "}
-            {canvasScaleDisplay}% · Zoom {Math.round(zoom * 100)}%
+            {canvasSize.width}×{canvasSize.height}px · Zoom {Math.round(zoom * 100)}%
           </div>
           <FloatingPageNav
             pageIndex={pageIndex}
@@ -2191,7 +2143,7 @@ export default function TemplifyEditor() {
                   <br />
                   Ctrl+click or Ctrl+Shift+click to multi-select.
                   <br />
-                  Drag ⠿ handle to reorder layers.
+                  Drag <IconDragHandle size={8} style={{ display: "inline" }} /> handle to reorder layers.
                 </p>
               </div>
             )}
@@ -2208,110 +2160,50 @@ export default function TemplifyEditor() {
                   overflow: "hidden",
                 }}
               >
-                {/* Canvas scale */}
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: 9,
-                    background: "rgba(232,255,71,0.03)",
-                    border: "1px solid rgba(232,255,71,0.1)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <SLabel>Canvas Scale</SLabel>
-                    <span
+                {!anySelected || isBackgroundSelected ? (
+                  <>
+                    {/* Template / canvas styles */}
+                    <div
                       style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#e8ff47",
+                        padding: "7px 9px",
+                        borderRadius: 7,
+                        background: "rgba(232,255,71,0.05)",
+                        border: "1px solid rgba(232,255,71,0.12)",
                       }}
                     >
-                      {canvasScaleDisplay}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={25}
-                    max={300}
-                    step={5}
-                    value={canvasScaleDisplay}
-                    onChange={(e) =>
-                      setCanvasScaleDisplay(Number(e.target.value))
-                    }
-                    onPointerUp={(e) =>
-                      resizeCanvas(
-                        Number((e.target as HTMLInputElement).value),
-                      )
-                    }
-                    style={{
-                      width: "100%",
-                      height: "3px",
-                      accentColor: "#e8ff47",
-                      marginBottom: 8,
-                    }}
-                  />
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                    {SCALE_PRESETS.map((s) => {
-                      const pct = Math.round(s * 100);
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => resizeCanvas(pct)}
-                          style={{
-                            flex: 1,
-                            minWidth: 30,
-                            padding: "4px 2px",
-                            borderRadius: 5,
-                            fontSize: 9,
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            border: "none",
-                            background:
-                              canvasScaleDisplay === pct
-                                ? "rgba(232,255,71,0.2)"
-                                : "rgba(255,255,255,0.05)",
-                            color:
-                              canvasScaleDisplay === pct
-                                ? "#e8ff47"
-                                : "rgba(240,237,232,0.4)",
-                          }}
-                        >
-                          {pct}%
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p
-                    style={{
-                      fontSize: 8,
-                      color: "rgba(240,237,232,0.2)",
-                      marginTop: 8,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    Canvas: {canvasSize.width}×{canvasSize.height}px
-                  </p>
-                </div>
-
-                {!anySelected ? (
-                  <p
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(240,237,232,0.18)",
-                      textAlign: "center",
-                      paddingBlock: 12,
-                      lineHeight: 1.7,
-                    }}
-                  >
-                    Select an object to edit its style.
-                  </p>
+                      <p
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: "#e8ff47",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        Template
+                      </p>
+                    </div>
+                    {bgImage && (
+                      <DimensionInputs
+                        selectedObj={bgImage}
+                        updateBgDimension={updateBgDimension}
+                        updateObj={() => {}}
+                        hidePosition
+                      />
+                    )}
+                    {!bgImage && (
+                      <p
+                        style={{
+                          fontSize: 11,
+                          color: "rgba(240,237,232,0.18)",
+                          textAlign: "center",
+                          paddingBlock: 12,
+                          lineHeight: 1.7,
+                        }}
+                      >
+                        Add a background image to set canvas size.
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <>
                     {/* Selection indicator */}
@@ -2352,7 +2244,7 @@ export default function TemplifyEditor() {
                               padding: 0,
                             }}
                           >
-                            ✕ clear
+                            <IconClose size={9} /> clear
                           </button>
                         </div>
                       ) : stylePrimary ? (
@@ -2369,8 +2261,8 @@ export default function TemplifyEditor() {
                         >
                           {stylePrimary.kind === "image"
                             ? (stylePrimary as ImageObject).isDataImage
-                              ? `📷 ${(stylePrimary as ImageObject).dataImageColumn || "Data Photo"}`
-                              : `🖼 ${(stylePrimary as ImageObject).name}`
+                              ? <><IconCamera size={10} /> {(stylePrimary as ImageObject).dataImageColumn || "Data Photo"}</>
+                              : <><IconImage size={10} /> {(stylePrimary as ImageObject).name}</>
                             : `T  {{${(stylePrimary as TextField).column}}}`}
                         </p>
                       ) : null}
@@ -2432,7 +2324,7 @@ export default function TemplifyEditor() {
                               color: "rgba(240,237,232,0.6)",
                             }}
                           >
-                            ↑ Fwd
+                            <IconArrowUp size={10} /> Fwd
                           </button>
                           <button
                             onClick={() => {
@@ -2459,7 +2351,7 @@ export default function TemplifyEditor() {
                               color: "rgba(240,237,232,0.6)",
                             }}
                           >
-                            ↓ Back
+                            <IconArrowDown size={10} /> Back
                           </button>
                         </div>
                       </div>
@@ -2487,112 +2379,6 @@ export default function TemplifyEditor() {
                                     rows.length - 1,
                                   )}
                                 />
-                              )}
-                            {!multiSelected &&
-                              img &&
-                              !img.isBackground &&
-                              img.isDataImage && (
-                                <div>
-                                  <SLabel>Row Offset</SLabel>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 5,
-                                      background: "rgba(255,255,255,0.03)",
-                                      border:
-                                        "1px solid rgba(255,255,255,0.08)",
-                                      borderRadius: 8,
-                                      padding: "5px 8px",
-                                    }}
-                                  >
-                                    <button
-                                      onClick={() =>
-                                        updateObj(
-                                          "columnOffset",
-                                          (img.columnOffset ?? 0) - 1,
-                                        )
-                                      }
-                                      style={{
-                                        width: 22,
-                                        height: 22,
-                                        borderRadius: 5,
-                                        background: "rgba(255,255,255,0.06)",
-                                        border:
-                                          "1px solid rgba(255,255,255,0.1)",
-                                        color: "rgba(240,237,232,0.6)",
-                                        cursor: "pointer",
-                                        fontSize: 13,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        flexShrink: 0,
-                                      }}
-                                    >
-                                      −
-                                    </button>
-                                    <div
-                                      style={{
-                                        flex: 1,
-                                        display: "flex",
-                                        gap: 3,
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      {[-1, 0, 1].map((v) => (
-                                        <button
-                                          key={v}
-                                          onClick={() =>
-                                            updateObj("columnOffset", v)
-                                          }
-                                          style={{
-                                            padding: "2px 7px",
-                                            borderRadius: 5,
-                                            fontSize: 10,
-                                            fontWeight: 700,
-                                            cursor: "pointer",
-                                            border: "none",
-                                            background:
-                                              (img.columnOffset ?? 0) === v
-                                                ? "#e8ff47"
-                                                : "rgba(255,255,255,0.06)",
-                                            color:
-                                              (img.columnOffset ?? 0) === v
-                                                ? "#0a0a10"
-                                                : "rgba(240,237,232,0.45)",
-                                          }}
-                                        >
-                                          {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <button
-                                      onClick={() =>
-                                        updateObj(
-                                          "columnOffset",
-                                          (img.columnOffset ?? 0) + 1,
-                                        )
-                                      }
-                                      style={{
-                                        width: 22,
-                                        height: 22,
-                                        borderRadius: 5,
-                                        background: "rgba(255,255,255,0.06)",
-                                        border:
-                                          "1px solid rgba(255,255,255,0.1)",
-                                        color: "rgba(240,237,232,0.6)",
-                                        cursor: "pointer",
-                                        fontSize: 13,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        flexShrink: 0,
-                                      }}
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
                               )}
                             <div>
                               <div
@@ -2692,52 +2478,6 @@ export default function TemplifyEditor() {
                         );
                       })()}
 
-                    {/* Background image opacity only */}
-                    {!multiSelected &&
-                      stylePrimary?.kind === "image" &&
-                      (stylePrimary as ImageObject).isBackground &&
-                      (() => {
-                        const img = stylePrimary as ImageObject;
-                        return (
-                          <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                marginBottom: 5,
-                              }}
-                            >
-                              <SLabel>Opacity</SLabel>
-                              <span
-                                style={{
-                                  fontSize: 9,
-                                  color: "#e8ff47",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {Math.round(img.opacity * 100)}%
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={Math.round(img.opacity * 100)}
-                              onChange={(e) =>
-                                styleApply(
-                                  "opacity",
-                                  Number(e.target.value) / 100,
-                                )
-                              }
-                              style={{
-                                width: "100%",
-                                height: "3px",
-                                accentColor: "#e8ff47",
-                              }}
-                            />
-                          </div>
-                        );
-                      })()}
 
                     {/* ── TEXT STYLES ─────────────────────────────────────── */}
                     {(allText ||
@@ -2746,106 +2486,6 @@ export default function TemplifyEditor() {
                         const f = stylePrimary as TextField | null;
                         return (
                           <>
-                            {!multiSelected && f && (
-                              <div>
-                                <SLabel>Row Offset</SLabel>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 5,
-                                    background: "rgba(255,255,255,0.03)",
-                                    border: "1px solid rgba(255,255,255,0.08)",
-                                    borderRadius: 8,
-                                    padding: "5px 8px",
-                                  }}
-                                >
-                                  <button
-                                    onClick={() =>
-                                      updateObj(
-                                        "columnOffset",
-                                        f.columnOffset - 1,
-                                      )
-                                    }
-                                    style={{
-                                      width: 22,
-                                      height: 22,
-                                      borderRadius: 5,
-                                      background: "rgba(255,255,255,0.06)",
-                                      border: "1px solid rgba(255,255,255,0.1)",
-                                      color: "rgba(240,237,232,0.6)",
-                                      cursor: "pointer",
-                                      fontSize: 13,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    −
-                                  </button>
-                                  <div
-                                    style={{
-                                      flex: 1,
-                                      display: "flex",
-                                      gap: 3,
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    {[-1, 0, 1].map((v) => (
-                                      <button
-                                        key={v}
-                                        onClick={() =>
-                                          updateObj("columnOffset", v)
-                                        }
-                                        style={{
-                                          padding: "2px 7px",
-                                          borderRadius: 5,
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          cursor: "pointer",
-                                          border: "none",
-                                          background:
-                                            f.columnOffset === v
-                                              ? "#e8ff47"
-                                              : "rgba(255,255,255,0.06)",
-                                          color:
-                                            f.columnOffset === v
-                                              ? "#0a0a10"
-                                              : "rgba(240,237,232,0.45)",
-                                        }}
-                                      >
-                                        {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <button
-                                    onClick={() =>
-                                      updateObj(
-                                        "columnOffset",
-                                        f.columnOffset + 1,
-                                      )
-                                    }
-                                    style={{
-                                      width: 22,
-                                      height: 22,
-                                      borderRadius: 5,
-                                      background: "rgba(255,255,255,0.06)",
-                                      border: "1px solid rgba(255,255,255,0.1)",
-                                      color: "rgba(240,237,232,0.6)",
-                                      cursor: "pointer",
-                                      fontSize: 13,
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                             <div>
                               <SLabel>Font</SLabel>
                               <FontPicker

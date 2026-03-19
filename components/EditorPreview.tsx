@@ -1,6 +1,12 @@
 import { useState } from "react";
 import PanelSection from "./PanelSection";
 import RLabel from "./RLabel";
+import {
+  IconSparkle, IconUndo, IconImage, IconBarChart, IconCamera,
+  IconClose, IconGrid, IconDragHandle, IconMinus, IconFitScreen,
+  IconChevronsLeft, IconChevronLeft, IconChevronRight, IconChevronsRight,
+  IconChevronDown, IconFolder, IconArrowUp, IconArrowDown,
+} from "./Icons";
 
 const sampleData = [
   {
@@ -22,21 +28,6 @@ const sampleData = [
     Image_Path: "carlo.jpg",
   },
 ];
-
-const miniBtn: React.CSSProperties = {
-  width: 20,
-  height: 20,
-  borderRadius: 4,
-  flexShrink: 0,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.1)",
-  color: "rgba(240,237,232,0.6)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 12,
-  cursor: "default",
-};
 
 const SWATCH_COLORS = [
   "#e8ff47",
@@ -69,114 +60,124 @@ function EditorPreview() {
       }}
     >
       {/* ── Top bar ── */}
-      <div
+      <header
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "8px 14px",
+          padding: "0 14px",
+          height: 44,
           borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "#0a0a10",
+          background: "#0c0c14",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div
-            style={{
-              width: 22,
-              height: 22,
-              background: "#e8ff47",
-              borderRadius: 5,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 9,
-              fontWeight: 900,
-              color: "#0a0a10",
-            }}
-          >
-            ✦
-          </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#f0ede8" }}>
-            Templify
-          </span>
-          <div
-            style={{
-              width: 1,
-              height: 12,
-              background: "rgba(255,255,255,0.08)",
-              margin: "0 2px",
-            }}
-          />
-          {["↩", "↪"].map((s, i) => (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div
-              key={i}
               style={{
                 width: 24,
                 height: 24,
-                borderRadius: 5,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#e8ff47",
+                borderRadius: 6,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 10,
-                color: "rgba(240,237,232,0.28)",
+                color: "#0a0a10",
               }}
             >
-              {s}
+              <IconSparkle size={10} />
             </div>
-          ))}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#f0ede8" }}>
+              Templify
+            </span>
+          </div>
           <div
             style={{
-              padding: "3px 10px",
-              borderRadius: 6,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              fontSize: 9,
-              color: "rgba(240,237,232,0.4)",
-              fontWeight: 600,
+              width: 1,
+              height: 14,
+              background: "rgba(255,255,255,0.08)",
+            }}
+          />
+          <div style={{ display: "flex", gap: 2 }}>
+            {[false, true].map((flip, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 5,
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "rgba(240,237,232,0.28)",
+                }}
+              >
+                <IconUndo
+                  size={11}
+                  style={flip ? { transform: "scaleX(-1)" } : undefined}
+                />
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
               display: "flex",
               alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span style={{ opacity: 0.5 }}>⬚</span> 16:9 HD 960×540
-          </div>
-          <div
-            style={{
-              display: "flex",
+              gap: 4,
+              padding: "3px 8px",
               borderRadius: 6,
-              overflow: "hidden",
-              border: "1px solid rgba(232,255,71,0.5)",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
             }}
           >
-            <div
+            <span style={{ fontSize: 8, color: "rgba(240,237,232,0.3)" }}>
+              Canvas
+            </span>
+            <span
               style={{
-                padding: "3px 12px",
-                background: "#e8ff47",
-                color: "#0a0a10",
                 fontSize: 9,
-                fontWeight: 700,
+                fontWeight: 600,
+                color: "rgba(240,237,232,0.6)",
+                fontFamily: "monospace",
               }}
             >
-              Export PNG · 3p
-            </div>
-            <div
-              style={{
-                padding: "3px 7px",
-                background: "#e8ff47",
-                color: "#0a0a10",
-                fontSize: 9,
-                borderLeft: "1px solid rgba(0,0,0,0.15)",
-              }}
-            >
-              ▾
-            </div>
+              960x540px
+            </span>
           </div>
         </div>
-      </div>
+        <button
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "0 12px",
+            height: 28,
+            borderRadius: 7,
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: "default",
+            background: "#e8ff47",
+            border: "none",
+            color: "#0a0a10",
+          }}
+        >
+          <IconGrid size={10} />
+          <span>Print Imposition & Export</span>
+          <span
+            style={{
+              fontSize: 7,
+              background: "rgba(0,0,0,0.12)",
+              padding: "1px 4px",
+              borderRadius: 3,
+              letterSpacing: "0.04em",
+            }}
+          >
+            GA
+          </span>
+        </button>
+      </header>
 
       {/* ── Body ── */}
       <div style={{ display: "flex", height: "full" }}>
@@ -193,7 +194,7 @@ function EditorPreview() {
           }}
         >
           <PanelSection label="Template / Image">
-            <div
+            <label
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -201,25 +202,12 @@ function EditorPreview() {
                 gap: 4,
                 padding: "10px 8px",
                 borderRadius: 8,
-                border: "1.5px dashed rgba(232,255,71,0.25)",
-                background: "rgba(232,255,71,0.02)",
+                cursor: "default",
+                border: "1.5px dashed rgba(232,255,71,0.22)",
+                background: "rgba(232,255,71,0.03)",
               }}
             >
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 6,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 13,
-                }}
-              >
-                🖼
-              </div>
+              <IconImage size={18} color="rgba(240,237,232,0.4)" />
               <p
                 style={{
                   fontSize: 10,
@@ -228,7 +216,7 @@ function EditorPreview() {
                   margin: 0,
                 }}
               >
-                Upload Image
+                Select Template
               </p>
               <p
                 style={{
@@ -237,9 +225,9 @@ function EditorPreview() {
                   margin: 0,
                 }}
               >
-                or drag & drop
+                auto-resizes canvas
               </p>
-            </div>
+            </label>
           </PanelSection>
 
           <PanelSection label="Data Source">
@@ -260,7 +248,7 @@ function EditorPreview() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontSize: 10 }}>📊</span>
+                  <IconBarChart size={10} color="#e8ff47" />
                   <span
                     style={{ fontSize: 10, fontWeight: 600, color: "#e8ff47" }}
                   >
@@ -280,36 +268,6 @@ function EditorPreview() {
               >
                 3 rows · 4 cols
               </p>
-              <div
-                style={{
-                  marginTop: 6,
-                  padding: "4px 6px",
-                  borderRadius: 5,
-                  background: "rgba(99,179,237,0.06)",
-                  border: "1px solid rgba(99,179,237,0.15)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 7,
-                    fontWeight: 700,
-                    color: "rgba(99,179,237,0.7)",
-                    letterSpacing: "0.05em",
-                    margin: "0 0 2px",
-                  }}
-                >
-                  ✦ AUTO-DETECTED
-                </p>
-                <p
-                  style={{
-                    fontSize: 8,
-                    color: "rgba(99,179,237,0.8)",
-                    margin: 0,
-                  }}
-                >
-                  1 photo column placed on canvas
-                </p>
-              </div>
             </div>
           </PanelSection>
 
@@ -331,14 +289,14 @@ function EditorPreview() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span>📷</span>
+                  <IconCamera size={10} color="#63b3ed" />
                   <span
                     style={{ fontSize: 10, fontWeight: 600, color: "#63b3ed" }}
                   >
                     3 photos
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span
                     style={{
                       fontSize: 9,
@@ -348,11 +306,7 @@ function EditorPreview() {
                   >
                     Replace
                   </span>
-                  <span
-                    style={{ fontSize: 10, color: "rgba(240,237,232,0.25)" }}
-                  >
-                    ✕
-                  </span>
+                  <IconClose size={8} color="rgba(240,237,232,0.25)" />
                 </div>
               </div>
               <p
@@ -390,7 +344,7 @@ function EditorPreview() {
                 }}
               >
                 <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 9 }}>📷</span>
+                  <IconCamera size={9} />
                   <span style={{ fontFamily: "monospace", fontSize: 8 }}>
                     Image_Path
                   </span>
@@ -581,136 +535,85 @@ function EditorPreview() {
               transform: "translateX(-50%)",
               display: "flex",
               alignItems: "center",
-              gap: 8,
-              padding: "6px 14px",
-              borderRadius: 20,
+              gap: 6,
+              padding: "6px 12px",
+              borderRadius: 14,
               background: "rgba(10,10,16,0.92)",
               border: "1px solid rgba(255,255,255,0.1)",
               backdropFilter: "blur(12px)",
             }}
           >
-            {/* Batch stepper */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "3px 8px",
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-              }}
-            >
-              <span style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}>
-                ◂
-              </span>
+            {[
+              { icon: <IconChevronsLeft size={10} />, action: () => setRow(0), disabled: row === 0 },
+              { icon: <IconChevronLeft size={10} />, action: () => setRow((r) => Math.max(0, r - 1)), disabled: row === 0 },
+            ].map((btn, i) => (
+              <button
+                key={i}
+                onClick={btn.action}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 4,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: btn.disabled
+                    ? "rgba(240,237,232,0.15)"
+                    : "rgba(240,237,232,0.6)",
+                  cursor: btn.disabled ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {btn.icon}
+              </button>
+            ))}
+            <div style={{ textAlign: "center", minWidth: 72 }}>
+              <div
+                style={{ fontSize: 10, fontWeight: 700, color: "#f0ede8" }}
+              >
+                Row {row + 1}{" "}
+                <span style={{ color: "rgba(240,237,232,0.3)" }}>
+                  / {sampleData.length}
+                </span>
+              </div>
               <div
                 style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 1,
-                  background: "rgba(240,237,232,0.3)",
+                  fontSize: 8,
+                  color: "rgba(240,237,232,0.35)",
+                  marginTop: 1,
                 }}
-              />
-              <div style={{ lineHeight: 1.2 }}>
-                <div
-                  style={{
-                    fontSize: 7,
-                    fontWeight: 700,
-                    color: "rgba(240,237,232,0.6)",
-                  }}
-                >
-                  1 per page
-                </div>
-                <div style={{ fontSize: 6, color: "rgba(240,237,232,0.3)" }}>
-                  3 pages total
-                </div>
+              >
+                {data
+                  ? Object.values(data).filter(Boolean)[0]?.slice(0, 20)
+                  : "—"}
               </div>
-              <span style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}>
-                ▸
-              </span>
             </div>
-            <div
-              style={{
-                width: 1,
-                height: 24,
-                background: "rgba(255,255,255,0.1)",
-              }}
-            />
-            {/* Page nav */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {["⟨⟨", "‹"].map((btn, i) => (
-                <button
-                  key={i}
-                  onClick={() => i === 1 && setRow((r) => Math.max(0, r - 1))}
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 5,
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    color:
-                      row === 0
-                        ? "rgba(240,237,232,0.15)"
-                        : "rgba(240,237,232,0.6)",
-                    cursor: row === 0 ? "default" : "pointer",
-                    fontSize: i === 0 ? 8 : 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {btn}
-                </button>
-              ))}
-              <div style={{ textAlign: "center", minWidth: 80 }}>
-                <div
-                  style={{ fontSize: 10, fontWeight: 700, color: "#f0ede8" }}
-                >
-                  Page {row + 1}{" "}
-                  <span style={{ color: "rgba(240,237,232,0.3)" }}>
-                    / {sampleData.length}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: 8,
-                    color: "rgba(240,237,232,0.35)",
-                    marginTop: 1,
-                  }}
-                >
-                  Rows {row + 1}–{row + 1} of {sampleData.length}
-                </div>
-              </div>
-              {["›", "⟩⟩"].map((btn, i) => (
-                <button
-                  key={i}
-                  onClick={() =>
-                    i === 0 &&
-                    setRow((r) => Math.min(sampleData.length - 1, r + 1))
-                  }
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 5,
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    color:
-                      row === sampleData.length - 1
-                        ? "rgba(240,237,232,0.15)"
-                        : "rgba(240,237,232,0.6)",
-                    cursor:
-                      row === sampleData.length - 1 ? "default" : "pointer",
-                    fontSize: i === 1 ? 8 : 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {btn}
-                </button>
-              ))}
-            </div>
+            {[
+              { icon: <IconChevronRight size={10} />, action: () => setRow((r) => Math.min(sampleData.length - 1, r + 1)), disabled: row === sampleData.length - 1 },
+              { icon: <IconChevronsRight size={10} />, action: () => setRow(sampleData.length - 1), disabled: row === sampleData.length - 1 },
+            ].map((btn, i) => (
+              <button
+                key={i}
+                onClick={btn.action}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 4,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: btn.disabled
+                    ? "rgba(240,237,232,0.15)"
+                    : "rgba(240,237,232,0.6)",
+                  cursor: btn.disabled ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {btn.icon}
+              </button>
+            ))}
           </div>
 
           {/* Zoom controls */}
@@ -727,45 +630,59 @@ function EditorPreview() {
               overflow: "hidden",
             }}
           >
-            {[
-              { l: "+", h: 28, sz: 16 },
-              { l: "100%", h: 20, sz: 7, y: true },
-              { l: "−", h: 28, sz: 16 },
-              { l: "⊡", h: 28, sz: 11 },
-            ].map((z, i) => (
-              <div
-                key={i}
-                style={{
-                  width: 30,
-                  height: z.h,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: z.sz,
-                  fontWeight: z.y ? 700 : 400,
-                  color: z.y ? "#e8ff47" : "rgba(240,237,232,0.5)",
-                  borderBottom:
-                    i < 3 ? "1px solid rgba(255,255,255,0.07)" : "none",
-                }}
-              >
-                {z.l}
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              position: "absolute",
-              bottom: 5,
-              left: "50%",
-              transform: "translateX(-50%)",
-              fontSize: 8,
-              color: "rgba(240,237,232,0.08)",
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-            }}
-          >
-            960×540px · 16:9 HD · 100%
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "rgba(240,237,232,0.5)",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              +
+            </div>
+            <div
+              style={{
+                width: 28,
+                height: 20,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 7,
+                fontWeight: 700,
+                color: "#e8ff47",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              100%
+            </div>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "rgba(240,237,232,0.5)",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <IconMinus size={12} />
+            </div>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "rgba(240,237,232,0.5)",
+              }}
+            >
+              <IconFitScreen size={12} />
+            </div>
           </div>
         </div>
 
@@ -781,7 +698,7 @@ function EditorPreview() {
             height: "37.5rem",
           }}
         >
-          {/* Tabs */}
+          {/* Tabs — matches actual: Layers + Style */}
           <div
             style={{
               display: "flex",
@@ -789,8 +706,8 @@ function EditorPreview() {
               flexShrink: 0,
             }}
           >
-            {["LAYERS", "STYLE", "CANVAS"].map((tab) => (
-              <div
+            {["Layers", "Style"].map((tab) => (
+              <button
                 key={tab}
                 style={{
                   flex: 1,
@@ -798,16 +715,20 @@ function EditorPreview() {
                   fontSize: 8,
                   fontWeight: 700,
                   letterSpacing: "0.06em",
+                  textTransform: "uppercase" as const,
                   textAlign: "center" as const,
-                  color: tab === "STYLE" ? "#e8ff47" : "rgba(240,237,232,0.28)",
+                  cursor: "default",
+                  background: "transparent",
+                  border: "none",
+                  color: tab === "Style" ? "#e8ff47" : "rgba(240,237,232,0.28)",
                   borderBottom:
-                    tab === "STYLE"
+                    tab === "Style"
                       ? "2px solid #e8ff47"
                       : "2px solid transparent",
                 }}
               >
                 {tab}
-              </div>
+              </button>
             ))}
           </div>
 
@@ -892,9 +813,12 @@ function EditorPreview() {
             {/* Layer order */}
             <RLabel>Layer Order</RLabel>
             <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
-              {["↑ Fwd", "↓ Back"].map((b) => (
+              {[
+                { icon: <IconArrowUp size={9} />, label: "Fwd" },
+                { icon: <IconArrowDown size={9} />, label: "Back" },
+              ].map((b, i) => (
                 <div
-                  key={b}
+                  key={i}
                   style={{
                     flex: 1,
                     padding: "4px 0",
@@ -905,54 +829,15 @@ function EditorPreview() {
                     color: "rgba(240,237,232,0.6)",
                     background: "rgba(255,255,255,0.04)",
                     border: "1px solid rgba(255,255,255,0.09)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 3,
                   }}
                 >
-                  {b}
+                  {b.icon} {b.label}
                 </div>
               ))}
-            </div>
-
-            {/* Row Offset */}
-            <RLabel>Row Offset</RLabel>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                marginBottom: 10,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 7,
-                padding: "4px 6px",
-              }}
-            >
-              <div style={miniBtn}>−</div>
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  gap: 3,
-                  justifyContent: "center",
-                }}
-              >
-                {[-1, 0, 1].map((v) => (
-                  <div
-                    key={v}
-                    style={{
-                      padding: "2px 5px",
-                      borderRadius: 4,
-                      fontSize: 9,
-                      fontWeight: 700,
-                      background:
-                        v === 0 ? "#e8ff47" : "rgba(255,255,255,0.05)",
-                      color: v === 0 ? "#0a0a10" : "rgba(240,237,232,0.45)",
-                    }}
-                  >
-                    {v === 0 ? "±0" : v > 0 ? `+${v}` : v}
-                  </div>
-                ))}
-              </div>
-              <div style={miniBtn}>+</div>
             </div>
 
             {/* Font */}
@@ -972,7 +857,8 @@ function EditorPreview() {
                 color: "#f0ede8",
               }}
             >
-              Merriweather <span style={{ fontSize: 9, opacity: 0.4 }}>▾</span>
+              Merriweather
+              <IconChevronDown size={9} style={{ opacity: 0.4 }} />
             </div>
 
             {/* Font size */}
@@ -1210,7 +1096,7 @@ function EditorPreview() {
                 marginBottom: 5,
               }}
             >
-              Page {row + 1} · Rows {row + 1}–{row + 1}
+              Row {row + 1} / {sampleData.length}
             </p>
             {Object.entries(data).map(([k, v]) => (
               <div key={k} style={{ marginBottom: 3 }}>

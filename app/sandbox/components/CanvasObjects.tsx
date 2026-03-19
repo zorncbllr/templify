@@ -11,6 +11,7 @@ import { shadowCSS, textShadowCSS, shrinkFontSize } from "../utils/rendering";
 import { resolveDataImageSrc } from "../utils/data";
 import { useDragResize } from "../hooks/useDragResize";
 import { SelectionHandles } from "./SelectionHandles";
+import { IconCamera, IconImage } from "@/components/Icons";
 
 // ─── ImageEl ─────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export function ImageEl({
               boxSizing: "border-box",
             }}
           >
-            <span style={{ fontSize: 22, opacity: 0.5 }}>📷</span>
+            <IconCamera size={22} style={{ opacity: 0.5 }} />
             <span
               style={{
                 fontSize: 8,
@@ -230,8 +231,8 @@ export function ImageEl({
             }}
           >
             {obj.isDataImage
-              ? `📷 ${obj.dataImageColumn || "Data Photo"}`
-              : `🖼 ${obj.name}`}
+              ? <><IconCamera size={10} /> {obj.dataImageColumn || "Data Photo"}</>
+              : <><IconImage size={10} /> {obj.name}</>}
           </div>
           <SelectionHandles onDown={handleResizeDown} scale={scale} />
         </>

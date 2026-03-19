@@ -2,25 +2,33 @@
 import EditorPreview from "@/components/EditorPreview";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
+import {
+  IconUpload, IconSparkle, IconEye, IconDownload,
+  IconType, IconShrink, IconCamera, IconBarChart,
+  IconUndo, IconPalette, IconImage, IconWand, IconKeyboard,
+  IconGradCap, IconBadge, IconIdCard, IconClipboard,
+  IconMail, IconTrophy, IconTag, IconScroll,
+  IconWarning, IconCheck,
+} from "@/components/Icons";
 
 const features = [
   {
-    icon: "⬆",
+    icon: <IconUpload size={16} />,
     title: "Upload Your Excel",
     desc: "Drop your spreadsheet and Templify instantly reads every column — names, dates, IDs, anything.",
   },
   {
-    icon: "✦",
+    icon: <IconSparkle size={16} />,
     title: "Design Your Template",
     desc: "Upload a background image, drag your column fields anywhere on the canvas. Style each field freely.",
   },
   {
-    icon: "👁",
+    icon: <IconEye size={16} />,
     title: "Preview Every Record",
     desc: "Flip through all rows before exporting. Catch overflow issues before they become 200 broken files.",
   },
   {
-    icon: "⬇",
+    icon: <IconDownload size={16} />,
     title: "Export in Any Format",
     desc: "Download as PNG or PDF. Bulk export every record in one click.",
   },
@@ -28,55 +36,55 @@ const features = [
 
 const featureGrid = [
   {
-    icon: "🔤",
+    icon: <IconType size={18} />,
     title: "26+ Google Fonts",
     desc: "Search and preview fonts by category — Serif, Sans, Script, Display, Mono — live on your canvas.",
     accent: "#e8ff47",
   },
   {
-    icon: "📐",
+    icon: <IconShrink size={18} />,
     title: "Smart Auto-Shrink",
     desc: "Long names never overflow. Text auto-scales to fit its field, and flagged records show in preview.",
     accent: "#ffb400",
   },
   {
-    icon: "📷",
+    icon: <IconCamera size={18} />,
     title: "Auto Photo Matching",
     desc: "Upload a folder of photos and Templify matches each one to the right row by filename — instantly.",
     accent: "#63b3ed",
   },
   {
-    icon: "📊",
+    icon: <IconBarChart size={18} />,
     title: "Batch Layout",
     desc: "Print 1, 2, 4, 6, or 9 records per page. Perfect for ID cards, badges, and certificates.",
     accent: "#a78bfa",
   },
   {
-    icon: "↩",
+    icon: <IconUndo size={18} />,
     title: "Undo / Redo",
     desc: "Full 25-step history. Experiment freely — every change is reversible.",
     accent: "#e8ff47",
   },
   {
-    icon: "🎨",
+    icon: <IconPalette size={18} />,
     title: "Canvas Styling",
     desc: "Set background color, border, corner radius, and grid overlay. Every detail, your call.",
     accent: "#f87171",
   },
   {
-    icon: "🖼",
+    icon: <IconImage size={18} />,
     title: "Background Images",
     desc: "Upload any image as a full-bleed canvas background. Sync the canvas size to match it exactly.",
     accent: "#4ade80",
   },
   {
-    icon: "🪄",
+    icon: <IconWand size={18} />,
     title: "Shadow & Border FX",
     desc: "Add drop shadows, outlines, borders, and corner radius to any text or image element.",
     accent: "#fb923c",
   },
   {
-    icon: "⌨️",
+    icon: <IconKeyboard size={18} />,
     title: "Keyboard Shortcuts",
     desc: "Ctrl+D to duplicate, arrow keys to nudge, Delete to remove. Designed for speed.",
     accent: "#e8ff47",
@@ -84,14 +92,14 @@ const featureGrid = [
 ];
 
 const useCases = [
-  { label: "School Certificates", emoji: "🎓" },
-  { label: "Event Badges", emoji: "🪪" },
-  { label: "ID Cards", emoji: "💳" },
-  { label: "Scholarship Liquidation", emoji: "📋" },
-  { label: "Invitations", emoji: "✉️" },
-  { label: "Award Documents", emoji: "🏆" },
-  { label: "Name Tags", emoji: "🏷️" },
-  { label: "Bulk Certificates", emoji: "📜" },
+  { label: "School Certificates", icon: <IconGradCap size={16} /> },
+  { label: "Event Badges", icon: <IconBadge size={16} /> },
+  { label: "ID Cards", icon: <IconIdCard size={16} /> },
+  { label: "Scholarship Liquidation", icon: <IconClipboard size={16} /> },
+  { label: "Invitations", icon: <IconMail size={16} /> },
+  { label: "Award Documents", icon: <IconTrophy size={16} /> },
+  { label: "Name Tags", icon: <IconTag size={16} /> },
+  { label: "Bulk Certificates", icon: <IconScroll size={16} /> },
 ];
 
 const exportFormats = ["PNG", "PDF"];
@@ -174,7 +182,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-10 py-5 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-[#e8ff47] rounded-lg flex items-center justify-center text-[#0a0a0f] text-sm font-bold">
-            ✦
+            <IconSparkle size={14} />
           </div>
           <span className="font-bold text-lg tracking-tight">Templify</span>
         </div>
@@ -224,7 +232,7 @@ export default function LandingPage() {
         <div className="fade-up-4 flex gap-3 mt-10 flex-wrap justify-center">
           <Link href={"/sandbox"}>
             <button className="px-9 py-4 rounded-full bg-[#e8ff47] text-[#0a0a0f] text-base font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(232,255,71,0.35)] transition-all">
-              Try Templify free →
+              Try Templify free
             </button>
           </Link>
           <a href="#editor-preview">
@@ -271,7 +279,7 @@ export default function LandingPage() {
                 key={u.label}
                 className="use-case-pill flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-full px-5 py-2.5 text-sm text-[#f0ede8]/70 transition-all whitespace-nowrap cursor-default"
               >
-                <span>{u.emoji}</span>
+                <span>{u.icon}</span>
                 <span>{u.label}</span>
               </div>
             ))}
@@ -396,12 +404,12 @@ export default function LandingPage() {
                     {r.name}
                   </span>
                   {r.status === "warn" ? (
-                    <span className="text-[11px] text-[#ffb400] bg-[rgba(255,180,0,0.1)] border border-[rgba(255,180,0,0.2)] px-2.5 py-1 rounded-full whitespace-nowrap ml-2">
-                      ⚠ auto-shrunk
+                    <span className="text-[11px] text-[#ffb400] bg-[rgba(255,180,0,0.1)] border border-[rgba(255,180,0,0.2)] px-2.5 py-1 rounded-full whitespace-nowrap ml-2 inline-flex items-center gap-1">
+                      <IconWarning size={10} /> auto-shrunk
                     </span>
                   ) : (
-                    <span className="text-[11px] text-[#4cff91] bg-[rgba(76,255,145,0.08)] border border-[rgba(76,255,145,0.15)] px-2.5 py-1 rounded-full ml-2">
-                      ✓ fits
+                    <span className="text-[11px] text-[#4cff91] bg-[rgba(76,255,145,0.08)] border border-[rgba(76,255,145,0.15)] px-2.5 py-1 rounded-full ml-2 inline-flex items-center gap-1">
+                      <IconCheck size={10} /> fits
                     </span>
                   )}
                 </div>
@@ -440,7 +448,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/[0.06] px-10 py-8 flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-[#e8ff47] rounded-md flex items-center justify-center text-[#0a0a0f] text-xs font-bold">
-            ✦
+            <IconSparkle size={12} />
           </div>
           <span className="font-bold text-[15px]">Templify</span>
         </div>
