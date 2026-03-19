@@ -300,16 +300,20 @@ export function DimensionInputs({
             <input
               type="number"
               value={str}
+              step={isImage && (field === "w" || field === "h") ? 10 : 1}
               onChange={(e) => {
-                set(e.target.value);
-                // Spinner buttons (up/down arrows) fire onChange without
-                // blur/Enter — commit immediately so the change applies.
-                if (focusedField.current !== field) {
-                  const v = parseInt(e.target.value, 10);
+                const newVal = e.target.value;
+                set(newVal);
+                // Only commit on spinner clicks (not typing).
+                // Spinner clicks produce inputType !== "insertText".
+                const evt = e.nativeEvent as InputEvent;
+                const isSpinner = evt.inputType && evt.inputType !== "insertText";
+                if (isSpinner && (field === "w" || field === "h")) {
+                  const v = parseInt(newVal, 10);
                   if (isFinite(v) && v > 0) {
                     if (field === "w") {
                       isImage ? updateBgDimension("width", v) : updateObj("width", v);
-                    } else if (field === "h") {
+                    } else {
                       isImage ? updateBgDimension("height", v) : updateObj("height", v);
                     }
                   }

@@ -95,7 +95,7 @@ export function ShadowPanel({
             overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", gap: 7 }}>
+          <div style={{ display: "flex", gap: 5 }}>
             <div
               style={{
                 position: "relative",

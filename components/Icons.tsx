@@ -281,3 +281,8 @@ export const IconDragHandle = multiPath([
 
 // Rotate
 export const IconRotate = svg("M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15");
+
+export const IconEyedropper = multiPath([
+  { d: "M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-3.54 3.54 1.06 1.06-4.6 4.6a2 2 0 00-.59 1.42V16h2.09a2 2 0 001.42-.59l4.6-4.6 1.06 1.06 3.54-3.54a1 1 0 000-1.41z" },
+  { d: "M6 20l-3 3" },
+]);

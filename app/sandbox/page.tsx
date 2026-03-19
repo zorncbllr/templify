@@ -8,6 +8,7 @@ import type {
   ImageObject,
   TextField,
   ImpositionResult,
+  Shadow,
 } from "./types/index";
 import {
   DEFAULT_SHADOW,
@@ -57,28 +58,47 @@ function remapObjects(
 
   const rx = newSize.width / Math.max(1, oldSize.width);
   const ry = newSize.height / Math.max(1, oldSize.height);
+  const avg = (rx + ry) / 2;
 
   return objects.map((o) => {
-    // Background images are pinned to 0,0 and sized to fill the canvas —
-    // they don't need remapping (their render size is derived elsewhere).
     if (o.kind === "image" && (o as ImageObject).isBackground) return o;
 
+    const shadow = o.kind === "image"
+      ? (o as ImageObject).shadow
+      : (o as TextField).shadow;
+    const scaledShadow: Shadow = {
+      ...shadow,
+      x: shadow.x * avg,
+      y: shadow.y * avg,
+      blur: shadow.blur * avg,
+    };
+
+    if (o.kind === "field") {
+      const f = o as TextField;
+      return {
+        ...f,
+        x: f.x * rx,
+        y: f.y * ry,
+        width: f.width * rx,
+        height: f.height * ry,
+        fontSize: Math.max(6, f.fontSize * avg),
+        shadow: scaledShadow,
+      } as CanvasObject;
+    }
+
+    const img = o as ImageObject;
     return {
-      ...o,
-      x: Math.round(o.x * rx),
-      y: Math.round(o.y * ry),
-      width: Math.round(o.width * rx),
-      height: Math.round(o.height * ry),
-      // Keep fontSize proportional for text fields (use the average scale so
-      // text doesn't blow up on very non-uniform resizes).
-      ...(o.kind === "field"
-        ? {
-            fontSize: Math.max(
-              6,
-              Math.round((o as TextField).fontSize * ((rx + ry) / 2)),
-            ),
-          }
-        : {}),
+      ...img,
+      x: img.x * rx,
+      y: img.y * ry,
+      width: img.width * rx,
+      height: img.height * ry,
+      borderRadius: img.borderRadius * avg,
+      border: {
+        ...img.border,
+        width: img.border.width * avg,
+      },
+      shadow: scaledShadow,
     } as CanvasObject;
   });
 }
@@ -818,43 +838,16 @@ export default function TemplifyEditor() {
 
         const newSize: CanvasSize = { width: baseW, height: baseH };
 
-        // Remap non-background objects proportionally.
-        const updatedObjects = prev.objects.map((o) => {
-          if (o.id === target.id) {
-            // Update the background image dimensions to match the new canvas
-            // size. Do NOT overwrite naturalWidth/naturalHeight — those store
-            // the original image's true pixel dimensions and are used to
-            // compute the aspect ratio on every subsequent resize. Overwriting
-            // them would cause the AR to drift after the first manual edit.
-            return {
-              ...img,
-              x: 0,
-              y: 0,
-              width: baseW,
-              height: baseH,
-            } as CanvasObject;
-          }
-          if (o.kind === "image" && (o as ImageObject).isBackground) return o;
-          // Proportionally remap this object.
-          const rx = baseW / Math.max(1, prev.canvasSize.width);
-          const ry = baseH / Math.max(1, prev.canvasSize.height);
-          const remapped: CanvasObject = {
-            ...o,
-            x: Math.round(o.x * rx),
-            y: Math.round(o.y * ry),
-            width: Math.round(o.width * rx),
-            height: Math.round(o.height * ry),
-            ...(o.kind === "field"
-              ? {
-                  fontSize: Math.max(
-                    6,
-                    Math.round((o as TextField).fontSize * ((rx + ry) / 2)),
-                  ),
-                }
-              : {}),
-          };
-          return remapped;
-        });
+        // Remap non-background objects proportionally (including borders,
+        // shadows, border-radius, font size).
+        const remapped = remapObjects(prev.objects, prev.canvasSize, newSize);
+
+        // Update the background image dimensions to match the new canvas.
+        const updatedObjects = remapped.map((o) =>
+          o.id === target.id
+            ? ({ ...img, x: 0, y: 0, width: baseW, height: baseH } as CanvasObject)
+            : o,
+        );
 
         return { objects: updatedObjects, canvasSize: newSize };
       });
