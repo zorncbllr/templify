@@ -3,12 +3,29 @@ import EditorPreview from "@/components/EditorPreview";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import {
-  IconUpload, IconSparkle, IconEye, IconDownload,
-  IconType, IconShrink, IconCamera, IconBarChart,
-  IconUndo, IconPalette, IconImage, IconWand, IconKeyboard,
-  IconGradCap, IconBadge, IconIdCard, IconClipboard,
-  IconMail, IconTrophy, IconTag, IconScroll,
-  IconWarning, IconCheck,
+  IconUpload,
+  IconSparkle,
+  IconEye,
+  IconDownload,
+  IconType,
+  IconShrink,
+  IconCamera,
+  IconBarChart,
+  IconUndo,
+  IconPalette,
+  IconImage,
+  IconWand,
+  IconKeyboard,
+  IconGradCap,
+  IconBadge,
+  IconIdCard,
+  IconClipboard,
+  IconMail,
+  IconTrophy,
+  IconTag,
+  IconScroll,
+  IconWarning,
+  IconCheck,
 } from "@/components/Icons";
 
 const features = [
@@ -187,9 +204,11 @@ export default function LandingPage() {
           <span className="font-bold text-lg tracking-tight">Templify</span>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-6 py-2.5 rounded-full border border-white/20 text-sm font-medium hover:border-white/40 hover:bg-white/5 transition-all">
-            Sign in
-          </button>
+          <Link href={"/login"}>
+            <button className="px-6 py-2.5 rounded-full border border-white/20 text-sm font-medium hover:border-white/40 hover:bg-white/5 transition-all">
+              Sign in
+            </button>
+          </Link>
           <Link href={"/sandbox"}>
             <button className="px-6 py-2.5 rounded-full bg-[#e8ff47] text-[#0a0a0f] text-sm font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(232,255,71,0.35)] transition-all">
               Get started free

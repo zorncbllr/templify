@@ -1,0 +1,97 @@
+export const runtime = 'nodejs';
+
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyWebhookSignature } from '@/lib/payments/paymongo';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { PRICING, getPlanExpiry, type PlanKey } from '@/lib/config/pricing';
+
+const VALID_PLANS: PlanKey[] = ['pro_monthly', 'pro_quarterly', 'pro_annual'];
+
+export async function POST(req: NextRequest) {
+  const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
+  if (!webhookSecret) return new NextResponse('Server misconfigured', { status: 500 });
+
+  // Read raw body BEFORE any parsing — needed for signature verification
+  const rawBody = await req.text();
+  const signatureHeader = req.headers.get('paymongo-signature') ?? '';
+
+  if (!verifyWebhookSignature(rawBody, signatureHeader, webhookSecret)) {
+    return new NextResponse('Invalid signature', { status: 400 });
+  }
+
+  let event: any;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return new NextResponse('Invalid JSON', { status: 400 });
+  }
+
+  const eventType = event?.data?.attributes?.type;
+
+  if (eventType !== 'checkout_session.payment.paid') {
+    return NextResponse.json({ received: true }); // ignore other events
+  }
+
+  const session = event.data.attributes.data;
+  const metadata = session?.attributes?.metadata ?? {};
+  const userId: string = metadata.user_id;
+  const plan: string = metadata.plan;
+  const paymentId: string = session?.id ?? '';
+  const amount: number = session?.attributes?.amount ?? 0;
+  const currency: string = session?.attributes?.currency ?? 'PHP';
+
+  if (!userId || !plan || !paymentId) {
+    return new NextResponse('Missing metadata', { status: 400 });
+  }
+
+  if (!VALID_PLANS.includes(plan as PlanKey)) {
+    return new NextResponse('Invalid plan in metadata', { status: 400 });
+  }
+
+  // Amount verification — prevent tampered checkout sessions
+  const expectedAmount = PRICING[plan as PlanKey]['ph']?.amount;
+  if (!expectedAmount || amount !== expectedAmount) {
+    return new NextResponse('Amount mismatch', { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+
+  // Verify user exists in profiles
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (!profile) return new NextResponse('User not found', { status: 400 });
+
+  // Idempotency check — skip duplicate events
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('gateway_payment_id', paymentId)
+    .maybeSingle();
+
+  if (existing) return NextResponse.json({ received: true }); // already processed
+
+  // Insert payment record
+  await supabase.from('payments').insert({
+    user_id: userId,
+    gateway: 'paymongo',
+    gateway_payment_id: paymentId,
+    amount,
+    currency,
+    plan: plan as Exclude<PlanKey, 'free'>,
+    status: 'succeeded',
+    metadata: { event_type: eventType },
+  });
+
+  // Update profile
+  await supabase.from('profiles').update({
+    plan,
+    plan_expires_at: getPlanExpiry(plan as PlanKey).toISOString(),
+    payment_gateway: 'paymongo',
+  }).eq('id', userId);
+
+  return NextResponse.json({ received: true });
+}

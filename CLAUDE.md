@@ -12,10 +12,11 @@
 
 ```
 app/
+  layout.tsx                      # Root layout — Geist fonts, metadata, html/body wrapper
   page.tsx                        # Landing page
   sandbox/
     page.tsx                      # Main editor — state, handlers, layout, sidebar panels
-    types/3
+    types/
       index.ts                    # CanvasObject, ImageObject, TextField, CanvasSize, etc.
       constants.ts                # Defaults, presets, sheet sizes, Google Fonts list
     hooks/
@@ -40,6 +41,12 @@ app/
 components/
   Icons.tsx                       # All SVG icons (shared across landing + editor)
   EditorPreview.tsx               # Landing page editor preview component
+  RLabel.tsx                      # Reusable uppercase muted section label (8px, editor panels)
+  PanelSection.tsx                # Labeled panel section wrapper with optional bottom border
+  ui/
+    button.tsx                    # shadcn/ui button (landing page only)
+lib/
+  utils.ts                        # cn() utility — clsx + tailwind-merge (landing page only)
 ```
 
 Key patterns:

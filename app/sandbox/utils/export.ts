@@ -243,6 +243,29 @@ function renderImpositionSheet(
   return sheet;
 }
 
+/**
+ * Apply a diagonal "Made with Templify" watermark to a composited sheet canvas.
+ * Called only when watermark === true (free-tier exports).
+ */
+function applyWatermark(
+  sheetCanvas: HTMLCanvasElement,
+  sheetW: number,
+  sheetH: number,
+): void {
+  const scale = 2; // matches SCALE constant used when rendering
+  const ctx = sheetCanvas.getContext("2d")!;
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = "#000000";
+  ctx.font = `bold ${Math.round(sheetW * 0.04)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.translate(sheetW / 2, sheetH / 2);
+  ctx.rotate(-Math.PI / 6);
+  ctx.fillText("Made with Templify", 0, 0);
+  ctx.restore();
+}
+
 export async function exportRecords(
   format: string,
   objects: CanvasObject[],
@@ -251,6 +274,7 @@ export async function exportRecords(
   dataImages: DataImageMap,
   layout: ImpositionResult,
   sheet: { w: number; h: number },
+  watermark: boolean,
   onProgress: (pct: number) => void,
 ) {
   if (!rows.length) rows = [{}];
@@ -282,6 +306,8 @@ export async function exportRecords(
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
       const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
 
+      if (watermark) applyWatermark(sheetCanvas, sheet.w, sheet.h);
+
       const blob = await new Promise<Blob>((resolve) =>
         sheetCanvas.toBlob((b) => resolve(b!), "image/png"),
       );
@@ -307,6 +333,9 @@ export async function exportRecords(
       const endIdx = Math.min(startIdx + cardsPerSheet, totalCards);
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
       const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
+
+      if (watermark) applyWatermark(sheetCanvas, sheet.w, sheet.h);
+
       const imgData = sheetCanvas.toDataURL("image/png");
 
       if (!pdf) {
