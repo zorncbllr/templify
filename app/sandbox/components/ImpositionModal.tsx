@@ -10,7 +10,7 @@ import { SHEET_PRESETS } from "../types/constants";
 import { runImpositionGA } from "../lib/impositionGA";
 import { TemplateThumbnail } from "./TemplateThumbnail";
 
-const PREVIEW_W = 340;
+const PREVIEW_W = 520;
 const MM_TO_PX = 2.835;
 
 export function ImpositionModal({
@@ -34,11 +34,16 @@ export function ImpositionModal({
   dataImages: DataImageMap;
   exportFormat: string;
   onExportFormatChange: (f: string) => void;
-  onExport: () => void;
+  onExport: (layout: ImpositionResult, sheet: { w: number; h: number }) => void;
   exportProgress: number | null;
   onClose: () => void;
 }) {
-  const [selectedSheet, setSelectedSheet] = useState(SHEET_PRESETS[0]);
+  const customSheet = {
+    label: "Default",
+    w: canvasSize.width,
+    h: canvasSize.height,
+  };
+  const [selectedSheet, setSelectedSheet] = useState(customSheet);
   const [allowRotation, setAllowRotation] = useState(true);
   const [minBleedMm, setMinBleedMm] = useState(3);
   const [gaRunning, setGaRunning] = useState(false);
@@ -46,6 +51,7 @@ export function ImpositionModal({
   const [bestResult, setBestResult] = useState<ImpositionResult | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
 
+  const isCustomSheet = selectedSheet.label === "Default";
   const minBleedPx = Math.round(minBleedMm * MM_TO_PX);
   const totalPages = bestResult
     ? Math.ceil(totalCards / bestResult.count)
@@ -53,6 +59,37 @@ export function ImpositionModal({
 
   const runGA = useCallback(() => {
     if (stopRef.current) stopRef.current();
+
+    // Default sheet matches the template exactly — skip GA, just 1 card per sheet.
+    if (isCustomSheet) {
+      setBestResult({
+        gene: {
+          marginTop: 0,
+          marginRight: 0,
+          marginBottom: 0,
+          marginLeft: 0,
+          gapX: 0,
+          gapY: 0,
+          rotation: 0,
+        },
+        cols: 1,
+        rows: 1,
+        count: 1,
+        wastePercent: 0,
+        cutLines: 0,
+        fitness: 1,
+        cardW: canvasSize.width,
+        cardH: canvasSize.height,
+        printAreaW: canvasSize.width,
+        printAreaH: canvasSize.height,
+        offsetX: 0,
+        offsetY: 0,
+      });
+      setGaRunning(false);
+      setGaGen(0);
+      return;
+    }
+
     setGaRunning(true);
     setGaGen(0);
     const stop = runImpositionGA({
@@ -72,7 +109,7 @@ export function ImpositionModal({
       },
     });
     stopRef.current = stop;
-  }, [canvasSize, selectedSheet, minBleedPx, allowRotation]);
+  }, [canvasSize, selectedSheet, isCustomSheet, minBleedPx, allowRotation]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -222,7 +259,7 @@ export function ImpositionModal({
               overflowY: "auto",
             }}
           >
-            {/* Sheet sizes */}
+            {/* Sheet size dropdown */}
             <div>
               <p
                 style={{
@@ -236,45 +273,64 @@ export function ImpositionModal({
               >
                 Sheet Size
               </p>
-              <div
+              <select
+                value={selectedSheet.label}
+                onChange={(e) => {
+                  const label = e.target.value;
+                  if (label === "Default") {
+                    setSelectedSheet(customSheet);
+                  } else {
+                    const preset = SHEET_PRESETS.find((s) => s.label === label);
+                    if (preset) setSelectedSheet(preset);
+                  }
+                }}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 3,
+                  width: "100%",
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "#1a1a28",
+                  color: "#f0ede8",
+                  appearance: "auto",
                 }}
               >
-                {SHEET_PRESETS.map((s) => (
-                  <button
-                    key={s.label}
-                    onClick={() => setSelectedSheet(s)}
-                    style={{
-                      padding: "5px 7px",
-                      borderRadius: 7,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1,
-                      border: `1px solid ${selectedSheet.label === s.label ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.07)"}`,
-                      background:
-                        selectedSheet.label === s.label
-                          ? "rgba(232,255,71,0.08)"
-                          : "rgba(255,255,255,0.02)",
-                      color:
-                        selectedSheet.label === s.label
-                          ? "#e8ff47"
-                          : "rgba(240,237,232,0.6)",
-                    }}
-                  >
-                    <span>{s.label}</span>
-                    <span style={{ fontSize: 7, opacity: 0.4 }}>
-                      {s.w}×{s.h}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                <option value="Default">
+                  Default ({customSheet.w}×{customSheet.h})
+                </option>
+                <optgroup label="ISO A Series">
+                  {SHEET_PRESETS.filter((s) => s.label.startsWith("A")).map((s) => (
+                    <option key={s.label} value={s.label}>
+                      {s.label} ({s.w}×{s.h})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="ISO B Series">
+                  {SHEET_PRESETS.filter((s) => s.label.startsWith("B")).map((s) => (
+                    <option key={s.label} value={s.label}>
+                      {s.label} ({s.w}×{s.h})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="US / North American">
+                  {SHEET_PRESETS.filter((s) =>
+                    ["Letter", "Legal", "Tabloid", "Executive"].includes(s.label)
+                  ).map((s) => (
+                    <option key={s.label} value={s.label}>
+                      {s.label} ({s.w}×{s.h})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Square / Specialty">
+                  {SHEET_PRESETS.filter((s) => s.label.startsWith("Square")).map((s) => (
+                    <option key={s.label} value={s.label}>
+                      {s.label} ({s.w}×{s.h})
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
 
             {/* Min bleed */}
@@ -400,6 +456,141 @@ export function ImpositionModal({
               </div>
             </div>
 
+            {/* Optimized Result */}
+            {bestResult && bestResult.count > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <p
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: "rgba(240,237,232,0.28)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Optimized Result
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 6,
+                  }}
+                >
+                  {[
+                    [
+                      "Cards / sheet",
+                      `${bestResult.count} (${bestResult.cols}×${bestResult.rows})`,
+                      "#e8ff47",
+                    ],
+                    [
+                      "Paper waste",
+                      `${bestResult.wastePercent.toFixed(1)}%`,
+                      bestResult.wastePercent < 20
+                        ? "#4ade80"
+                        : bestResult.wastePercent < 40
+                          ? "#f6ad55"
+                          : "#f87171",
+                    ],
+                    [
+                      "Total sheets",
+                      totalCards
+                        ? `${Math.ceil(totalCards / bestResult.count)} sheets`
+                        : "—",
+                      "rgba(240,237,232,0.7)",
+                    ],
+                    [
+                      "Gap H/V",
+                      `${bestResult.gene.gapX}×${bestResult.gene.gapY}px`,
+                      "rgba(240,237,232,0.5)",
+                    ],
+                  ].map(([label, value, color]) => (
+                    <div
+                      key={label as string}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: 8,
+                          color: "rgba(240,237,232,0.3)",
+                          marginBottom: 3,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {label}
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: color as string,
+                        }}
+                      >
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 8,
+                    background: "rgba(232,255,71,0.04)",
+                    border: "1px solid rgba(232,255,71,0.15)",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 9,
+                      color: "rgba(240,237,232,0.4)",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Margins: T{bestResult.gene.marginTop} R
+                    {bestResult.gene.marginRight} B
+                    {bestResult.gene.marginBottom} L{bestResult.gene.marginLeft}
+                    px
+                    {bestResult.gene.rotation === 1 && (
+                      <span style={{ color: "#63b3ed" }}>
+                        {" "}
+                        · Cards rotated 90°
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : gaRunning ? (
+              <div
+                style={{
+                  padding: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: 22,
+                    height: 22,
+                    border: "2px solid rgba(232,255,71,0.2)",
+                    borderTop: "2px solid #e8ff47",
+                    borderRadius: "50%",
+                    animation: "spin 0.7s linear infinite",
+                  }}
+                />
+                <p style={{ fontSize: 10, color: "rgba(240,237,232,0.3)" }}>
+                  Optimizing… gen {gaGen}/200
+                </p>
+              </div>
+            ) : null}
+
             {/* Export */}
             <div
               style={{
@@ -410,6 +601,7 @@ export function ImpositionModal({
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
+                marginTop: "auto",
               }}
             >
               <p
@@ -451,8 +643,8 @@ export function ImpositionModal({
                 ))}
               </div>
               <button
-                onClick={onExport}
-                disabled={exportProgress !== null}
+                onClick={() => bestResult && onExport(bestResult, { w: selectedSheet.w, h: selectedSheet.h })}
+                disabled={exportProgress !== null || !bestResult}
                 style={{
                   width: "100%",
                   padding: "9px 0",
@@ -731,151 +923,6 @@ export function ImpositionModal({
                 </div>
               </div>
             </div>
-
-            {bestResult && bestResult.count > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <p
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: "rgba(240,237,232,0.28)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Optimized Result
-                </p>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 6,
-                  }}
-                >
-                  {[
-                    [
-                      "Cards / sheet",
-                      `${bestResult.count} (${bestResult.cols}×${bestResult.rows})`,
-                      "#e8ff47",
-                    ],
-                    [
-                      "Paper waste",
-                      `${bestResult.wastePercent.toFixed(1)}%`,
-                      bestResult.wastePercent < 20
-                        ? "#4ade80"
-                        : bestResult.wastePercent < 40
-                          ? "#f6ad55"
-                          : "#f87171",
-                    ],
-                    [
-                      "Total sheets",
-                      totalCards
-                        ? `${Math.ceil(totalCards / bestResult.count)} sheets`
-                        : "—",
-                      "rgba(240,237,232,0.7)",
-                    ],
-                    [
-                      "Gap H/V",
-                      `${bestResult.gene.gapX}×${bestResult.gene.gapY}px`,
-                      "rgba(240,237,232,0.5)",
-                    ],
-                  ].map(([label, value, color]) => (
-                    <div
-                      key={label as string}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 8,
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                      }}
-                    >
-                      <p
-                        style={{
-                          fontSize: 8,
-                          color: "rgba(240,237,232,0.3)",
-                          marginBottom: 3,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        {label}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: color as string,
-                        }}
-                      >
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 8,
-                    background: "rgba(232,255,71,0.04)",
-                    border: "1px solid rgba(232,255,71,0.15)",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 9,
-                      color: "rgba(240,237,232,0.4)",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    Margins: T{bestResult.gene.marginTop} R
-                    {bestResult.gene.marginRight} B
-                    {bestResult.gene.marginBottom} L{bestResult.gene.marginLeft}
-                    px
-                    {bestResult.gene.rotation === 1 && (
-                      <span style={{ color: "#63b3ed" }}>
-                        {" "}
-                        · Cards rotated 90°
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ) : gaRunning ? (
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <div style={{ textAlign: "center" }}>
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      border: "2px solid rgba(232,255,71,0.2)",
-                      borderTop: "2px solid #e8ff47",
-                      borderRadius: "50%",
-                      animation: "spin 0.7s linear infinite",
-                      margin: "0 auto 10px",
-                    }}
-                  />
-                  <p style={{ fontSize: 11, color: "rgba(240,237,232,0.3)" }}>
-                    Optimizing layout…
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 9,
-                      color: "rgba(240,237,232,0.15)",
-                      marginTop: 3,
-                    }}
-                  >
-                    Generation {gaGen} / 200
-                  </p>
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
       </div>

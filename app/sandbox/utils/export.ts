@@ -1,7 +1,49 @@
-import type { CanvasObject, CanvasSize, RowData, DataImageMap, ImageObject, TextField } from "../types";
+import type { CanvasObject, CanvasSize, RowData, DataImageMap, ImageObject, TextField, ImpositionResult } from "../types";
 import { resolveDataImageSrc } from "./data";
-import { shrinkFontSize, textShadowCSS, shadowCSS, loadScript, downloadBlob } from "./rendering";
+import { shrinkFontSize, loadScript, downloadBlob } from "./rendering";
 
+/** Load an image from a src URL and return it as an HTMLImageElement. */
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      // Retry without crossOrigin for data: URLs or local blobs
+      const retry = new Image();
+      retry.onload = () => resolve(retry);
+      retry.onerror = reject;
+      retry.src = src;
+    };
+    img.src = src;
+  });
+}
+
+/**
+ * Draw a rounded-rect clipping path.
+ */
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Render a single card directly to a canvas using the Canvas 2D API.
+ * No html2canvas — avoids cross-origin stylesheet and CSS color issues.
+ */
 export async function renderSingleCard(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
@@ -9,28 +51,23 @@ export async function renderSingleCard(
   rowIndex: number,
   dataImages: DataImageMap,
 ): Promise<HTMLCanvasElement> {
-  const page = document.createElement("div");
-  page.style.cssText = `position:fixed;top:-99999px;left:-99999px;width:${canvasSize.width}px;height:${canvasSize.height}px;overflow:hidden;background:#fff;`;
-  document.body.appendChild(page);
+  const SCALE = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasSize.width * SCALE;
+  canvas.height = canvasSize.height * SCALE;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(SCALE, SCALE);
 
-  const bgImg = objects.find(
-    (o) => o.kind === "image" && (o as ImageObject).isBackground,
-  ) as ImageObject | undefined;
-
-  if (bgImg) {
-    const img = document.createElement("img");
-    img.src = bgImg.src;
-    img.style.cssText = `position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:${bgImg.opacity};`;
-    page.appendChild(img);
-  }
+  // White background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
 
   const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
+
   for (const obj of sorted) {
     if (obj.kind === "image") {
       const imgObj = obj as ImageObject;
-      if (imgObj.isBackground) continue;
-      const img = document.createElement("img");
-      img.src = imgObj.isDataImage
+      const src = imgObj.isDataImage
         ? resolveDataImageSrc(
             imgObj.isDataImage,
             imgObj.dataImageColumn,
@@ -41,15 +78,66 @@ export async function renderSingleCard(
             dataImages,
           )
         : imgObj.src;
-      img.style.cssText = `position:absolute;left:${imgObj.x}px;top:${imgObj.y}px;width:${imgObj.width}px;height:${imgObj.height}px;opacity:${imgObj.opacity};object-fit:fill;border-radius:${imgObj.borderRadius ?? 0}px;box-sizing:border-box;${imgObj.border?.enabled ? `border:${imgObj.border.width}px ${imgObj.border.style} ${imgObj.border.color};` : ""}`;
-      if (imgObj.shadow.enabled)
-        img.style.filter = `drop-shadow(${shadowCSS(imgObj.shadow)})`;
-      page.appendChild(img);
+
+      let img: HTMLImageElement;
+      try {
+        img = await loadImage(src);
+      } catch {
+        continue; // skip broken images
+      }
+
+      const x = imgObj.isBackground ? 0 : imgObj.x;
+      const y = imgObj.isBackground ? 0 : imgObj.y;
+      const w = imgObj.isBackground ? canvasSize.width : imgObj.width;
+      const h = imgObj.isBackground ? canvasSize.height : imgObj.height;
+      const radius = imgObj.isBackground ? 0 : (imgObj.borderRadius ?? 0);
+
+      ctx.save();
+      ctx.globalAlpha = imgObj.opacity;
+
+      // Drop shadow
+      if (imgObj.shadow?.enabled) {
+        ctx.shadowOffsetX = imgObj.shadow.x;
+        ctx.shadowOffsetY = imgObj.shadow.y;
+        ctx.shadowBlur = imgObj.shadow.blur;
+        ctx.shadowColor = imgObj.shadow.color;
+      }
+
+      // Clip for border-radius
+      if (radius > 0) {
+        roundRectPath(ctx, x, y, w, h, radius);
+        ctx.clip();
+      }
+
+      ctx.drawImage(img, x, y, w, h);
+
+      // Reset shadow before drawing border
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+
+      // Border
+      if (imgObj.border?.enabled && imgObj.border.width > 0) {
+        const bw = imgObj.border.width;
+        ctx.strokeStyle = imgObj.border.color;
+        ctx.lineWidth = bw;
+        if (imgObj.border.style === "dashed") ctx.setLineDash([bw * 3, bw * 2]);
+        else if (imgObj.border.style === "dotted") ctx.setLineDash([bw, bw]);
+        else ctx.setLineDash([]);
+        roundRectPath(ctx, x + bw / 2, y + bw / 2, w - bw, h - bw, Math.max(0, radius - bw / 2));
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
     } else {
       const f = obj as TextField;
       const ti = rowIndex + f.columnOffset;
       const text =
         ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
+      if (!text) continue;
+
       const fs = shrinkFontSize(
         text,
         f.width,
@@ -59,54 +147,100 @@ export async function renderSingleCard(
         f.bold,
         f.italic,
       );
-      const span = document.createElement("div");
-      span.textContent = text;
-      span.style.cssText = [
-        `position:absolute;left:${f.x}px;top:${f.y}px;width:${f.width}px;height:${f.height}px;overflow:hidden;`,
-        `font-family:'${f.fontFamily}',serif;font-size:${fs}px;color:${f.color};`,
-        `font-weight:${f.bold ? "bold" : "normal"};font-style:${f.italic ? "italic" : "normal"};`,
-        `text-align:${f.textAlign};display:flex;align-items:center;`,
-        `justify-content:${f.textAlign === "right" ? "flex-end" : f.textAlign === "center" ? "center" : "flex-start"};`,
-        `padding:0 3px;white-space:nowrap;box-sizing:border-box;`,
-        f.shadow.enabled || (f.shadow.thickness && f.shadow.thickness > 0)
-          ? `text-shadow:${textShadowCSS(f.shadow)};`
-          : "",
-      ].join("");
-      page.appendChild(span);
+
+      ctx.save();
+      // Clip to text field bounds
+      ctx.beginPath();
+      ctx.rect(f.x, f.y, f.width, f.height);
+      ctx.clip();
+
+      const fontStyle = f.italic ? "italic" : "normal";
+      const fontWeight = f.bold ? "bold" : "normal";
+      ctx.font = `${fontStyle} ${fontWeight} ${fs}px '${f.fontFamily}', serif`;
+      ctx.fillStyle = f.color;
+
+      // Horizontal alignment
+      let textX = f.x + 3; // padding
+      if (f.textAlign === "center") {
+        ctx.textAlign = "center";
+        textX = f.x + f.width / 2;
+      } else if (f.textAlign === "right") {
+        ctx.textAlign = "right";
+        textX = f.x + f.width - 3;
+      } else {
+        ctx.textAlign = "left";
+      }
+
+      // Vertical center
+      ctx.textBaseline = "middle";
+      const textY = f.y + f.height / 2;
+
+      // Text shadow / stroke outline (thickness)
+      if (f.shadow.thickness && f.shadow.thickness > 0) {
+        ctx.strokeStyle = f.shadow.color;
+        ctx.lineWidth = f.shadow.thickness * 2;
+        ctx.lineJoin = "round";
+        ctx.strokeText(text, textX, textY);
+      }
+      if (f.shadow.enabled) {
+        ctx.shadowOffsetX = f.shadow.x;
+        ctx.shadowOffsetY = f.shadow.y;
+        ctx.shadowBlur = f.shadow.blur;
+        ctx.shadowColor = f.shadow.color;
+      }
+
+      ctx.fillText(text, textX, textY);
+      ctx.restore();
     }
   }
 
-  const imgs = page.querySelectorAll("img");
-  await Promise.all(
-    Array.from(imgs).map((img) =>
-      img.complete
-        ? Promise.resolve()
-        : new Promise((r) => {
-            img.onload = r;
-            img.onerror = r;
-          }),
-    ),
-  );
+  return canvas;
+}
 
-  const h2c = await loadScript(
-    "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
-    "html2canvas",
-  );
-  const resultCanvas = await h2c(page, {
-    useCORS: true,
-    allowTaint: true,
-    scale: 2,
-    width: canvasSize.width,
-    height: canvasSize.height,
-    x: 0,
-    y: 0,
-    scrollX: 0,
-    scrollY: 0,
-    backgroundColor: "#ffffff",
-  });
+/**
+ * Render a single imposition sheet canvas by compositing pre-rendered card
+ * canvases according to the GA layout result.
+ */
+function renderImpositionSheet(
+  cardCanvases: HTMLCanvasElement[],
+  layout: ImpositionResult,
+  sheetW: number,
+  sheetH: number,
+): HTMLCanvasElement {
+  const scale = 2;
+  const sheet = document.createElement("canvas");
+  sheet.width = sheetW * scale;
+  sheet.height = sheetH * scale;
+  const ctx = sheet.getContext("2d")!;
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, sheetW, sheetH);
 
-  document.body.removeChild(page);
-  return resultCanvas;
+  const isRotated = layout.gene.rotation === 1;
+  const cardW = layout.cardW;
+  const cardH = layout.cardH;
+
+  for (let i = 0; i < cardCanvases.length; i++) {
+    const col = i % layout.cols;
+    const row = Math.floor(i / layout.cols);
+    const x = layout.offsetX + col * (cardW + layout.gene.gapX);
+    const y = layout.offsetY + row * (cardH + layout.gene.gapY);
+
+    ctx.save();
+    if (isRotated) {
+      // The card was rendered at its original (unrotated) size.
+      // cardW/cardH in the layout are already swapped for rotation,
+      // so we rotate the original canvas into the rotated slot.
+      ctx.translate(x + cardW, y);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(cardCanvases[i], 0, 0, cardH, cardW);
+    } else {
+      ctx.drawImage(cardCanvases[i], x, y, cardW, cardH);
+    }
+    ctx.restore();
+  }
+
+  return sheet;
 }
 
 export async function exportRecords(
@@ -115,45 +249,79 @@ export async function exportRecords(
   canvasSize: CanvasSize,
   rows: RowData[],
   dataImages: DataImageMap,
+  layout: ImpositionResult,
+  sheet: { w: number; h: number },
   onProgress: (pct: number) => void,
 ) {
   if (!rows.length) rows = [{}];
   onProgress(5);
-  const totalRows = rows.length;
+
+  const totalCards = rows.length;
+  const cardsPerSheet = layout.count;
+  const totalSheets = Math.ceil(totalCards / cardsPerSheet);
+
+  // Pre-render all individual cards
+  const cardCanvases: HTMLCanvasElement[] = [];
+  for (let i = 0; i < totalCards; i++) {
+    cardCanvases.push(
+      await renderSingleCard(objects, canvasSize, rows, i, dataImages),
+    );
+    onProgress(Math.round(5 + (i / totalCards) * 45));
+  }
 
   if (format === "PNG") {
-    for (let i = 0; i < totalRows; i++) {
-      const cv = await renderSingleCard(objects, canvasSize, rows, i, dataImages);
-      await new Promise<void>((resolve) =>
-        cv.toBlob((blob) => {
-          if (blob) downloadBlob(blob, `record_${i + 1}.png`);
-          resolve();
-        }, "image/png"),
+    const JSZip = await loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+      "JSZip",
+    );
+    const zip = new JSZip();
+
+    for (let s = 0; s < totalSheets; s++) {
+      const startIdx = s * cardsPerSheet;
+      const endIdx = Math.min(startIdx + cardsPerSheet, totalCards);
+      const sheetCards = cardCanvases.slice(startIdx, endIdx);
+      const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
+
+      const blob = await new Promise<Blob>((resolve) =>
+        sheetCanvas.toBlob((b) => resolve(b!), "image/png"),
       );
-      onProgress(Math.round(10 + (i / totalRows) * 90));
+      zip.file(`sheet_${s + 1}.png`, blob);
+      onProgress(Math.round(50 + ((s + 1) / totalSheets) * 45));
     }
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    downloadBlob(zipBlob, "templify_export.zip");
   } else if (format === "PDF") {
     const jsPDF = await loadScript(
       "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
       "jspdf",
     );
     const { jsPDF: JsPDF } = jsPDF;
-    const pW = canvasSize.width * 0.264583;
-    const pH = canvasSize.height * 0.264583;
+    const pxToMm = 0.264583;
+    const pW = sheet.w * pxToMm;
+    const pH = sheet.h * pxToMm;
     let pdf: any = null;
-    for (let i = 0; i < totalRows; i++) {
-      const cv = await renderSingleCard(objects, canvasSize, rows, i, dataImages);
-      const imgData = cv.toDataURL("image/png");
-      if (!pdf)
+
+    for (let s = 0; s < totalSheets; s++) {
+      const startIdx = s * cardsPerSheet;
+      const endIdx = Math.min(startIdx + cardsPerSheet, totalCards);
+      const sheetCards = cardCanvases.slice(startIdx, endIdx);
+      const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
+      const imgData = sheetCanvas.toDataURL("image/png");
+
+      if (!pdf) {
         pdf = new JsPDF({
           orientation: pW > pH ? "l" : "p",
           unit: "mm",
           format: [pW, pH],
         });
-      else pdf.addPage([pW, pH], pW > pH ? "l" : "p");
+      } else {
+        pdf.addPage([pW, pH], pW > pH ? "l" : "p");
+      }
       pdf.addImage(imgData, "PNG", 0, 0, pW, pH);
-      onProgress(Math.round(10 + (i / totalRows) * 88));
+      onProgress(Math.round(50 + ((s + 1) / totalSheets) * 45));
     }
+
     if (pdf) pdf.save("templify_export.pdf");
   }
   onProgress(100);

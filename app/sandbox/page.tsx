@@ -7,6 +7,7 @@ import type {
   DataImageMap,
   ImageObject,
   TextField,
+  ImpositionResult,
 } from "./types/index";
 import {
   DEFAULT_SHADOW,
@@ -1060,7 +1061,7 @@ export default function TemplifyEditor() {
     [layerDraggingId, setObjects],
   );
 
-  const doExport = useCallback(async () => {
+  const doExport = useCallback(async (layout: ImpositionResult, sheet: { w: number; h: number }) => {
     if (exportProgress !== null) return;
     setExportProgress(0);
     try {
@@ -1070,6 +1071,8 @@ export default function TemplifyEditor() {
         canvasSize,
         rows,
         dataImages,
+        layout,
+        sheet,
         (pct) => setExportProgress(pct),
       );
     } catch (err: any) {
