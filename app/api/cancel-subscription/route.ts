@@ -2,7 +2,6 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getStripeClient_exported } from '@/lib/payments/stripe';
 
 export async function POST(req: NextRequest) {
   // CSRF: verify Origin header
@@ -25,27 +24,6 @@ export async function POST(req: NextRequest) {
 
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
   if (profile.plan === 'free') return NextResponse.json({ error: 'No active subscription' }, { status: 400 });
-  if (profile.payment_gateway !== 'stripe') {
-    return NextResponse.json({ error: 'PayMongo subscriptions expire automatically — no cancellation needed' }, { status: 400 });
-  }
-  if (!profile.gateway_subscription_id) {
-    return NextResponse.json({ error: 'No subscription ID found' }, { status: 400 });
-  }
 
-  try {
-    const stripe = getStripeClient_exported();
-    // Use subscription ID from DB — never from request body
-    const subscription = await stripe.subscriptions.update(
-      profile.gateway_subscription_id,
-      { cancel_at_period_end: true },
-    );
-
-    return NextResponse.json({
-      success: true,
-      // cancel_at is set by Stripe when cancel_at_period_end is true
-      cancelsAt: (subscription as any).cancel_at ?? null,
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? 'Cancellation failed' }, { status: 500 });
-  }
+  return NextResponse.json({ error: 'PayMongo subscriptions expire automatically — no cancellation needed' }, { status: 400 });
 }

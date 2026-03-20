@@ -1,13 +1,15 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { retrieveCheckoutSession } from '@/lib/payments/paymongo';
 import { getPlanExpiry, type PlanKey } from '@/lib/config/pricing';
 
-const VALID_PLANS: PlanKey[] = ['pro_monthly', 'pro_quarterly', 'pro_annual'];
+const VALID_PLANS: PlanKey[] = [
+  'pro_monthly', 'pro_quarterly', 'pro_annual',
+  'biz_monthly', 'biz_quarterly', 'biz_annual',
+];
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -91,57 +93,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ plan });
 
-  } else if (gateway === 'stripe') {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-
-    const stripe = new Stripe(key);
-    let session: Stripe.Checkout.Session;
-    try {
-      session = await stripe.checkout.sessions.retrieve(sessionId);
-    } catch {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-    }
-
-    if (session.payment_status !== 'paid') {
-      return NextResponse.json({ plan: 'free', status: session.payment_status });
-    }
-
-    const metadata = session.metadata ?? {};
-    const plan = metadata.plan as string;
-    const metaUserId = metadata.user_id as string;
-
-    if (!plan || !VALID_PLANS.includes(plan as PlanKey)) {
-      return NextResponse.json({ error: 'Invalid plan in session' }, { status: 400 });
-    }
-
-    if (metaUserId !== user.id) {
-      return NextResponse.json({ error: 'Session does not belong to user' }, { status: 403 });
-    }
-
-    // Insert payment record
-    await admin.from('payments').insert({
-      user_id: user.id,
-      gateway: 'stripe',
-      gateway_payment_id: sessionId,
-      gateway_subscription_id: session.subscription as string ?? null,
-      amount: session.amount_total ?? 0,
-      currency: 'USD',
-      plan: plan as Exclude<PlanKey, 'free'>,
-      status: 'succeeded',
-      metadata: { verified_via: 'client_fallback' },
-    });
-
-    // Update profile
-    await admin.from('profiles').update({
-      plan,
-      plan_expires_at: getPlanExpiry(plan as PlanKey).toISOString(),
-      payment_gateway: 'stripe',
-      gateway_customer_id: session.customer as string ?? null,
-      gateway_subscription_id: session.subscription as string ?? null,
-    }).eq('id', user.id);
-
-    return NextResponse.json({ plan });
   }
 
   return NextResponse.json({ error: 'Unknown gateway' }, { status: 400 });

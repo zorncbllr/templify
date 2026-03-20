@@ -64,6 +64,9 @@ import {
   IconRotate,
   IconSettings,
   IconLogOut,
+  IconWarning,
+  IconCheck,
+  IconCrown,
 } from "@/components/Icons";
 import { signOut } from "@/lib/auth/actions";
 import { ChevronUpIcon } from "lucide-react";
@@ -150,8 +153,13 @@ interface EditorProps {
   initialDataFileName?: string | null;
   initialDataImagesLabel?: string | null;
   initialDataImages?: DataImageMap;
+  initialProjectName?: string;
   watermark?: boolean;
   onSave?: (state: { objects: CanvasObject[]; canvasSize: CanvasSize }) => void;
+  onDataImagesUpload?: (files: FileList) => Promise<DataImageMap>;
+  onDataImagesClear?: () => Promise<void>;
+  maxPhotoColumns?: number;
+  maxRows?: number;
   projectId?: string | null;
   user?: { plan: string; displayName?: string } | null;
 }
@@ -164,12 +172,19 @@ export default function Editor({
   initialDataFileName,
   initialDataImagesLabel,
   initialDataImages,
+  initialProjectName,
   watermark = true,
   onSave,
+  onDataImagesUpload,
+  onDataImagesClear,
+  maxPhotoColumns,
+  maxRows,
   projectId,
   user,
 }: EditorProps = {}) {
   const [mounted, setMounted] = useState(false);
+  const [projectName, setProjectName] = useState(initialProjectName ?? "");
+  const projectNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Unified undo/redo for objects + canvasSize ───────────────────────────
   const {
@@ -251,6 +266,51 @@ export default function Editor({
     }, 800);
   }, [editorState, onSave]);
 
+  // ─── Debounced project name save ─────────────────────────────────────────
+  const handleProjectNameChange = useCallback(
+    (name: string) => {
+      setProjectName(name);
+      if (!projectId) return;
+      if (projectNameTimerRef.current) clearTimeout(projectNameTimerRef.current);
+      projectNameTimerRef.current = setTimeout(async () => {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("projects")
+            .update({ name })
+            .eq("id", projectId);
+        } catch {
+          // Silently fail — name will persist on next full save
+        }
+      }, 800);
+    },
+    [projectId],
+  );
+
+  // ─── Upgrade checkout from row-limit modal ──────────────────────────────
+  const handleUpgradeCheckout = useCallback(
+    async (planKey: string) => {
+      setUpgradeCheckoutLoading(planKey);
+      setUpgradeCheckoutError(null);
+      try {
+        const res = await fetch("/api/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: planKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        sessionStorage.setItem("checkout_session_id", data.sessionId);
+        window.location.href = data.checkoutUrl;
+      } catch (err: any) {
+        setUpgradeCheckoutError(err.message ?? "Something went wrong");
+        setUpgradeCheckoutLoading(null);
+      }
+    },
+    [],
+  );
+
   // ─── Multi-select state ───────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [primaryId, setPrimaryId] = useState<number | null>(null);
@@ -320,6 +380,22 @@ export default function Editor({
   );
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [rowLimitPrompt, setRowLimitPrompt] = useState<{
+    totalRows: number;
+    file: File;
+    columns: string[];
+    rows: RowData[];
+    imgCols: string[];
+  } | null>(null);
+  const [upgradeBillingCycle, setUpgradeBillingCycle] = useState<
+    "monthly" | "quarterly" | "annual"
+  >("monthly");
+  const [upgradeCheckoutLoading, setUpgradeCheckoutLoading] = useState<
+    string | null
+  >(null);
+  const [upgradeCheckoutError, setUpgradeCheckoutError] = useState<
+    string | null
+  >(null);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
   const [dataImages, setDataImages] = useState<DataImageMap>(
     initialDataImages ?? {},
@@ -681,6 +757,21 @@ export default function Editor({
   const addDataPhotoObjectRef = useRef<(column: string) => void>(() => {});
   const addDataPhotoObject = useCallback(
     (column: string) => {
+      // Check photo column limit
+      if (maxPhotoColumns != null) {
+        const usedColumns = new Set(
+          objectsRef.current
+            .filter((o) => o.kind === "image" && (o as ImageObject).isDataImage)
+            .map((o) => (o as ImageObject).dataImageColumn),
+        );
+        if (!usedColumns.has(column) && usedColumns.size >= maxPhotoColumns) {
+          setDataError(
+            `Photo column limit reached (${maxPhotoColumns}). Upgrade your plan for more.`,
+          );
+          return;
+        }
+      }
+
       const W = Math.round(canvasSize.width * 0.3);
       const H = Math.round(W * 1.2);
       const existing = objectsRef.current.filter(
@@ -714,30 +805,22 @@ export default function Editor({
       selectOne(obj.id);
       setRightTab("style");
     },
-    [canvasSize, setObjects, selectOne],
+    [canvasSize, setObjects, selectOne, maxPhotoColumns],
   );
   addDataPhotoObjectRef.current = addDataPhotoObject;
 
-  const handleDataFile = async (file: File) => {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!["xlsx", "xls", "csv", "tsv"].includes(ext || "")) {
-      setDataError("Please upload XLSX, XLS, CSV, or TSV.");
-      return;
-    }
-    setDataLoading(true);
-    setDataError(null);
-    try {
-      const { columns: cols, rows: rd } = await parseSpreadsheet(file);
-      if (!cols.length) {
-        setDataError("No columns detected.");
-        setDataLoading(false);
-        return;
-      }
-      const imgCols = detectImageColumns(rd, cols);
+  const applyDataFile = useCallback(
+    (
+      file: File,
+      cols: string[],
+      rd: RowData[],
+      imgCols: string[],
+      truncate?: boolean,
+    ) => {
+      const appliedRows = truncate && maxRows ? rd.slice(0, maxRows) : rd;
       setAutoDetectedImageColumns(imgCols);
       setColumns(cols);
-      const limitedRd = user?.plan === "free" ? rd.slice(0, 25) : rd;
-      setRows(limitedRd);
+      setRows(appliedRows);
       setDataFileName(file.name);
       setPageIndex(0);
       setObjects((p) =>
@@ -758,6 +841,41 @@ export default function Editor({
           });
         }, 0);
       }
+    },
+    [maxRows, setObjects],
+  );
+
+  const handleDataFile = async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!["xlsx", "xls", "csv", "tsv"].includes(ext || "")) {
+      setDataError("Please upload XLSX, XLS, CSV, or TSV.");
+      return;
+    }
+    setDataLoading(true);
+    setDataError(null);
+    try {
+      const { columns: cols, rows: rd } = await parseSpreadsheet(file);
+      if (!cols.length) {
+        setDataError("No columns detected.");
+        setDataLoading(false);
+        return;
+      }
+      const imgCols = detectImageColumns(rd, cols);
+
+      // Check row limit
+      if (maxRows && rd.length > maxRows) {
+        setRowLimitPrompt({
+          totalRows: rd.length,
+          file,
+          columns: cols,
+          rows: rd,
+          imgCols,
+        });
+        setDataLoading(false);
+        return;
+      }
+
+      applyDataFile(file, cols, rd, imgCols);
     } catch (err: any) {
       setDataError(`Parse error: ${err?.message || "Unknown"}`);
     }
@@ -770,28 +888,40 @@ export default function Editor({
     );
     if (!imageFiles.length) return;
     setDataImagesLoading(true);
-    const map: DataImageMap = {};
-    await Promise.all(
-      imageFiles.map(
-        (f) =>
-          new Promise<void>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const src = e.target?.result as string;
-              map[f.name.toLowerCase()] = src;
-              map[normalizeImageKey(f.name)] = src;
-              resolve();
-            };
-            reader.readAsDataURL(f);
-          }),
-      ),
-    );
-    setDataImages(map);
-    setDataImagesLabel(
-      `${imageFiles.length} photo${imageFiles.length === 1 ? "" : "s"}`,
-    );
+
+    try {
+      if (onDataImagesUpload) {
+        // Persistent mode: upload to Supabase Storage
+        const map = await onDataImagesUpload(files);
+        setDataImages(map);
+      } else {
+        // Sandbox/demo mode: in-memory only
+        const map: DataImageMap = {};
+        await Promise.all(
+          imageFiles.map(
+            (f) =>
+              new Promise<void>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                  const src = e.target?.result as string;
+                  map[f.name.toLowerCase()] = src;
+                  map[normalizeImageKey(f.name)] = src;
+                  resolve();
+                };
+                reader.readAsDataURL(f);
+              }),
+          ),
+        );
+        setDataImages(map);
+      }
+      setDataImagesLabel(
+        `${imageFiles.length} photo${imageFiles.length === 1 ? "" : "s"}`,
+      );
+    } catch (err: any) {
+      setDataError(err.message ?? "Failed to upload images");
+    }
     setDataImagesLoading(false);
-  }, []);
+  }, [onDataImagesUpload]);
 
   // ─── addImage ─────────────────────────────────────────────────────────────
   // When a new background image is added we:
@@ -1363,6 +1493,192 @@ export default function Editor({
         />
       )}
 
+      {/* Row limit exceeded prompt */}
+      {rowLimitPrompt && (() => {
+        const userTier = !user?.plan || user.plan === "free" ? "free" : user.plan.startsWith("biz_") ? "business" : "pro";
+        const UPGRADE_PLANS = [
+          ...(userTier === "free" ? [{
+            tier: "pro" as const,
+            name: "Pro",
+            description: "For individuals and small teams",
+            rows: "100 rows",
+            features: ["Unlimited projects", "100 rows per export", "3 photo columns", "2GB storage", "No watermark"],
+            prefix: "pro",
+            pricing: {
+              monthly: "₱199",
+              quarterly: "₱499",
+              annual: "₱1,699",
+            },
+            savings: { monthly: null as string | null, quarterly: "Save ₱98", annual: "Save 3 months" },
+          }] : []),
+          ...(userTier !== "business" ? [{
+            tier: "business" as const,
+            name: "Business",
+            description: "For organizations and power users",
+            rows: "1,000 rows",
+            features: ["Unlimited projects", "1,000 rows per export", "5 photo columns", "10GB storage", "No watermark", "Priority support"],
+            prefix: "biz",
+            pricing: {
+              monthly: "₱799",
+              quarterly: "₱1,999",
+              annual: "₱6,999",
+            },
+            savings: { monthly: null as string | null, quarterly: "Save ₱398", annual: "Save 3 months" },
+          }] : []),
+        ];
+        const periods = { monthly: "month", quarterly: "quarter", annual: "year" } as const;
+
+        return (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-app-bg border border-white/[0.07] rounded-2xl shadow-2xl w-[680px] max-w-[95vw] overflow-hidden">
+              {/* Header */}
+              <div className="px-8 pt-8 pb-5">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-app-warn/10 flex items-center justify-center shrink-0">
+                      <IconWarning size={20} className="text-app-warn" />
+                    </div>
+                    <div>
+                      <h3 className="text-[16px] font-bold text-app-text m-0">
+                        Row Limit Exceeded
+                      </h3>
+                      <p className="text-[12px] text-app-text/40 m-0 mt-1">
+                        Your file has <span className="font-semibold text-app-text/70">{rowLimitPrompt.totalRows.toLocaleString()}</span> rows but your plan allows <span className="font-semibold text-app-text/70">{maxRows?.toLocaleString()}</span>.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setRowLimitPrompt(null);
+                      setUpgradeCheckoutError(null);
+                    }}
+                    className="w-7 h-7 rounded-lg bg-transparent border border-white/[0.08] text-app-text/40 cursor-pointer flex items-center justify-center hover:bg-white/[0.04] transition-colors"
+                  >
+                    <IconClose size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Billing cycle toggle */}
+              <div className="px-8 pb-5">
+                <div className="flex gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1 w-fit">
+                  {(["monthly", "quarterly", "annual"] as const).map((cycle) => (
+                    <button
+                      key={cycle}
+                      onClick={() => setUpgradeBillingCycle(cycle)}
+                      className={`text-[11px] font-semibold px-4 py-1.5 rounded-lg border-none cursor-pointer transition-all capitalize ${
+                        upgradeBillingCycle === cycle
+                          ? "bg-app-accent text-app-bg"
+                          : "bg-transparent text-app-text/40 hover:text-app-text/60"
+                      }`}
+                    >
+                      {cycle}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Error banner */}
+              {upgradeCheckoutError && (
+                <div className="mx-8 mb-4 flex items-center gap-2 px-3 py-2 bg-red-500/[0.07] border border-red-500/20 rounded-lg">
+                  <IconWarning size={12} />
+                  <span className="text-[11px] text-red-400">{upgradeCheckoutError}</span>
+                </div>
+              )}
+
+              {/* Plan cards */}
+              <div className={`px-8 pb-6 grid gap-4 ${UPGRADE_PLANS.length > 1 ? "grid-cols-2" : "grid-cols-1 max-w-[340px] mx-auto"}`}>
+                {UPGRADE_PLANS.map((plan) => {
+                  const price = plan.pricing[upgradeBillingCycle];
+                  const saving = plan.savings[upgradeBillingCycle];
+                  const planKey = `${plan.prefix}_${upgradeBillingCycle}`;
+                  const isLoading = upgradeCheckoutLoading === planKey;
+                  const isBiz = plan.tier === "business";
+
+                  return (
+                    <div
+                      key={plan.tier}
+                      className={`relative rounded-2xl p-6 flex flex-col transition-all ${
+                        isBiz
+                          ? "bg-app-accent/[0.04] border border-app-accent/20"
+                          : "bg-white/[0.025] border border-white/[0.07]"
+                      }`}
+                    >
+                      {isBiz && (
+                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-app-accent text-app-bg text-[9px] font-extrabold px-2.5 py-0.5 rounded-full tracking-[0.08em] uppercase whitespace-nowrap">
+                          Best Value
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <IconCrown size={12} color={isBiz ? "var(--app-accent)" : "rgba(240,237,232,0.4)"} />
+                        <span className={`text-[10px] font-bold tracking-widest uppercase ${isBiz ? "text-app-accent" : "text-app-text/40"}`}>
+                          {plan.name}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-app-text/40 mb-4 m-0">
+                        {plan.description}
+                      </p>
+                      <div className="mb-0.5">
+                        <span className="text-3xl font-extrabold text-app-text">{price}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-5">
+                        <span className="text-[12px] text-app-text/35">/ {periods[upgradeBillingCycle]}</span>
+                        {saving && (
+                          <span className="text-[9px] font-semibold text-app-accent bg-app-accent/12 px-1.5 py-0.5 rounded">
+                            {saving}
+                          </span>
+                        )}
+                      </div>
+                      <ul className="list-none p-0 m-0 mb-auto space-y-2">
+                        {plan.features.map((f) => (
+                          <li key={f} className="flex items-center gap-2 text-[11px] text-app-text/70">
+                            <span className={`shrink-0 ${isBiz ? "text-app-accent" : "text-app-text/30"}`}>
+                              <IconCheck size={11} />
+                            </span>
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        onClick={() => handleUpgradeCheckout(planKey)}
+                        disabled={upgradeCheckoutLoading !== null}
+                        className={`mt-5 w-full py-2.5 border-none rounded-lg text-[12px] font-bold transition-all ${
+                          isBiz
+                            ? "bg-app-accent text-app-bg hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)]"
+                            : "bg-white/[0.06] text-app-text hover:bg-white/10"
+                        }`}
+                        style={{
+                          cursor: upgradeCheckoutLoading !== null ? "not-allowed" : "pointer",
+                          opacity: upgradeCheckoutLoading !== null && !isLoading ? 0.5 : 1,
+                        }}
+                      >
+                        {isLoading ? "Redirecting..." : `Upgrade to ${plan.name}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="px-8 py-4 border-t border-white/[0.06] flex items-center justify-between">
+                <p className="text-[11px] text-app-text/30 m-0">
+                  Reduce rows in your spreadsheet to stay on your current plan.
+                </p>
+                <button
+                  onClick={() => {
+                    setRowLimitPrompt(null);
+                    setUpgradeCheckoutError(null);
+                  }}
+                  className="px-4 py-2 rounded-lg text-[11px] font-semibold cursor-pointer bg-transparent border border-white/[0.08] text-app-text/50 hover:bg-white/[0.04] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <header className="flex items-center justify-between px-4 h-[50px] border-b border-border/60 bg-app-bg-deep shrink-0 z-20">
         <div className="flex items-center gap-2.5">
@@ -1378,6 +1694,18 @@ export default function Editor({
             </span>
           </a>
           <div className="w-px h-[18px] bg-[rgba(255,255,255,0.08)]" />
+          {projectId && (
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => handleProjectNameChange(e.target.value)}
+              placeholder="Untitled Project"
+              className="bg-transparent border-none outline-none text-[13px] text-app-text/70 font-medium w-[160px] px-1.5 py-0.5 rounded-md hover:bg-white/[0.04] focus:bg-white/[0.06] focus:text-app-text placeholder:text-app-text/25 transition-colors"
+            />
+          )}
+          {projectId && (
+            <div className="w-px h-[18px] bg-[rgba(255,255,255,0.08)]" />
+          )}
           <div className="flex gap-0.5">
             <button
               className="undob w-7 h-7 rounded-md bg-transparent border border-[rgba(255,255,255,0.08)] text-[rgba(240,237,232,0.55)] text-[13px] cursor-pointer flex items-center justify-center"
@@ -1638,7 +1966,8 @@ export default function Editor({
             objects={objects}
             onUpload={handleDataImagesUpload}
             onClear={() => {
-              setDataImages({});
+              if (onDataImagesClear) onDataImagesClear();
+              else setDataImages({});
               setDataImagesLabel(null);
             }}
             onPlacePhoto={addDataPhotoObject}

@@ -3,13 +3,26 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { signOut } from "@/lib/auth/actions";
-import { IconUser, IconCrown, IconLogOut } from "@/components/Icons";
+import Link from "next/link";
+import {
+  IconUser,
+  IconCrown,
+  IconLogOut,
+  IconWarning,
+} from "@/components/Icons";
+import { getPlanTier, getPlanLimits } from "@/lib/config/pricing";
 import type { Profile } from "@/lib/types/database";
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`;
+}
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [locale, setLocale] = useState<"ph" | "intl">("intl");
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelStatus, setCancelStatus] = useState<
     "idle" | "loading" | "done" | "error"
@@ -25,21 +38,10 @@ export default function SettingsPage() {
       .then(({ data }) => {
         if (data) {
           setProfile(data as Profile);
-          setLocale(data.locale ?? "intl");
         }
         setLoading(false);
       });
   }, []);
-
-  async function handleLocaleChange(newLocale: "ph" | "intl") {
-    setLocale(newLocale);
-    const supabase = createClient();
-    await supabase
-      .from("profiles")
-      .update({ locale: newLocale })
-      .eq("id", profile!.id);
-    setProfile((p) => (p ? { ...p, locale: newLocale } : p));
-  }
 
   async function handleCancelSubscription() {
     setCancelStatus("loading");
@@ -62,239 +64,131 @@ export default function SettingsPage() {
     }
   }
 
-  const isPro = profile?.plan && profile.plan !== "free";
-  const isStripe = profile?.payment_gateway === "stripe";
+  const plan = profile?.plan ?? "free";
+  const tier = getPlanTier(plan);
+  const isPaid = tier !== "free";
+  const limits = getPlanLimits(plan);
   const expiryDate = profile?.plan_expires_at
     ? new Date(profile.plan_expires_at).toLocaleDateString()
     : null;
-  const planLabel = profile?.plan
-    ? profile.plan
-        .replace("pro_", "Pro ")
-        .replace("monthly", "Monthly")
-        .replace("quarterly", "Quarterly")
-        .replace("annual", "Annual")
-    : "Free";
+
+  const planLabel =
+    tier === "free"
+      ? "Free"
+      : tier === "business"
+        ? plan
+            .replace("biz_", "Business ")
+            .replace("monthly", "Monthly")
+            .replace("quarterly", "Quarterly")
+            .replace("annual", "Annual")
+        : plan
+            .replace("pro_", "Pro ")
+            .replace("monthly", "Monthly")
+            .replace("quarterly", "Quarterly")
+            .replace("annual", "Annual");
+
+  const storageUsed = profile?.storage_used ?? 0;
+  const storageCap = limits.storageBytes;
+  const storagePercent = Math.min(
+    100,
+    Math.round((storageUsed / storageCap) * 100),
+  );
 
   if (loading) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "60vh",
-          color: "rgba(240,237,232,0.4)",
-          fontSize: 13,
-        }}
-      >
+      <div className="flex items-center justify-center h-[60vh] text-app-text/40 text-sm">
         Loading...
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        maxWidth: 600,
-        margin: "0 auto",
-        padding: "40px 24px",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          color: "#f0ede8",
-          marginBottom: 32,
-        }}
-      >
-        Settings
-      </h1>
+    <div className="max-w-160 mx-auto px-6 py-12">
+      {/* Header */}
+      <div className="mb-10">
+        <h1 className="text-2xl font-bold tracking-tight mb-1">Settings</h1>
+        <p className="text-sm text-app-text/40">
+          Manage your account and subscription.
+        </p>
+      </div>
 
-      {/* Profile section */}
-      <section
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 12,
-          padding: "24px",
-          marginBottom: 20,
-        }}
-      >
-        <p
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            marginBottom: 16,
-          }}
-        >
+      {/* Account section */}
+      <section className="bg-white/2.5 border border-white/[0.07] rounded-2xl p-6 mb-5">
+        <p className="text-[11px] font-bold text-app-text/30 tracking-widest uppercase mb-5">
           Account
         </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="flex items-center gap-4">
           {profile?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.avatar_url}
               alt="avatar"
-              width={40}
-              height={40}
-              style={{ borderRadius: "50%" }}
+              width={44}
+              height={44}
+              className="rounded-full ring-1 ring-white/10"
             />
           ) : (
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.08)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "rgba(240,237,232,0.4)",
-              }}
-            >
+            <div className="w-11 h-11 rounded-full bg-white/6 flex items-center justify-center text-app-text/40">
               <IconUser size={20} />
             </div>
           )}
           <div>
-            <p
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#f0ede8",
-                margin: 0,
-              }}
-            >
+            <p className="text-[15px] font-semibold m-0">
               {profile?.full_name ?? "Unknown"}
             </p>
-            <p
-              style={{
-                fontSize: 12,
-                color: "rgba(240,237,232,0.45)",
-                margin: 0,
-              }}
-            >
+            <p className="text-[13px] text-app-text/45 m-0">
               {profile?.email}
             </p>
           </div>
         </div>
       </section>
 
-      {/* Plan section */}
-      <section
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 12,
-          padding: "24px",
-          marginBottom: 20,
-        }}
-      >
-        <p
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            marginBottom: 16,
-          }}
-        >
+      {/* Subscription section */}
+      <section className="bg-white/2.5 border border-white/[0.07] rounded-2xl p-6 mb-5">
+        <p className="text-[11px] font-bold text-app-text/30 tracking-widest uppercase mb-5">
           Subscription
         </p>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {isPro && <IconCrown size={16} color="#e8ff47" />}
-            <span style={{ fontSize: 15, fontWeight: 600, color: "#f0ede8" }}>
-              {planLabel}
-            </span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            {isPaid && <IconCrown size={16} color="var(--app-accent)" />}
+            <span className="text-base font-semibold">{planLabel}</span>
           </div>
-          {!isPro && (
-            <a
+          {!isPaid && (
+            <Link
               href="/pricing"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "#e8ff47",
-                textDecoration: "none",
-                padding: "6px 14px",
-                background: "rgba(232,255,71,0.1)",
-                borderRadius: 6,
-                border: "1px solid rgba(232,255,71,0.2)",
-              }}
+              className="text-xs font-semibold text-app-accent no-underline px-3.5 py-1.5 bg-app-accent/10 rounded-lg border border-app-accent/20 transition-all hover:bg-app-accent/15"
             >
-              Upgrade to Pro
-            </a>
+              Upgrade
+            </Link>
           )}
         </div>
 
-        {isPro && expiryDate && (
-          <p
-            style={{
-              fontSize: 12,
-              color: "rgba(240,237,232,0.45)",
-              margin: "0 0 12px",
-            }}
-          >
-            {isStripe ? "Renews" : "Expires"} on {expiryDate}
+        {isPaid && expiryDate && (
+          <p className="text-[13px] text-app-text/45 mb-3">
+            Expires on {expiryDate}
           </p>
         )}
 
-        {isPro && isStripe && cancelStatus === "idle" && !cancelConfirm && (
+        {isPaid && !cancelConfirm && cancelStatus !== "done" && (
           <button
             onClick={() => setCancelConfirm(true)}
-            style={{
-              fontSize: 12,
-              color: "rgba(220,60,60,0.7)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              textDecoration: "underline",
-            }}
+            className="text-xs text-red-400/70 bg-transparent border-none cursor-pointer p-0 underline hover:text-red-400 transition-colors"
           >
             Cancel subscription
           </button>
         )}
 
         {cancelConfirm && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: "16px",
-              background: "rgba(220,60,60,0.07)",
-              border: "1px solid rgba(220,60,60,0.2)",
-              borderRadius: 8,
-            }}
-          >
-            <p style={{ fontSize: 13, color: "#f0ede8", marginBottom: 12 }}>
-              Your Pro features will remain active until {expiryDate}. After
-              that you&apos;ll return to the free plan.
+          <div className="mt-3 p-4 bg-red-500/6 border border-red-500/15 rounded-xl">
+            <p className="text-[13px] text-app-text mb-3">
+              Your features will remain active until {expiryDate}. After that
+              you&apos;ll return to the free plan.
             </p>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="flex gap-2">
               <button
                 onClick={handleCancelSubscription}
                 disabled={cancelStatus === "loading"}
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "#fff",
-                  background: "rgba(220,60,60,0.6)",
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "7px 16px",
-                  cursor: "pointer",
-                }}
+                className="text-xs font-semibold text-white bg-red-500/60 border-none rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-red-500/70"
               >
                 {cancelStatus === "loading"
                   ? "Cancelling..."
@@ -302,27 +196,14 @@ export default function SettingsPage() {
               </button>
               <button
                 onClick={() => setCancelConfirm(false)}
-                style={{
-                  fontSize: 12,
-                  color: "rgba(240,237,232,0.5)",
-                  background: "none",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 6,
-                  padding: "7px 16px",
-                  cursor: "pointer",
-                }}
+                className="text-xs text-app-text/50 bg-transparent border border-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:border-white/20 hover:bg-white/3"
               >
                 Keep Plan
               </button>
             </div>
             {cancelStatus === "error" && (
-              <p
-                style={{
-                  fontSize: 12,
-                  color: "rgba(220,60,60,0.8)",
-                  marginTop: 8,
-                }}
-              >
+              <p className="text-xs text-red-400/80 mt-2 flex items-center gap-1.5">
+                <IconWarning size={12} />
                 Cancellation failed. Please try again.
               </p>
             )}
@@ -330,105 +211,95 @@ export default function SettingsPage() {
         )}
 
         {cancelStatus === "done" && cancelDate && (
-          <p
-            style={{
-              fontSize: 12,
-              color: "rgba(240,237,232,0.45)",
-              marginTop: 8,
-            }}
-          >
-            Subscription cancels on {cancelDate}. Pro features remain active
-            until then.
+          <p className="text-[13px] text-app-text/45 mt-2">
+            Subscription cancels on {cancelDate}. Features remain active until
+            then.
           </p>
         )}
 
-        {isPro && !isStripe && (
-          <p
-            style={{
-              fontSize: 12,
-              color: "rgba(240,237,232,0.4)",
-              marginTop: 4,
-            }}
-          >
+        {isPaid && (
+          <p className="text-[13px] text-app-text/40 mt-3">
             Your plan expires on {expiryDate}.{" "}
-            <a
+            <Link
               href="/pricing"
-              style={{ color: "#e8ff47", textDecoration: "none" }}
+              className="text-app-accent no-underline hover:underline"
             >
               Renew
-            </a>
+            </Link>
           </p>
         )}
       </section>
 
-      {/* Locale section */}
-      <section
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 12,
-          padding: "24px",
-          marginBottom: 20,
-        }}
-      >
-        <p
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            marginBottom: 16,
-          }}
-        >
-          Region
+      {/* Plan limits section */}
+      <section className="bg-white/2.5 border border-white/[0.07] rounded-2xl p-6 mb-5">
+        <p className="text-[11px] font-bold text-app-text/30 tracking-widest uppercase mb-5">
+          Plan Limits
         </p>
-        <p
-          style={{
-            fontSize: 12,
-            color: "rgba(240,237,232,0.45)",
-            marginBottom: 14,
-          }}
-        >
-          Controls pricing currency and available payment methods.
-        </p>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["ph", "intl"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => handleLocaleChange(l)}
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                padding: "7px 16px",
-                borderRadius: 7,
-                border: `1px solid ${locale === l ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.1)"}`,
-                background:
-                  locale === l ? "rgba(232,255,71,0.1)" : "transparent",
-                color: locale === l ? "#e8ff47" : "rgba(240,237,232,0.5)",
-                cursor: "pointer",
-              }}
-            >
-              {l === "ph" ? "Philippines" : "International"}
-            </button>
-          ))}
+
+        {/* Storage bar */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] text-app-text/60">Storage</span>
+            <span className="text-[12px] text-app-text/40 tabular-nums">
+              {formatBytes(storageUsed)} / {formatBytes(storageCap)}
+            </span>
+          </div>
+          <div className="h-2 bg-white/6 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                storagePercent > 90
+                  ? "bg-red-400"
+                  : storagePercent > 70
+                    ? "bg-yellow-400"
+                    : "bg-app-accent"
+              }`}
+              style={{ width: `${storagePercent}%` }}
+            />
+          </div>
         </div>
+
+        {/* Other limits */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-app-text/60">
+              Rows per export
+            </span>
+            <span className="text-[13px] font-semibold text-app-text/80 tabular-nums">
+              {limits.maxRows.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-app-text/60">Photo columns</span>
+            <span className="text-[13px] font-semibold text-app-text/80 tabular-nums">
+              {limits.maxPhotoColumns}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] text-app-text/60">Projects</span>
+            <span className="text-[13px] font-semibold text-app-text/80 tabular-nums">
+              {limits.maxProjects === Infinity
+                ? "Unlimited"
+                : limits.maxProjects}
+            </span>
+          </div>
+        </div>
+
+        {!isPaid && (
+          <div className="mt-5 pt-4 border-t border-white/6">
+            <Link
+              href="/pricing"
+              className="text-xs font-semibold text-app-accent no-underline hover:underline"
+            >
+              Upgrade for more storage, rows, and photo columns
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* Sign out */}
       <button
         onClick={signOut}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 7,
-          fontSize: 13,
-          color: "rgba(240,237,232,0.4)",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          padding: 0,
-        }}
+        className="flex items-center gap-2 text-[13px] text-app-text/40 bg-transparent border-none cursor-pointer p-0 transition-colors hover:text-app-text/60"
       >
         <IconLogOut size={15} />
         Sign out

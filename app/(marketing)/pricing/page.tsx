@@ -1,49 +1,99 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { IconCheck, IconCrown, IconWarning } from "@/components/Icons";
 
-type PlanKey = "pro_monthly" | "pro_quarterly" | "pro_annual";
+type BillingCycle = "monthly" | "quarterly" | "annual";
 type Locale = "ph" | "intl";
-type PaymentMethod = "gcash" | "maya" | "card";
 
-const PRICING = {
-  pro_monthly: {
-    ph: { display: "₱199", period: "month", savings: null },
-    intl: { display: "$4.99", period: "month", savings: null },
+const BILLING_CYCLES: { key: BillingCycle; label: string }[] = [
+  { key: "monthly", label: "Monthly" },
+  { key: "quarterly", label: "Quarterly" },
+  { key: "annual", label: "Annual" },
+];
+
+const TIERS = {
+  free: {
+    name: "Free",
+    description: "For trying things out",
+    features: [
+      "3 projects",
+      "25 rows per export",
+      "1 photo column",
+      "200MB storage",
+      "Watermark on exports",
+    ],
   },
-  pro_quarterly: {
-    ph: { display: "₱499", period: "quarter", savings: "Save ₱98" },
-    intl: null,
+  pro: {
+    name: "Pro",
+    description: "For individuals and small teams",
+    features: [
+      "Unlimited projects",
+      "100 rows per export",
+      "3 photo columns",
+      "2GB storage",
+      "No watermark",
+    ],
+    pricing: {
+      monthly: { ph: "₱199", intl: "₱279", savings: null },
+      quarterly: {
+        ph: "₱499",
+        intl: "₱699",
+        savings: { ph: "Save ₱98", intl: "Save ₱138" },
+      },
+      annual: {
+        ph: "₱1,699",
+        intl: "₱2,239",
+        savings: { ph: "Save 3 months", intl: "Save 3 months" },
+      },
+    },
+    planPrefix: "pro",
   },
-  pro_annual: {
-    ph: { display: "₱1,699", period: "year", savings: "Save 3 months" },
-    intl: { display: "$39.99", period: "year", savings: "Save $19.89" },
+  business: {
+    name: "Business",
+    description: "For organizations and power users",
+    features: [
+      "Unlimited projects",
+      "1,000 rows per export",
+      "5 photo columns",
+      "10GB storage",
+      "No watermark",
+      "Priority support",
+    ],
+    pricing: {
+      monthly: { ph: "₱799", intl: "₱999", savings: null },
+      quarterly: {
+        ph: "₱1,999",
+        intl: "₱2,499",
+        savings: { ph: "Save ₱398", intl: "Save ₱498" },
+      },
+      annual: {
+        ph: "₱6,999",
+        intl: "₱8,999",
+        savings: { ph: "Save 3 months", intl: "Save 3 months" },
+      },
+    },
+    planPrefix: "biz",
   },
 } as const;
 
-const FREE_FEATURES = ["3 projects", "25 rows per export", "Watermark on exports", "All templates"];
-const PRO_FEATURES = ["Unlimited projects", "Unlimited rows", "No watermark", "All templates", "Priority support"];
-
-const PAYMENT_METHODS: { id: PaymentMethod; label: string; locales: Locale[] }[] = [
-  { id: "gcash", label: "GCash", locales: ["ph"] },
-  { id: "maya", label: "Maya", locales: ["ph"] },
-  { id: "card", label: "Credit / Debit Card", locales: ["ph", "intl"] },
-];
+const PERIODS: Record<BillingCycle, string> = {
+  monthly: "month",
+  quarterly: "quarter",
+  annual: "year",
+};
 
 export default function PricingPage() {
   const [locale, setLocale] = useState<Locale>("intl");
-  const [billingCycle, setBillingCycle] = useState<PlanKey>("pro_monthly");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Read locale from cookie
     const cookieLocale = document.cookie
       .split(";")
       .find((c) => c.trim().startsWith("locale="))
@@ -68,398 +118,285 @@ export default function PricingPage() {
     });
   }, []);
 
-  function handleLocaleToggle(l: Locale) {
-    setLocale(l);
-    // Update cookie
-    document.cookie = `locale=${l};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`;
-    if (l === "intl" && billingCycle === "pro_quarterly") {
-      setBillingCycle("pro_monthly");
-    }
-  }
-
-  async function handleCheckout() {
-    if (!selectedMethod) return;
-    setCheckoutLoading(true);
+  async function handleCheckout(planKey: string) {
+    setCheckoutLoading(planKey);
     setCheckoutError(null);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: billingCycle, paymentMethod: selectedMethod }),
+        body: JSON.stringify({ plan: planKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      // Store checkout info so payment-success page can verify directly
-      sessionStorage.setItem('checkout_session_id', data.sessionId);
-      sessionStorage.setItem('checkout_gateway', data.gateway);
+      sessionStorage.setItem("checkout_session_id", data.sessionId);
       window.location.href = data.checkoutUrl;
     } catch (err: any) {
       setCheckoutError(err.message ?? "Something went wrong");
-      setCheckoutLoading(false);
+      setCheckoutLoading(null);
     }
   }
 
-  const price = PRICING[billingCycle][locale];
-  const isPro = userPlan && userPlan !== "free";
-
-  const availableCycles: { key: PlanKey; label: string }[] = [
-    { key: "pro_monthly", label: "Monthly" },
-    ...(locale === "ph" ? [{ key: "pro_quarterly" as PlanKey, label: "Quarterly" }] : []),
-    { key: "pro_annual", label: "Annual" },
-  ];
-
-  const availableMethods = PAYMENT_METHODS.filter((m) => m.locales.includes(locale));
+  const userTier = !userPlan || userPlan === "free" ? "free" : userPlan.startsWith("biz_") ? "business" : "pro";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a10", padding: "60px 24px" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+    <div className="min-h-screen bg-app-bg text-app-text overflow-x-hidden">
+      {/* Background glow */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute w-125 h-125 rounded-full bg-app-accent/6 blur-[100px] top-[5%] left-1/2 -translate-x-1/2" />
+      </div>
+
+      <div className="relative z-10 max-w-[1200px] mx-auto px-6 pt-20 pb-24">
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <h1
-            style={{ fontSize: 36, fontWeight: 800, color: "#f0ede8", marginBottom: 12, letterSpacing: "-0.5px" }}
-          >
+        <div className="text-center mb-12">
+          <span className="inline-block bg-app-accent/10 text-app-accent border border-app-accent/20 rounded-full px-4 py-1.5 text-xs font-semibold tracking-widest uppercase mb-5">
+            Pricing
+          </span>
+          <h1 className="text-4xl font-extrabold tracking-tight mb-3">
             Simple, transparent pricing
           </h1>
-          <p style={{ fontSize: 16, color: "rgba(240,237,232,0.5)", marginBottom: 24 }}>
+          <p className="text-base text-app-text/50">
             Start free. Upgrade when you need more.
           </p>
-
-          {/* Locale toggle */}
-          <div
-            style={{
-              display: "inline-flex",
-              gap: 4,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 8,
-              padding: 4,
-            }}
-          >
-            {(["ph", "intl"] as Locale[]).map((l) => (
-              <button
-                key={l}
-                onClick={() => handleLocaleToggle(l)}
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  padding: "6px 14px",
-                  borderRadius: 5,
-                  border: "none",
-                  background: locale === l ? "rgba(255,255,255,0.08)" : "transparent",
-                  color: locale === l ? "#f0ede8" : "rgba(240,237,232,0.4)",
-                  cursor: "pointer",
-                }}
-              >
-                {l === "ph" ? "Philippines" : "International"}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Billing cycle toggle */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 40 }}>
-          {availableCycles.map(({ key, label }) => {
-            const p = PRICING[key][locale];
-            const savings = p?.savings;
-            return (
-              <button
-                key={key}
-                onClick={() => setBillingCycle(key)}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  padding: "10px 20px",
-                  borderRadius: 8,
-                  border: `1px solid ${billingCycle === key ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.08)"}`,
-                  background: billingCycle === key ? "rgba(232,255,71,0.08)" : "transparent",
-                  color: billingCycle === key ? "#e8ff47" : "rgba(240,237,232,0.5)",
-                  cursor: "pointer",
-                  minWidth: 100,
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
-                {savings && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: "#e8ff47",
-                      background: "rgba(232,255,71,0.12)",
-                      padding: "1px 6px",
-                      borderRadius: 4,
-                      marginTop: 3,
-                    }}
-                  >
-                    {savings}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex justify-center gap-1.5 mb-12 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1.5 w-fit mx-auto">
+          {BILLING_CYCLES.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setBillingCycle(key)}
+              className={`text-[13px] font-semibold px-5 py-2 rounded-lg border-none cursor-pointer transition-all ${
+                billingCycle === key
+                  ? "bg-app-accent text-app-bg"
+                  : "bg-transparent text-app-text/50 hover:text-app-text/70"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
+        {/* Error banner */}
+        {checkoutError && (
+          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/[0.07] border border-red-500/20 rounded-xl mb-8 max-w-md mx-auto">
+            <IconWarning size={14} />
+            <span className="text-xs text-red-400">{checkoutError}</span>
+          </div>
+        )}
+
         {/* Plan cards */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-            gap: 20,
-            marginBottom: 48,
-          }}
-        >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Free card */}
-          <div
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 16,
-              padding: "32px 28px",
-            }}
-          >
-            <p style={{ fontSize: 13, fontWeight: 700, color: "rgba(240,237,232,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
-              Free
+          <div className="bg-white/[0.025] border border-white/[0.07] rounded-2xl p-8 flex flex-col transition-all hover:-translate-y-1 hover:border-white/12">
+            <p className="text-[11px] font-bold text-app-text/35 tracking-widest uppercase mb-2">
+              {TIERS.free.name}
             </p>
-            <div style={{ marginBottom: 24 }}>
-              <span style={{ fontSize: 36, fontWeight: 800, color: "#f0ede8" }}>$0</span>
-              <span style={{ fontSize: 14, color: "rgba(240,237,232,0.4)", marginLeft: 4 }}>forever</span>
+            <p className="text-[13px] text-app-text/40 mb-6">
+              {TIERS.free.description}
+            </p>
+            <div className="mb-1">
+              <span className="text-4xl font-extrabold">₱0</span>
             </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px" }}>
-              {FREE_FEATURES.map((f) => (
-                <li key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "rgba(240,237,232,0.6)", marginBottom: 10 }}>
-                  <span style={{ color: "rgba(240,237,232,0.3)", flexShrink: 0 }}><IconCheck size={14} /></span>
+            <p className="text-sm text-app-text/35 mb-8">forever</p>
+            <ul className="list-none p-0 m-0 mb-auto space-y-3">
+              {TIERS.free.features.map((f) => (
+                <li
+                  key={f}
+                  className="flex items-center gap-2.5 text-[13px] text-app-text/55"
+                >
+                  <span className="text-app-text/25 shrink-0">
+                    <IconCheck size={13} />
+                  </span>
                   {f}
                 </li>
               ))}
             </ul>
-            {!isLoggedIn ? (
-              <a
-                href="/sandbox"
-                style={{
-                  display: "block",
-                  textAlign: "center",
-                  padding: "11px",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 8,
-                  color: "rgba(240,237,232,0.5)",
-                  textDecoration: "none",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Try the demo
-              </a>
-            ) : !isPro ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "11px",
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 8,
-                  color: "rgba(240,237,232,0.35)",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Current Plan
-              </div>
-            ) : null}
+            <div className="mt-8">
+              {!isLoggedIn ? (
+                <Link
+                  href="/sandbox"
+                  className="block text-center py-2.5 border border-white/10 rounded-lg text-app-text/50 no-underline text-[13px] font-semibold transition-all hover:border-white/20 hover:bg-white/3"
+                >
+                  Try the demo
+                </Link>
+              ) : userTier === "free" ? (
+                <div className="text-center py-2.5 bg-white/4 rounded-lg text-app-text/35 text-[13px] font-semibold">
+                  Current Plan
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {/* Pro card */}
-          <div
-            style={{
-              background: "rgba(232,255,71,0.04)",
-              border: "1px solid rgba(232,255,71,0.2)",
-              borderRadius: 16,
-              padding: "32px 28px",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: -12,
-                left: "50%",
-                transform: "translateX(-50%)",
-                background: "#e8ff47",
-                color: "#0a0a10",
-                fontSize: 10,
-                fontWeight: 800,
-                padding: "3px 12px",
-                borderRadius: 20,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Most Popular
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <IconCrown size={14} color="#e8ff47" />
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#e8ff47", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
-                Pro
-              </p>
-            </div>
-            <div style={{ marginBottom: 24 }}>
-              {price ? (
-                <>
-                  <span style={{ fontSize: 36, fontWeight: 800, color: "#f0ede8" }}>{price.display}</span>
-                  <span style={{ fontSize: 14, color: "rgba(240,237,232,0.4)", marginLeft: 4 }}>/ {price.period}</span>
-                </>
-              ) : (
-                <span style={{ fontSize: 15, color: "rgba(240,237,232,0.4)" }}>Not available in your region</span>
-              )}
-            </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px" }}>
-              {PRO_FEATURES.map((f) => (
-                <li key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#f0ede8", marginBottom: 10 }}>
-                  <span style={{ color: "#e8ff47", flexShrink: 0 }}><IconCheck size={14} /></span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            {!isLoggedIn ? (
-              <a
-                href="/login"
-                style={{
-                  display: "block",
-                  textAlign: "center",
-                  padding: "12px",
-                  background: "#e8ff47",
-                  color: "#0a0a10",
-                  borderRadius: 8,
-                  textDecoration: "none",
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}
-              >
-                Get started
-              </a>
-            ) : isPro ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "11px",
-                  background: "rgba(232,255,71,0.1)",
-                  borderRadius: 8,
-                  color: "#e8ff47",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                Current Plan
-              </div>
-            ) : price ? (
-              <button
-                onClick={() => setShowPaymentModal(true)}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  background: "#e8ff47",
-                  color: "#0a0a10",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Upgrade to Pro
-              </button>
-            ) : null}
-          </div>
-        </div>
+          {(() => {
+            const tier = TIERS.pro;
+            const pricing = tier.pricing[billingCycle];
+            const display = locale === "ph" ? pricing.ph : pricing.intl;
+            const savings = pricing.savings
+              ? locale === "ph"
+                ? pricing.savings.ph
+                : pricing.savings.intl
+              : null;
+            const planKey = `${tier.planPrefix}_${billingCycle}`;
+            const isLoading = checkoutLoading === planKey;
 
-        {/* Payment modal */}
-        {showPaymentModal && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.7)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 100,
-              padding: 24,
-            }}
-            onClick={(e) => { if (e.target === e.currentTarget) setShowPaymentModal(false); }}
-          >
-            <div
-              style={{
-                background: "#0a0a10",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 16,
-                padding: "32px",
-                width: "100%",
-                maxWidth: 400,
-              }}
-            >
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: "#f0ede8", marginBottom: 8 }}>
-                Choose payment method
-              </h2>
-              <p style={{ fontSize: 13, color: "rgba(240,237,232,0.45)", marginBottom: 24 }}>
-                {price?.display} / {price?.period}
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                {availableMethods.map((method) => (
-                  <button
-                    key={method.id}
-                    onClick={() => setSelectedMethod(method.id)}
-                    style={{
-                      padding: "14px 16px",
-                      borderRadius: 9,
-                      border: `1px solid ${selectedMethod === method.id ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.08)"}`,
-                      background: selectedMethod === method.id ? "rgba(232,255,71,0.08)" : "rgba(255,255,255,0.02)",
-                      color: selectedMethod === method.id ? "#e8ff47" : "#f0ede8",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                  >
-                    {method.label}
-                  </button>
-                ))}
-              </div>
-              {checkoutError && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "10px 14px",
-                    background: "rgba(220,60,60,0.07)",
-                    border: "1px solid rgba(220,60,60,0.2)",
-                    borderRadius: 7,
-                    marginBottom: 16,
-                    fontSize: 12,
-                    color: "rgba(220,60,60,0.9)",
-                  }}
-                >
-                  <IconWarning size={14} />
-                  {checkoutError}
+            return (
+              <div className="bg-white/[0.025] border border-white/[0.07] rounded-2xl p-8 flex flex-col transition-all hover:-translate-y-1 hover:border-white/12">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <IconCrown size={13} color="rgba(240,237,232,0.4)" />
+                  <p className="text-[11px] font-bold text-app-text/40 tracking-widest uppercase m-0">
+                    {tier.name}
+                  </p>
                 </div>
-              )}
-              <button
-                onClick={handleCheckout}
-                disabled={!selectedMethod || checkoutLoading}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  background: selectedMethod ? "#e8ff47" : "rgba(255,255,255,0.07)",
-                  color: selectedMethod ? "#0a0a10" : "rgba(240,237,232,0.3)",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: selectedMethod ? "pointer" : "not-allowed",
-                }}
-              >
-                {checkoutLoading ? "Redirecting..." : "Continue to payment"}
-              </button>
-            </div>
-          </div>
-        )}
+                <p className="text-[13px] text-app-text/40 mb-6">
+                  {tier.description}
+                </p>
+                <div className="mb-1">
+                  <span className="text-4xl font-extrabold">{display}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-8">
+                  <p className="text-sm text-app-text/35">
+                    / {PERIODS[billingCycle]}
+                  </p>
+                  {savings && (
+                    <span className="text-[10px] font-semibold text-app-accent bg-app-accent/12 px-2 py-0.5 rounded">
+                      {savings}
+                    </span>
+                  )}
+                </div>
+                <ul className="list-none p-0 m-0 mb-auto space-y-3">
+                  {tier.features.map((f) => (
+                    <li
+                      key={f}
+                      className="flex items-center gap-2.5 text-[13px] text-app-text"
+                    >
+                      <span className="text-app-text/40 shrink-0">
+                        <IconCheck size={13} />
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-8">
+                  {!isLoggedIn ? (
+                    <Link
+                      href="/login"
+                      className="block text-center py-2.5 rounded-lg no-underline text-[13px] font-bold bg-white/6 text-app-text hover:bg-white/10 transition-all"
+                    >
+                      Get started
+                    </Link>
+                  ) : userTier === "pro" ? (
+                    <div className="text-center py-2.5 bg-app-accent/10 rounded-lg text-app-accent text-[13px] font-semibold">
+                      Current Plan
+                    </div>
+                  ) : userTier === "free" ? (
+                    <button
+                      onClick={() => handleCheckout(planKey)}
+                      disabled={checkoutLoading !== null}
+                      className="w-full py-2.5 border-none rounded-lg text-[13px] font-bold bg-white/6 text-app-text hover:bg-white/10 transition-all"
+                      style={{
+                        cursor:
+                          checkoutLoading !== null ? "not-allowed" : "pointer",
+                        opacity:
+                          checkoutLoading !== null && !isLoading ? 0.5 : 1,
+                      }}
+                    >
+                      {isLoading ? "Redirecting..." : "Upgrade to Pro"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Business card */}
+          {(() => {
+            const tier = TIERS.business;
+            const pricing = tier.pricing[billingCycle];
+            const display = locale === "ph" ? pricing.ph : pricing.intl;
+            const savings = pricing.savings
+              ? locale === "ph"
+                ? pricing.savings.ph
+                : pricing.savings.intl
+              : null;
+            const planKey = `${tier.planPrefix}_${billingCycle}`;
+            const isLoading = checkoutLoading === planKey;
+
+            return (
+              <div className="relative bg-app-accent/4 border border-app-accent/20 rounded-2xl p-8 flex flex-col transition-all hover:-translate-y-1 hover:border-app-accent/35">
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-app-accent text-app-bg text-[10px] font-extrabold px-3 py-0.5 rounded-full tracking-[0.08em] uppercase whitespace-nowrap">
+                  Best Value
+                </div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <IconCrown size={13} color="var(--app-accent)" />
+                  <p className="text-[11px] font-bold text-app-accent tracking-widest uppercase m-0">
+                    {tier.name}
+                  </p>
+                </div>
+                <p className="text-[13px] text-app-text/40 mb-6">
+                  {tier.description}
+                </p>
+                <div className="mb-1">
+                  <span className="text-4xl font-extrabold">{display}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-8">
+                  <p className="text-sm text-app-text/35">
+                    / {PERIODS[billingCycle]}
+                  </p>
+                  {savings && (
+                    <span className="text-[10px] font-semibold text-app-accent bg-app-accent/12 px-2 py-0.5 rounded">
+                      {savings}
+                    </span>
+                  )}
+                </div>
+                <ul className="list-none p-0 m-0 mb-auto space-y-3">
+                  {tier.features.map((f) => (
+                    <li
+                      key={f}
+                      className="flex items-center gap-2.5 text-[13px] text-app-text"
+                    >
+                      <span className="text-app-accent shrink-0">
+                        <IconCheck size={13} />
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-8">
+                  {!isLoggedIn ? (
+                    <Link
+                      href="/login"
+                      className="block text-center py-2.5 rounded-lg no-underline text-[13px] font-bold bg-app-accent text-app-bg hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)] transition-all"
+                    >
+                      Get started
+                    </Link>
+                  ) : userTier === "business" ? (
+                    <div className="text-center py-2.5 bg-app-accent/10 rounded-lg text-app-accent text-[13px] font-semibold">
+                      Current Plan
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleCheckout(planKey)}
+                      disabled={checkoutLoading !== null}
+                      className="w-full py-2.5 border-none rounded-lg text-[13px] font-bold bg-app-accent text-app-bg hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)] transition-all"
+                      style={{
+                        cursor:
+                          checkoutLoading !== null ? "not-allowed" : "pointer",
+                        opacity:
+                          checkoutLoading !== null && !isLoading ? 0.5 : 1,
+                      }}
+                    >
+                      {isLoading
+                        ? "Redirecting..."
+                        : "Upgrade to Business"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );

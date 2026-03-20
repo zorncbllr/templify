@@ -7,7 +7,7 @@ create table public.profiles (
   avatar_url text,
   plan text not null default 'free' check (plan in ('free', 'pro_monthly', 'pro_quarterly', 'pro_annual')),
   plan_expires_at timestamptz,
-  payment_gateway text check (payment_gateway in ('paymongo', 'stripe')),
+  payment_gateway text check (payment_gateway in ('paymongo')),
   gateway_customer_id text,
   gateway_subscription_id text,
   locale text not null default 'ph' check (locale in ('ph', 'intl')),
@@ -110,7 +110,7 @@ create policy "Users can delete own projects"
 create table public.payments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  gateway text not null check (gateway in ('paymongo', 'stripe')),
+  gateway text not null check (gateway in ('paymongo')),
   gateway_payment_id text not null unique,
   gateway_subscription_id text,
   amount integer not null,
@@ -161,3 +161,12 @@ create policy "Users can delete own data files"
   on storage.objects for delete using (
     bucket_id = 'data-files' and auth.uid()::text = (storage.foldername(name))[1]
   );
+
+insert into public.profiles (id, email, full_name, avatar_url)
+select 
+  id,
+  email,
+  raw_user_meta_data->>'full_name',
+  raw_user_meta_data->>'avatar_url'
+from auth.users
+where id not in (select id from public.profiles);

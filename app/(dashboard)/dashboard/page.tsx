@@ -84,14 +84,15 @@ export default async function DashboardPage() {
   const canCreateProject = !isFree || projectList.length < 3;
   const projectLimit = isFree ? 3 : null;
 
-  const lastUpdated = projectList.length > 0 ? projectList[0].updated_at : null;
+  const lastUpdated =
+    projectList.length > 0 ? projectList[0].updated_at : null;
 
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-10">
+    <div className="max-w-[1100px] mx-auto px-6 py-12">
       {/* Welcome section */}
-      <div className="mb-10 flex items-start justify-between gap-4">
+      <div className="mb-10 flex items-end justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-2xl font-bold text-app-text">
+          <h1 className="text-2xl font-bold tracking-tight mb-1">
             {getGreeting()}, {firstName}
           </h1>
           <p className="text-sm text-app-text/40">
@@ -104,7 +105,7 @@ export default async function DashboardPage() {
           <form action={createProject}>
             <button
               type="submit"
-              className="flex items-center gap-1.5 rounded-lg bg-app-accent px-4 py-2 text-[13px] font-semibold text-app-bg transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-app-accent px-5 py-2.5 text-[13px] font-bold text-app-bg transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)]"
             >
               <IconPlus size={14} color="var(--app-bg)" />
               New Project
@@ -114,20 +115,20 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total projects */}
-        <div className="flex items-center gap-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-app-accent/[0.08]">
-            <IconLayers size={16} color="var(--app-accent)" />
+        <div className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5 transition-all hover:-translate-y-0.5 hover:border-white/[0.12]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-app-accent/[0.08] border border-app-accent/[0.15]">
+            <IconLayers size={17} color="var(--app-accent)" />
           </div>
           <div>
-            <div className="text-xs font-medium tracking-wide text-app-text/35 uppercase">
+            <div className="text-[11px] font-bold tracking-widest text-app-text/30 uppercase">
               Projects
             </div>
-            <div className="text-lg font-bold text-app-text tabular-nums">
+            <div className="text-xl font-bold tabular-nums">
               {projectList.length}
               {projectLimit !== null && (
-                <span className="ml-1 text-xs font-normal text-app-text/30">
+                <span className="ml-1 text-xs font-normal text-app-text/25">
                   / {projectLimit}
                 </span>
               )}
@@ -136,31 +137,35 @@ export default async function DashboardPage() {
         </div>
 
         {/* Plan */}
-        <div className="flex items-center gap-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4">
+        <div className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5 transition-all hover:-translate-y-0.5 hover:border-white/[0.12]">
           <div
-            className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-              isFree ? "bg-white/[0.04]" : "bg-app-accent/[0.08]"
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+              isFree
+                ? "bg-white/[0.04] border-white/[0.08]"
+                : "bg-app-accent/[0.08] border-app-accent/[0.15]"
             }`}
           >
             <IconCrown
-              size={16}
-              color={isFree ? "rgba(240,237,232,0.3)" : "var(--app-accent)"}
+              size={17}
+              color={
+                isFree ? "rgba(240,237,232,0.3)" : "var(--app-accent)"
+              }
             />
           </div>
           <div>
-            <div className="text-xs font-medium tracking-wide text-app-text/35 uppercase">
+            <div className="text-[11px] font-bold tracking-widest text-app-text/30 uppercase">
               Plan
             </div>
             <div className="flex items-center gap-2">
               <span
-                className={`text-lg font-bold ${isFree ? "text-app-text/50" : "text-app-accent"}`}
+                className={`text-xl font-bold ${isFree ? "text-app-text/50" : "text-app-accent"}`}
               >
-                {isFree ? "FREE" : "PRO"}
+                {isFree ? "FREE" : plan.startsWith("biz_") ? "BIZ" : "PRO"}
               </span>
               {isFree && (
                 <Link
                   href="/pricing"
-                  className="rounded-md bg-app-accent/10 px-2 py-0.5 text-[10px] font-semibold text-app-accent no-underline transition-colors hover:bg-app-accent/15"
+                  className="rounded-full bg-app-accent/10 border border-app-accent/20 px-2.5 py-0.5 text-[10px] font-semibold text-app-accent no-underline transition-all hover:bg-app-accent/15"
                 >
                   Upgrade
                 </Link>
@@ -170,15 +175,15 @@ export default async function DashboardPage() {
         </div>
 
         {/* Last activity */}
-        <div className="flex items-center gap-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04]">
-            <IconClock size={16} color="rgba(240,237,232,0.3)" />
+        <div className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-5 transition-all hover:-translate-y-0.5 hover:border-white/[0.12]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08]">
+            <IconClock size={17} color="rgba(240,237,232,0.3)" />
           </div>
           <div>
-            <div className="text-xs font-medium tracking-wide text-app-text/35 uppercase">
+            <div className="text-[11px] font-bold tracking-widest text-app-text/30 uppercase">
               Last Active
             </div>
-            <div className="text-lg font-bold text-app-text/60 tabular-nums">
+            <div className="text-xl font-bold text-app-text/60 tabular-nums">
               {lastUpdated ? formatRelative(lastUpdated) : "--"}
             </div>
           </div>
@@ -187,10 +192,10 @@ export default async function DashboardPage() {
 
       {/* Upgrade CTA for free users at limit */}
       {!canCreateProject && (
-        <div className="mb-7 flex items-center gap-3.5 rounded-xl border border-app-accent/15 bg-app-accent/[0.04] px-6 py-4">
+        <div className="mb-8 flex items-center gap-4 rounded-2xl border border-app-accent/15 bg-app-accent/[0.04] px-6 py-5">
           <IconWarning size={18} color="var(--app-accent)" />
           <div className="flex-1">
-            <div className="mb-0.5 text-sm font-semibold text-app-text">
+            <div className="mb-0.5 text-sm font-semibold">
               Project limit reached
             </div>
             <div className="text-[13px] text-app-text/50">
@@ -199,7 +204,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/pricing"
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-app-accent px-3.5 py-[7px] text-[13px] font-semibold text-app-bg no-underline transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-app-accent px-5 py-2 text-[13px] font-bold text-app-bg no-underline transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)]"
           >
             <IconCrown size={13} color="var(--app-bg)" />
             Upgrade to Pro
@@ -209,8 +214,8 @@ export default async function DashboardPage() {
 
       {/* Section label */}
       {projectList.length > 0 && (
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xs font-semibold tracking-[0.08em] text-app-text/35 uppercase">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-[11px] font-bold tracking-widest text-app-text/30 uppercase">
             All Projects
           </h2>
         </div>
@@ -218,8 +223,8 @@ export default async function DashboardPage() {
 
       {/* Empty state */}
       {projectList.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-20">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+        <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-6 py-20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.03]">
             <IconFolder size={28} color="rgba(240,237,232,0.2)" />
           </div>
           <div className="text-center">
@@ -233,7 +238,7 @@ export default async function DashboardPage() {
           <form action={createProject}>
             <button
               type="submit"
-              className="flex items-center gap-1.5 rounded-lg bg-app-accent px-5 py-2.5 text-[13px] font-semibold text-app-bg transition-opacity hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-app-accent px-6 py-2.5 text-[13px] font-bold text-app-bg transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(232,255,71,0.25)]"
             >
               <IconPlus size={14} color="var(--app-bg)" />
               Create Project

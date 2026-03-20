@@ -25,7 +25,7 @@ export default async function ProjectEditPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, plan")
+    .select("full_name, plan, storage_used")
     .eq("id", user.id)
     .single();
 
@@ -51,9 +51,12 @@ export default async function ProjectEditPage({
         data_images_label: project.data_images_label,
         data_file_url: dataFileUrl,
         data_file_path: project.data_file_path,
+        name: project.name,
       }}
       userPlan={profile?.plan ?? "free"}
+      userId={user.id}
       displayName={displayName}
+      storageUsed={profile?.storage_used ?? 0}
     />
   );
 }

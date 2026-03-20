@@ -88,11 +88,13 @@ export default function PaymentSuccessPage() {
 
   const planLabel = plan
     ? plan
+        .replace("biz_", "Business ")
         .replace("pro_", "Pro ")
         .replace("monthly", "Monthly")
         .replace("quarterly", "Quarterly")
         .replace("annual", "Annual")
     : "";
+  const tierName = plan?.startsWith("biz_") ? "Business" : "Pro";
 
   return (
     <div
@@ -155,7 +157,7 @@ export default function PaymentSuccessPage() {
                 marginBottom: 8,
               }}
             >
-              Welcome to Templify Pro!
+              Welcome to Templify {tierName}!
             </h1>
             <p
               style={{

@@ -25,7 +25,8 @@ export default async function DashboardLayout({
 
   const displayName = profile?.full_name || user.email || "User";
   const plan = profile?.plan ?? "free";
-  const isPro = plan !== "free";
+  const isPaid = plan !== "free";
+  const tierLabel = plan.startsWith("biz_") ? "Business" : "Pro";
   const initials = displayName
     .split(" ")
     .map((s: string) => s[0])
@@ -59,14 +60,14 @@ export default async function DashboardLayout({
         {/* Right: Plan + User */}
         <div className="flex items-center gap-3">
           {/* Plan badge */}
-          {isPro ? (
+          {isPaid ? (
             <span className="flex shrink-0 items-center gap-1 rounded-full border border-app-accent/20 bg-app-accent/[0.08] px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-app-accent uppercase">
               <IconCrown
                 size={10}
                 color="var(--app-accent)"
                 className="-translate-y-[1.5px]"
               />
-              Pro
+              {tierLabel}
             </span>
           ) : (
             <Link

@@ -1,6 +1,10 @@
-export type Plan = 'free' | 'pro_monthly' | 'pro_quarterly' | 'pro_annual';
+export type Plan =
+  | 'free'
+  | 'pro_monthly' | 'pro_quarterly' | 'pro_annual'
+  | 'biz_monthly' | 'biz_quarterly' | 'biz_annual';
+
 export type Locale = 'ph' | 'intl';
-export type PaymentGateway = 'paymongo' | 'stripe';
+export type PaymentGateway = 'paymongo';
 export type PaymentStatus = 'succeeded' | 'failed' | 'refunded';
 
 export type Profile = {
@@ -13,6 +17,7 @@ export type Profile = {
   payment_gateway: PaymentGateway | null;
   gateway_customer_id: string | null;
   gateway_subscription_id: string | null;
+  storage_used: number; // bytes
   locale: Locale;
   created_at: string;
   updated_at: string;
@@ -41,7 +46,7 @@ export type Payment = {
   gateway_payment_id: string;
   gateway_subscription_id: string | null;
   amount: number;
-  currency: 'PHP' | 'USD';
+  currency: 'PHP';
   plan: Exclude<Plan, 'free'>;
   status: PaymentStatus;
   metadata: Record<string, unknown> | null;

@@ -14,7 +14,7 @@ export interface CreateCheckoutParams {
   amount: number; // in cents
   currency: string;
   lineItemName: string;
-  paymentMethodTypes: ('gcash' | 'maya' | 'card')[];
+  paymentMethodTypes: string[];
   successUrl: string;
   cancelUrl: string;
   metadata: Record<string, string>;
