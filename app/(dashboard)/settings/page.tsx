@@ -122,16 +122,20 @@ export default function SettingsPage() {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.avatar_url}
-              alt="avatar"
+              alt=""
               width={44}
               height={44}
               className="rounded-full ring-1 ring-white/10"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+                e.currentTarget.nextElementSibling?.classList.remove("hidden");
+              }}
             />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-white/6 flex items-center justify-center text-app-text/40">
-              <IconUser size={20} />
-            </div>
-          )}
+          ) : null}
+          <div className={`w-11 h-11 rounded-full bg-white/6 flex items-center justify-center text-app-text/40 ${profile?.avatar_url ? "hidden" : ""}`}>
+            <IconUser size={20} />
+          </div>
           <div>
             <p className="text-[15px] font-semibold m-0">
               {profile?.full_name ?? "Unknown"}

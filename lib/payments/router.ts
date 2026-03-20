@@ -29,9 +29,10 @@ export async function routePayment(
   const pricing = PRICING[plan][locale];
   if (!pricing) throw new Error(`Plan ${plan} not available in ${locale}`);
 
-  // PH users get all 3 methods; intl users get card only
   const methodTypes: string[] =
-    locale === "ph" ? ["gcash", "paymaya", "card"] : ["card"];
+    locale === "ph"
+      ? ["qrph", "gcash", "paymaya", "card"]
+      : ["card", "paypal"];
 
   const { checkoutUrl, sessionId } = await paymongoCheckout({
     amount: pricing.amount,
