@@ -37,7 +37,6 @@ export function LayerItem({
       : imgObj!.name
     : `${(obj as TextField).column}`;
   const isBg = isImg && imgObj!.isBackground;
-  const offset = !isImg ? (obj as TextField).columnOffset : 0;
   const isDragging = dragHandlers.draggingId === obj.id;
 
   return (
@@ -88,11 +87,6 @@ export function LayerItem({
         {isImg && imgObj!.isDataImage && !isBg && (
           <span className="text-[8px] px-1 py-px rounded-md bg-[rgba(99,179,237,0.15)] text-[#63b3ed] font-bold shrink-0">
             AUTO
-          </span>
-        )}
-        {!isImg && offset !== 0 && (
-          <span className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.08)] text-[#e8ff47] font-bold shrink-0">
-            {offset > 0 ? `+${offset}` : offset}
           </span>
         )}
       </div>

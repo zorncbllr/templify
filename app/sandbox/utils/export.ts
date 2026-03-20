@@ -44,6 +44,115 @@ function roundRectPath(
  * Render a single card directly to a canvas using the Canvas 2D API.
  * No html2canvas — avoids cross-origin stylesheet and CSS color issues.
  */
+/** Render a small JPEG thumbnail of the template (max 300px wide).
+ *  Renders directly at thumbnail scale — no full-res intermediate canvas. */
+export async function renderThumbnail(
+  objects: CanvasObject[],
+  canvasSize: CanvasSize,
+  rows: RowData[],
+  dataImages: DataImageMap,
+): Promise<string> {
+  const maxW = 300;
+  const scale = Math.min(maxW / canvasSize.width, 1);
+  const thumbW = Math.round(canvasSize.width * scale);
+  const thumbH = Math.round(canvasSize.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = thumbW;
+  canvas.height = thumbH;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(scale, scale);
+
+  // White background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+
+  const sorted = [...objects].sort((a, b) => a.zIndex - b.zIndex);
+
+  for (const obj of sorted) {
+    if (obj.kind === "image") {
+      const imgObj = obj as ImageObject;
+      const src = imgObj.isDataImage
+        ? resolveDataImageSrc(
+            imgObj.isDataImage, imgObj.dataImageColumn, 0,
+            imgObj.src, rows, 0, dataImages,
+          )
+        : imgObj.src;
+
+      let img: HTMLImageElement;
+      try { img = await loadImage(src); } catch { continue; }
+
+      const x = imgObj.isBackground ? 0 : imgObj.x;
+      const y = imgObj.isBackground ? 0 : imgObj.y;
+      const w = imgObj.isBackground ? canvasSize.width : imgObj.width;
+      const h = imgObj.isBackground ? canvasSize.height : imgObj.height;
+      const radius = imgObj.isBackground ? 0 : (imgObj.borderRadius ?? 0);
+
+      ctx.save();
+      ctx.globalAlpha = imgObj.opacity;
+
+      if (!imgObj.isBackground && imgObj.rotation) {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((imgObj.rotation * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+
+      if (radius > 0) {
+        roundRectPath(ctx, x, y, w, h, radius);
+        ctx.clip();
+      }
+
+      ctx.drawImage(img, x, y, w, h);
+      ctx.restore();
+    } else {
+      const f = obj as TextField;
+      const text = rows.length > 0 ? (rows[0][f.column] ?? "") : "";
+      if (!text) continue;
+
+      const codeType = f.codeType ?? "text";
+      if (codeType === "qr" || codeType === "barcode") continue; // skip codes in thumbnail
+
+      ctx.save();
+
+      if (f.rotation) {
+        const cx = f.x + f.width / 2;
+        const cy = f.y + f.height / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((f.rotation * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+
+      const fs = f.textOverflow === "shrink"
+        ? shrinkFontSize(text, f.width, f.height, f.fontFamily, f.fontSize, f.bold, f.italic)
+        : f.fontSize;
+
+      if (f.textOverflow === "shrink") {
+        ctx.beginPath();
+        ctx.rect(f.x, f.y, f.width, f.height);
+        ctx.clip();
+      }
+
+      const fontStyle = f.italic ? "italic" : "normal";
+      const fontWeight = f.fontWeight ?? (f.bold ? 700 : 400);
+      ctx.font = `${fontStyle} ${fontWeight} ${fs}px '${f.fontFamily}', serif`;
+      ctx.fillStyle = f.color;
+
+      let textX = f.x + 3;
+      if (f.textAlign === "center") { ctx.textAlign = "center"; textX = f.x + f.width / 2; }
+      else if (f.textAlign === "right") { ctx.textAlign = "right"; textX = f.x + f.width - 3; }
+      else { ctx.textAlign = "left"; }
+
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, textX, f.y + f.height / 2);
+      ctx.restore();
+    }
+  }
+
+  return canvas.toDataURL("image/jpeg", 0.5);
+}
+
 export async function renderSingleCard(
   objects: CanvasObject[],
   canvasSize: CanvasSize,
@@ -71,7 +180,7 @@ export async function renderSingleCard(
         ? resolveDataImageSrc(
             imgObj.isDataImage,
             imgObj.dataImageColumn,
-            imgObj.columnOffset,
+            0,
             imgObj.src,
             rows,
             rowIndex,
@@ -142,9 +251,8 @@ export async function renderSingleCard(
       ctx.restore();
     } else {
       const f = obj as TextField;
-      const ti = rowIndex + f.columnOffset;
       const text =
-        ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
+        rowIndex >= 0 && rowIndex < rows.length ? (rows[rowIndex][f.column] ?? "") : "";
       if (!text) continue;
 
       const codeType = f.codeType ?? "text";

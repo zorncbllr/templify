@@ -1,15 +1,15 @@
 export const PRICING = {
   pro_monthly: {
-    ph: { amount: 19900, currency: 'PHP', display: '₱199', period: 'month' },
-    intl: { amount: 27900, currency: 'PHP', display: '₱279', period: 'month' },
+    ph: { amount: 29900, currency: 'PHP', display: '₱299', period: 'month' },
+    intl: { amount: 39900, currency: 'PHP', display: '₱399', period: 'month' },
   },
   pro_quarterly: {
-    ph: { amount: 49900, currency: 'PHP', display: '₱499', period: 'quarter' },
-    intl: { amount: 69900, currency: 'PHP', display: '₱699', period: 'quarter' },
+    ph: { amount: 74900, currency: 'PHP', display: '₱749', period: 'quarter' },
+    intl: { amount: 99900, currency: 'PHP', display: '₱999', period: 'quarter' },
   },
   pro_annual: {
-    ph: { amount: 169900, currency: 'PHP', display: '₱1,699', period: 'year' },
-    intl: { amount: 223900, currency: 'PHP', display: '₱2,239', period: 'year' },
+    ph: { amount: 249900, currency: 'PHP', display: '₱2,499', period: 'year' },
+    intl: { amount: 339900, currency: 'PHP', display: '₱3,399', period: 'year' },
   },
   biz_monthly: {
     ph: { amount: 79900, currency: 'PHP', display: '₱799', period: 'month' },
@@ -61,19 +61,19 @@ export const PLAN_LIMITS = {
     maxProjects: 3,
     maxRows: 25,
     maxPhotoColumns: 1,
-    storageBytes: 200 * 1024 * 1024, // 200MB
+    storageBytes: 25 * 1024 * 1024, // 25MB
   },
   pro: {
     maxProjects: Infinity,
-    maxRows: 100,
+    maxRows: 500,
     maxPhotoColumns: 3,
-    storageBytes: 2 * 1024 * 1024 * 1024, // 2GB
+    storageBytes: 200 * 1024 * 1024, // 200MB
   },
   business: {
     maxProjects: Infinity,
-    maxRows: 1000,
+    maxRows: 1500,
     maxPhotoColumns: 5,
-    storageBytes: 10 * 1024 * 1024 * 1024, // 10GB
+    storageBytes: 500 * 1024 * 1024, // 500MB
   },
 } as const;
 

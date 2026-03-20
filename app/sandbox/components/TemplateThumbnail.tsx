@@ -197,7 +197,7 @@ export function TemplateThumbnail({
               ? resolveDataImageSrc(
                   imgObj.isDataImage,
                   imgObj.dataImageColumn,
-                  imgObj.columnOffset,
+                  0,
                   imgObj.src,
                   rows,
                   pageIndex,
@@ -250,7 +250,7 @@ export function TemplateThumbnail({
           }
 
           const f = obj as TextField;
-          const ti = pageIndex + f.columnOffset;
+          const ti = pageIndex;
           const text =
             ti >= 0 && ti < rows.length
               ? (rows[ti][f.column] ?? "")

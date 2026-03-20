@@ -136,9 +136,7 @@ export default function SettingsPage() {
             <p className="text-[15px] font-semibold m-0">
               {profile?.full_name ?? "Unknown"}
             </p>
-            <p className="text-[13px] text-app-text/45 m-0">
-              {profile?.email}
-            </p>
+            <p className="text-[13px] text-app-text/45 m-0">{profile?.email}</p>
           </div>
         </div>
       </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { IconEdit, IconClock } from "@/components/Icons";
+import { IconClock, IconEdit } from "@/components/Icons";
 import DeleteProjectButton from "./DeleteProjectButton";
 
 function formatRelative(iso: string) {
@@ -26,18 +26,27 @@ function formatRelative(iso: string) {
 export default function ProjectCard({ project }: { project: any }) {
   return (
     <div className="group relative flex flex-col rounded-xl border border-white/[0.06] bg-white/[0.02] transition-colors hover:border-white/[0.1] hover:bg-white/[0.04]">
-      {/* Card header / thumbnail area */}
+      {/* Template preview */}
       <Link
         href={`/projects/${project.id}/edit`}
-        className="flex h-32 items-center justify-center rounded-t-xl border-b border-white/[0.04] bg-white/[0.01] no-underline"
+        className="relative flex items-center justify-center rounded-t-xl border-b border-white/[0.04] overflow-hidden h-[160px] no-underline"
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04] transition-colors group-hover:bg-app-accent/[0.08]">
-          <IconEdit
-            size={20}
-            color="rgba(240,237,232,0.2)"
-            className="transition-colors group-hover:!text-app-accent"
+        {project.thumbnail ? (
+          <img
+            src={project.thumbnail}
+            alt={project.name || "Template preview"}
+            className="w-full h-full object-cover"
+            draggable={false}
           />
-        </div>
+        ) : (
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04] transition-colors group-hover:bg-app-accent/[0.08]">
+            <IconEdit
+              size={20}
+              color="rgba(240,237,232,0.2)"
+              className="transition-colors group-hover:!text-app-accent"
+            />
+          </div>
+        )}
       </Link>
 
       {/* Card body */}
@@ -50,7 +59,7 @@ export default function ProjectCard({ project }: { project: any }) {
           >
             {project.name || "Untitled Project"}
           </Link>
-          <DeleteProjectButton projectId={project.id} />
+          <DeleteProjectButton projectId={project.id} projectName={project.name} userId={project.user_id} />
         </div>
 
         {/* Meta info */}
@@ -61,7 +70,7 @@ export default function ProjectCard({ project }: { project: any }) {
               {formatRelative(project.updated_at)}
             </span>
           )}
-          {typeof project.row_count === "number" && (
+          {typeof project.row_count === "number" && project.row_count > 0 && (
             <span className="tabular-nums">
               {project.row_count} row{project.row_count !== 1 ? "s" : ""}
             </span>

@@ -1,11 +1,15 @@
 export type Plan =
-  | 'free'
-  | 'pro_monthly' | 'pro_quarterly' | 'pro_annual'
-  | 'biz_monthly' | 'biz_quarterly' | 'biz_annual';
+  | "free"
+  | "pro_monthly"
+  | "pro_quarterly"
+  | "pro_annual"
+  | "biz_monthly"
+  | "biz_quarterly"
+  | "biz_annual";
 
-export type Locale = 'ph' | 'intl';
-export type PaymentGateway = 'paymongo';
-export type PaymentStatus = 'succeeded' | 'failed' | 'refunded';
+export type Locale = "ph" | "intl";
+export type PaymentGateway = "paymongo";
+export type PaymentStatus = "succeeded" | "failed" | "refunded";
 
 export type Profile = {
   id: string;
@@ -27,7 +31,7 @@ export type Project = {
   id: string;
   user_id: string;
   name: string;
-  objects: import('@/app/sandbox/types').CanvasObject[];
+  objects: import("@/app/sandbox/types").CanvasObject[];
   canvas_width: number;
   canvas_height: number;
   columns: string[];
@@ -46,8 +50,8 @@ export type Payment = {
   gateway_payment_id: string;
   gateway_subscription_id: string | null;
   amount: number;
-  currency: 'PHP';
-  plan: Exclude<Plan, 'free'>;
+  currency: "PHP";
+  plan: Exclude<Plan, "free">;
   status: PaymentStatus;
   metadata: Record<string, unknown> | null;
   created_at: string;

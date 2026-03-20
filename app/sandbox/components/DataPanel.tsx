@@ -190,7 +190,7 @@ export function DataImageInfo({
   const previewSrc = resolveDataImageSrc(
     obj.isDataImage,
     obj.dataImageColumn,
-    obj.columnOffset,
+    0,
     obj.src,
     rows,
     baseRowIndex,

@@ -29,15 +29,6 @@ export default async function ProjectEditPage({
     .eq("id", user.id)
     .single();
 
-  // Generate signed URL for data file if it exists
-  let dataFileUrl: string | null = null;
-  if (project.data_file_path) {
-    const { data: signedData } = await supabase.storage
-      .from("data-files")
-      .createSignedUrl(project.data_file_path, 3600); // 1 hour
-    dataFileUrl = signedData?.signedUrl ?? null;
-  }
-
   const displayName = profile?.full_name || user.email || "User";
 
   return (
@@ -48,9 +39,9 @@ export default async function ProjectEditPage({
         canvas_width: project.canvas_width,
         canvas_height: project.canvas_height,
         columns: project.columns ?? [],
+        data_rows: project.data_rows ?? [],
         data_images_label: project.data_images_label,
-        data_file_url: dataFileUrl,
-        data_file_path: project.data_file_path,
+        data_file_name: project.data_file_name ?? null,
         name: project.name,
       }}
       userPlan={profile?.plan ?? "free"}

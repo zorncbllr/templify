@@ -22,7 +22,7 @@ import {
   normalizeImageKey,
 } from "../utils/data";
 import { measureTextDimensions } from "../utils/rendering";
-import { exportRecords } from "../utils/export";
+import { exportRecords, renderThumbnail } from "../utils/export";
 import { LayerItem, DimensionInputs } from "./LayerItem";
 import { ZoomControls, FloatingPageNav, KbdHint } from "./Controls";
 import { ShadowPanel, BorderPanel, NumInput } from "./StylePanels";
@@ -155,7 +155,15 @@ interface EditorProps {
   initialDataImages?: DataImageMap;
   initialProjectName?: string;
   watermark?: boolean;
-  onSave?: (state: { objects: CanvasObject[]; canvasSize: CanvasSize }) => void;
+  onSave?: (state: {
+    objects: CanvasObject[];
+    canvasSize: CanvasSize;
+    columns: string[];
+    rows: RowData[];
+    dataImagesLabel: string | null;
+    dataFileName: string | null;
+    thumbnail: string | null;
+  }) => void;
   onDataImagesUpload?: (files: FileList) => Promise<DataImageMap>;
   onDataImagesClear?: () => Promise<void>;
   maxPhotoColumns?: number;
@@ -246,25 +254,61 @@ export default function Editor({
   >("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRenderRef = useRef(true);
+  const columnsRef = useRef<string[]>(initialColumns ?? []);
+  const rowsRef = useRef<RowData[]>(initialRows ?? []);
+  const dataImagesLabelRef = useRef<string | null>(initialDataImagesLabel ?? null);
+  const dataFileNameRef = useRef<string | null>(initialDataFileName ?? (initialRows && initialRows.length > 0 ? "Data" : null));
+  const dataImagesRef = useRef<DataImageMap>(initialDataImages ?? {});
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const saveProjectRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
+  const saveProject = useCallback(async () => {
+    if (!onSaveRef.current) return;
+    setSaveStatus("saving");
+    try {
+      // Generate thumbnail
+      let thumbnail: string | null = null;
+      try {
+        if (editorState.objects.length > 0) {
+          thumbnail = await renderThumbnail(
+            editorState.objects,
+            editorState.canvasSize,
+            rowsRef.current,
+            dataImagesRef.current,
+          );
+        }
+      } catch {
+        // Non-critical — save without thumbnail
+      }
+
+      await onSaveRef.current({
+        objects: editorState.objects,
+        canvasSize: editorState.canvasSize,
+        columns: columnsRef.current,
+        rows: rowsRef.current,
+        dataImagesLabel: dataImagesLabelRef.current,
+        dataFileName: dataFileNameRef.current,
+        thumbnail,
+      });
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      setSaveStatus("error");
+    }
+  }, [editorState]);
+  saveProjectRef.current = saveProject;
+
+  // Auto-save on editor state change (objects/canvas)
   useEffect(() => {
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
       return;
     }
     if (!onSave) return;
-    setSaveStatus("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        onSave(editorState);
-        setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 2000);
-      } catch {
-        setSaveStatus("error");
-      }
-    }, 800);
-  }, [editorState, onSave]);
+    saveTimerRef.current = setTimeout(saveProject, 800);
+  }, [editorState, onSave, saveProject]);
 
   // ─── Debounced project name save ─────────────────────────────────────────
   const handleProjectNameChange = useCallback(
@@ -375,9 +419,13 @@ export default function Editor({
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
   const [columns, setColumns] = useState<string[]>(initialColumns ?? []);
   const [rows, setRows] = useState<RowData[]>(initialRows ?? []);
-  const [dataFileName, setDataFileName] = useState<string | null>(
+  const [dataFileName, setDataFileNameRaw] = useState<string | null>(
     initialDataFileName ?? null,
   );
+  const setDataFileName = useCallback((name: string | null) => {
+    setDataFileNameRaw(name);
+    dataFileNameRef.current = name;
+  }, []);
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [rowLimitPrompt, setRowLimitPrompt] = useState<{
@@ -397,9 +445,13 @@ export default function Editor({
     string | null
   >(null);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
-  const [dataImages, setDataImages] = useState<DataImageMap>(
+  const [dataImages, setDataImagesRaw] = useState<DataImageMap>(
     initialDataImages ?? {},
   );
+  const setDataImages = useCallback((v: DataImageMap) => {
+    setDataImagesRaw(v);
+    dataImagesRef.current = v;
+  }, []);
   const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(
     initialDataImagesLabel ?? null,
   );
@@ -613,7 +665,12 @@ export default function Editor({
         tag === "TEXTAREA" ||
         tag === "SELECT" ||
         (e.target as HTMLElement).isContentEditable;
-      // Allow Ctrl+B / Ctrl+I even when an input is focused
+      // Allow Ctrl+S / Ctrl+B / Ctrl+I even when an input is focused
+      if (ctrl && e.key === "s") {
+        e.preventDefault();
+        saveProjectRef.current();
+        return;
+      }
       if (inInput && !(ctrl && (e.key === "b" || e.key === "i"))) return;
       if (ctrl && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -820,13 +877,19 @@ export default function Editor({
       const appliedRows = truncate && maxRows ? rd.slice(0, maxRows) : rd;
       setAutoDetectedImageColumns(imgCols);
       setColumns(cols);
+      columnsRef.current = cols;
       setRows(appliedRows);
+      rowsRef.current = appliedRows;
       setDataFileName(file.name);
       setPageIndex(0);
       setObjects((p) =>
-        p.filter(
-          (o) => o.kind !== "field" || cols.includes((o as TextField).column),
-        ),
+        p.filter((o) => {
+          // Remove text fields for columns that no longer exist
+          if (o.kind === "field") return cols.includes((o as TextField).column);
+          // Remove data image objects (photos are cleared on new file upload)
+          if (o.kind === "image" && (o as ImageObject).isDataImage) return false;
+          return true;
+        }),
       );
       if (imgCols.length > 0) {
         setTimeout(() => {
@@ -854,6 +917,18 @@ export default function Editor({
     setDataLoading(true);
     setDataError(null);
     try {
+      // Clear existing data images from storage before loading new file
+      if (onDataImagesClear) {
+        try {
+          await onDataImagesClear();
+        } catch {
+          // Continue even if clear fails
+        }
+      }
+      setDataImages({});
+      setDataImagesLabel(null);
+      dataImagesLabelRef.current = null;
+
       const { columns: cols, rows: rd } = await parseSpreadsheet(file);
       if (!cols.length) {
         setDataError("No columns detected.");
@@ -876,6 +951,8 @@ export default function Editor({
       }
 
       applyDataFile(file, cols, rd, imgCols);
+      // Trigger save after data file is applied
+      setTimeout(() => saveProjectRef.current(), 100);
     } catch (err: any) {
       setDataError(`Parse error: ${err?.message || "Unknown"}`);
     }
@@ -914,9 +991,11 @@ export default function Editor({
         );
         setDataImages(map);
       }
-      setDataImagesLabel(
-        `${imageFiles.length} photo${imageFiles.length === 1 ? "" : "s"}`,
-      );
+      const label = `${imageFiles.length} photo${imageFiles.length === 1 ? "" : "s"}`;
+      setDataImagesLabel(label);
+      dataImagesLabelRef.current = label;
+      // Trigger save to persist data images label
+      setTimeout(() => saveProject(), 100);
     } catch (err: any) {
       setDataError(err.message ?? "Failed to upload images");
     }
@@ -1093,7 +1172,7 @@ export default function Editor({
         italic: false,
         zIndex: nextZ.current++,
         shadow: { ...DEFAULT_SHADOW },
-        columnOffset: existing.length,
+        columnOffset: 0,
         textAlign: "left",
       };
       setObjects((p) => [...p, obj]);
@@ -1370,9 +1449,8 @@ export default function Editor({
         const tf = updated as TextField;
         if ((tf.codeType ?? "text") !== "text") return updated;
         const ci = currentRow ? rows.indexOf(currentRow) : -1;
-        const ti = ci >= 0 ? ci + tf.columnOffset : -1;
         const text =
-          ti >= 0 && ti < rows.length ? (rows[ti][tf.column] ?? "") : "";
+          ci >= 0 && ci < rows.length ? (rows[ci][tf.column] ?? "") : "";
         if (!text) return updated;
         const m = measureTextDimensions(
           text,
@@ -1501,22 +1579,22 @@ export default function Editor({
             tier: "pro" as const,
             name: "Pro",
             description: "For individuals and small teams",
-            rows: "100 rows",
-            features: ["Unlimited projects", "100 rows per export", "3 photo columns", "2GB storage", "No watermark"],
+            rows: "500 rows",
+            features: ["Unlimited projects", "500 rows per export", "3 photo columns", "200MB storage", "No watermark"],
             prefix: "pro",
             pricing: {
-              monthly: "₱199",
-              quarterly: "₱499",
-              annual: "₱1,699",
+              monthly: "₱299",
+              quarterly: "₱749",
+              annual: "₱2,499",
             },
-            savings: { monthly: null as string | null, quarterly: "Save ₱98", annual: "Save 3 months" },
+            savings: { monthly: null as string | null, quarterly: "Save ₱148", annual: "Save 3 months" },
           }] : []),
           ...(userTier !== "business" ? [{
             tier: "business" as const,
             name: "Business",
             description: "For organizations and power users",
-            rows: "1,000 rows",
-            features: ["Unlimited projects", "1,000 rows per export", "5 photo columns", "10GB storage", "No watermark", "Priority support"],
+            rows: "1,500 rows",
+            features: ["Unlimited projects", "1,500 rows per export", "5 photo columns", "500MB storage", "No watermark", "Priority support"],
             prefix: "biz",
             pricing: {
               monthly: "₱799",
@@ -1748,6 +1826,23 @@ export default function Editor({
         </div>
 
         <div className="flex items-center gap-2">
+          {projectId && saveStatus !== "idle" && (
+            <span
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md ${
+                saveStatus === "saving"
+                  ? "text-app-text/30"
+                  : saveStatus === "saved"
+                    ? "text-app-success/70"
+                    : "text-red-400 bg-red-500/10"
+              }`}
+            >
+              {saveStatus === "saving"
+                ? "Saving..."
+                : saveStatus === "saved"
+                  ? "Saved"
+                  : "Save failed"}
+            </span>
+          )}
           <button
             onClick={() => setShowImpositionModal(true)}
             className="flex items-center gap-1.5 px-3.5 h-8 rounded-md text-[11px] font-bold cursor-pointer bg-app-accent border-none text-app-bg"
@@ -1969,6 +2064,7 @@ export default function Editor({
               if (onDataImagesClear) onDataImagesClear();
               else setDataImages({});
               setDataImagesLabel(null);
+              dataImagesLabelRef.current = null;
             }}
             onPlacePhoto={addDataPhotoObject}
           />
@@ -2817,13 +2913,9 @@ export default function Editor({
                                                   const ci = currentRow
                                                     ? rows.indexOf(currentRow)
                                                     : -1;
-                                                  const ti =
-                                                    ci >= 0
-                                                      ? ci + tf.columnOffset
-                                                      : -1;
                                                   const text =
-                                                    ti >= 0 && ti < rows.length
-                                                      ? (rows[ti][tf.column] ??
+                                                    ci >= 0 && ci < rows.length
+                                                      ? (rows[ci][tf.column] ??
                                                         "")
                                                       : "";
                                                   if (text) {
@@ -2940,13 +3032,9 @@ export default function Editor({
                                             const ci = currentRow
                                               ? rows.indexOf(currentRow)
                                               : -1;
-                                            const ti =
-                                              ci >= 0
-                                                ? ci + tf.columnOffset
-                                                : -1;
                                             const text =
-                                              ti >= 0 && ti < rows.length
-                                                ? (rows[ti][tf.column] ?? "")
+                                              ci >= 0 && ci < rows.length
+                                                ? (rows[ci][tf.column] ?? "")
                                                 : "";
                                             if (!text) return o;
                                             const m = measureTextDimensions(

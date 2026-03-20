@@ -41,7 +41,7 @@ export function ImageEl({
   const resolvedSrc = resolveDataImageSrc(
     obj.isDataImage,
     obj.dataImageColumn,
-    obj.columnOffset,
+    0,
     obj.src,
     rows,
     baseRowIndex,
@@ -277,9 +277,8 @@ export function TextEl({
   const rawText = useMemo(() => {
     if (!currentRow) return "";
     const ci = rows.indexOf(currentRow);
-    const ti = ci + obj.columnOffset;
-    return ti >= 0 && ti < rows.length ? (rows[ti][obj.column] ?? "") : "";
-  }, [currentRow, rows, obj.column, obj.columnOffset]);
+    return ci >= 0 && ci < rows.length ? (rows[ci][obj.column] ?? "") : "";
+  }, [currentRow, rows, obj.column]);
 
   const codeType = obj.codeType ?? "text";
 

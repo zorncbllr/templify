@@ -9,7 +9,6 @@ import type {
 } from "@/app/sandbox/types";
 import Editor from "@/app/sandbox/components/Editor";
 import { createClient } from "@/lib/supabase/client";
-import { parseSpreadsheet } from "@/app/sandbox/utils/data";
 import {
   uploadDataImages,
   loadDataImages,
@@ -24,9 +23,9 @@ interface ProjectEditorProps {
     canvas_width: number;
     canvas_height: number;
     columns: string[];
+    data_rows: RowData[];
     data_images_label: string | null;
-    data_file_url: string | null;
-    data_file_path: string | null;
+    data_file_name: string | null;
     name: string;
   };
   userPlan: string;
@@ -42,7 +41,6 @@ export default function ProjectEditor({
   displayName,
   storageUsed: initialStorageUsed,
 }: ProjectEditorProps) {
-  const [rows, setRows] = useState<RowData[]>([]);
   const [dataImages, setDataImages] = useState<DataImageMap>({});
   const [dataLoading, setDataLoading] = useState(true);
   const [storageUsed, setStorageUsed] = useState(initialStorageUsed);
@@ -50,60 +48,53 @@ export default function ProjectEditor({
   const limits = getPlanLimits(userPlan);
 
   useEffect(() => {
-    async function loadAll() {
-      const promises: Promise<void>[] = [];
-
-      // Load data file
-      if (project.data_file_url) {
-        promises.push(
-          (async () => {
-            try {
-              const res = await fetch(project.data_file_url!);
-              const blob = await res.blob();
-              const fileName =
-                project.data_file_path?.split("/").pop() ?? "data.xlsx";
-              const file = new File([blob], fileName, { type: blob.type });
-              const { rows: parsedRows } = await parseSpreadsheet(file);
-              setRows(parsedRows);
-            } catch {
-              // Continue without data file
-            }
-          })(),
-        );
+    async function loadDataImagesFromStorage() {
+      try {
+        const map = await loadDataImages(userId, project.id);
+        if (Object.keys(map).length > 0) {
+          setDataImages(map);
+        }
+      } catch {
+        // Continue without data images
       }
-
-      // Load data images from storage
-      promises.push(
-        (async () => {
-          try {
-            const map = await loadDataImages(userId, project.id);
-            if (Object.keys(map).length > 0) {
-              setDataImages(map);
-            }
-          } catch {
-            // Continue without data images
-          }
-        })(),
-      );
-
-      await Promise.all(promises);
       setDataLoading(false);
     }
 
-    loadAll();
-  }, [project.data_file_url, project.data_file_path, userId, project.id]);
+    loadDataImagesFromStorage();
+  }, [userId, project.id]);
 
   const handleSave = useCallback(
-    async (state: { objects: CanvasObject[]; canvasSize: CanvasSize }) => {
+    async (state: {
+      objects: CanvasObject[];
+      canvasSize: CanvasSize;
+      columns: string[];
+      rows: RowData[];
+      dataImagesLabel: string | null;
+      dataFileName: string | null;
+      thumbnail: string | null;
+    }) => {
       const supabase = createClient();
-      await supabase
+      const updateData: Record<string, any> = {
+        objects: state.objects as any,
+        canvas_width: state.canvasSize.width,
+        canvas_height: state.canvasSize.height,
+        columns: state.columns as any,
+        data_rows: state.rows as any,
+        row_count: state.rows.length,
+        data_images_label: state.dataImagesLabel,
+        data_file_name: state.dataFileName,
+      };
+      if (state.thumbnail !== null) {
+        updateData.thumbnail = state.thumbnail;
+      }
+      const { error } = await supabase
         .from("projects")
-        .update({
-          objects: state.objects as any,
-          canvas_width: state.canvasSize.width,
-          canvas_height: state.canvasSize.height,
-        })
+        .update(updateData)
         .eq("id", project.id);
+      if (error) {
+        console.error("Project save failed:", error.message);
+        throw error;
+      }
     },
     [project.id],
   );
@@ -182,9 +173,9 @@ export default function ProjectEditor({
         height: project.canvas_height,
       }}
       initialColumns={project.columns}
-      initialRows={rows}
+      initialRows={project.data_rows}
       initialDataImages={dataImages}
-      initialDataFileName={project.data_file_path?.split("/").pop() ?? null}
+      initialDataFileName={project.data_file_name}
       initialDataImagesLabel={project.data_images_label}
       initialProjectName={project.name}
       watermark={userPlan === "free"}

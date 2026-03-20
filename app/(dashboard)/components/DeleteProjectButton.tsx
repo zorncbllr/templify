@@ -2,49 +2,125 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { IconTrash } from "@/components/Icons";
+import { IconTrash, IconWarning } from "@/components/Icons";
 
 interface DeleteProjectButtonProps {
   projectId: string;
+  projectName?: string;
+  userId: string;
 }
 
 export default function DeleteProjectButton({
   projectId,
+  projectName,
+  userId,
 }: DeleteProjectButtonProps) {
   const [hovered, setHovered] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
-    const confirmed = window.confirm(
-      "Delete this project? This cannot be undone.",
-    );
-    if (!confirmed) return;
-
+    setDeleting(true);
     const supabase = createClient();
+    const folder = `${userId}/${projectId}`;
+
+    // Delete data images from storage and track freed bytes
+    let bytesFreed = 0;
+    const { data: imageFiles } = await supabase.storage
+      .from("data-images")
+      .list(folder);
+    if (imageFiles && imageFiles.length > 0) {
+      for (const f of imageFiles) {
+        bytesFreed += f.metadata?.size ?? 0;
+      }
+      await supabase.storage
+        .from("data-images")
+        .remove(imageFiles.map((f) => `${folder}/${f.name}`));
+    }
+
+    // Delete data files from storage
+    const { data: dataFiles } = await supabase.storage
+      .from("data-files")
+      .list(folder);
+    if (dataFiles && dataFiles.length > 0) {
+      await supabase.storage
+        .from("data-files")
+        .remove(dataFiles.map((f) => `${folder}/${f.name}`));
+    }
+
+    // Update storage_used on profile
+    if (bytesFreed > 0) {
+      await supabase.rpc("update_storage_used", { delta: -bytesFreed });
+    }
+
+    // Delete the project row
     await supabase.from("projects").delete().eq("id", projectId);
     window.location.reload();
   }
 
   return (
-    <button
-      onClick={handleDelete}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      title="Delete project"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        color: hovered ? "rgba(220,60,60,0.8)" : "rgba(240,237,232,0.3)",
-        padding: 6,
-        borderRadius: 6,
-        transition: "color 0.15s",
-        flexShrink: 0,
-      }}
-    >
-      <IconTrash size={14} color="currentColor" />
-    </button>
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title="Delete project"
+        className="flex items-center justify-center bg-transparent border-none cursor-pointer p-1.5 rounded-md shrink-0 transition-colors"
+        style={{
+          color: hovered ? "rgba(220,60,60,0.8)" : "rgba(240,237,232,0.3)",
+        }}
+      >
+        <IconTrash size={14} color="currentColor" />
+      </button>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-app-bg border border-white/[0.07] rounded-2xl shadow-2xl w-[400px] max-w-[90vw] p-6 flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                <IconWarning size={20} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-bold text-app-text m-0">
+                  Delete Project
+                </h3>
+                <p className="text-[12px] text-app-text/40 m-0 mt-0.5">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <p className="text-[13px] text-app-text/60 m-0 leading-relaxed">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-app-text/80">
+                {projectName || "this project"}
+              </span>
+              ? All data, images, and exports associated with it will be
+              permanently removed.
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 justify-end pt-1">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={deleting}
+                className="px-4 py-2.5 rounded-lg text-[12px] font-semibold cursor-pointer bg-transparent border border-white/[0.08] text-app-text/50 hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2.5 rounded-lg text-[12px] font-bold cursor-pointer bg-red-500/15 border border-red-500/25 text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete Project"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
