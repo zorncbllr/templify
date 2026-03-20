@@ -39,13 +39,22 @@ export async function middleware(request: NextRequest) {
   // Locale detection via Vercel IP country header
   // Only set once — don't override a locale the user has already chosen
   if (!request.cookies.get("locale")) {
-    const country = request.headers.get("x-vercel-ip-country");
+    const country = request.headers.get("x-vercel-ip-country") ?? "PH";
     const locale = country === "PH" ? "ph" : "intl";
     response.cookies.set("locale", locale, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365, // 1 year
       sameSite: "lax",
     });
+
+    // Sync detected locale to the user's profile
+    if (user) {
+      supabase
+        .from("profiles")
+        .update({ locale })
+        .eq("id", user.id)
+        .then(() => {});
+    }
   }
 
   return response;

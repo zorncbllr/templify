@@ -32,7 +32,7 @@ export async function routePayment(
   const methodTypes: string[] =
     locale === "ph"
       ? ["qrph", "gcash", "paymaya", "card"]
-      : ["card", "paypal"];
+      : ["card"];
 
   const { checkoutUrl, sessionId } = await paymongoCheckout({
     amount: pricing.amount,

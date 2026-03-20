@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { IconCheck, IconCrown, IconWarning } from "@/components/Icons";
+import {
+  IconCheck,
+  IconCrown,
+  IconWarning,
+  IconSparkle,
+  IconArrowBack,
+} from "@/components/Icons";
 
 type BillingCycle = "monthly" | "quarterly" | "annual";
 type Locale = "ph" | "intl";
@@ -137,7 +143,12 @@ export default function PricingPage() {
     }
   }
 
-  const userTier = !userPlan || userPlan === "free" ? "free" : userPlan.startsWith("biz_") ? "business" : "pro";
+  const userTier =
+    !userPlan || userPlan === "free"
+      ? "free"
+      : userPlan.startsWith("biz_")
+        ? "business"
+        : "pro";
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text overflow-x-hidden">
@@ -146,12 +157,31 @@ export default function PricingPage() {
         <div className="absolute w-125 h-125 rounded-full bg-app-accent/6 blur-[100px] top-[5%] left-1/2 -translate-x-1/2" />
       </div>
 
-      <div className="relative z-10 max-w-[1200px] mx-auto px-6 pt-20 pb-24">
+      {/* Top nav */}
+      <nav className="relative z-20 flex items-center gap-4 px-6 py-5">
+        <Link
+          href={isLoggedIn ? "/projects" : "/"}
+          className="flex items-center gap-2 text-app-text/50 no-underline text-sm hover:text-app-text transition-colors"
+        >
+          <IconArrowBack size={16} />
+          Back
+        </Link>
+      </nav>
+
+      <div className="relative z-10 max-w-300 mx-auto px-6 pt-4 pb-24">
         {/* Header */}
         <div className="text-center mb-12">
-          <span className="inline-block bg-app-accent/10 text-app-accent border border-app-accent/20 rounded-full px-4 py-1.5 text-xs font-semibold tracking-widest uppercase mb-5">
-            Pricing
-          </span>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 no-underline mb-6"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-app-accent text-app-bg">
+              <IconSparkle size={18} />
+            </div>
+            <span className="text-2xl font-bold tracking-tight text-app-text">
+              Templify
+            </span>
+          </Link>
           <h1 className="text-4xl font-extrabold tracking-tight mb-3">
             Simple, transparent pricing
           </h1>
@@ -387,9 +417,7 @@ export default function PricingPage() {
                           checkoutLoading !== null && !isLoading ? 0.5 : 1,
                       }}
                     >
-                      {isLoading
-                        ? "Redirecting..."
-                        : "Upgrade to Business"}
+                      {isLoading ? "Redirecting..." : "Upgrade to Business"}
                     </button>
                   )}
                 </div>
