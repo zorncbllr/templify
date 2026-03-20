@@ -35,35 +35,23 @@ export function DataImagesPanel({
   const imageCount = Object.keys(dataImages).length / 2;
 
   return (
-    <div
-      className="px-2.5 py-2 border-b border-[rgba(255,255,255,0.06)]"
-    >
+    <div className="px-2.5 py-2 border-b border-[rgba(255,255,255,0.06)]">
       {dataImagesLabel ? (
-        <div
-          className="bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.2)] rounded-md px-2 py-1.5"
-        >
-          <div
-            className="flex items-center justify-between"
-          >
-            <div
-              className="flex items-center gap-[5px] min-w-0"
-            >
-              <span className="shrink-0"><IconCamera size={11} /></span>
-              <span
-                className="text-[9px] font-semibold text-[#63b3ed] overflow-hidden text-ellipsis whitespace-nowrap"
-              >
+        <div className="bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.2)] rounded-md px-2 py-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-[5px] min-w-0">
+              <span className="shrink-0">
+                <IconCamera size={11} />
+              </span>
+              <span className="text-[9px] font-semibold text-[#63b3ed] overflow-hidden text-ellipsis whitespace-nowrap">
                 {dataImagesLabel}
               </span>
               <span className="text-[8px] text-[rgba(240,237,232,0.3)] shrink-0">
                 {Math.round(imageCount)} img
               </span>
             </div>
-            <div
-              className="flex items-center gap-1 shrink-0 ml-1"
-            >
-              <label
-                className="text-[8px] text-[rgba(240,237,232,0.4)] cursor-pointer underline"
-              >
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              <label className="text-[8px] text-[rgba(240,237,232,0.4)] cursor-pointer underline">
                 Replace
                 <input
                   type="file"
@@ -114,9 +102,7 @@ export function DataImagesPanel({
             <IconCamera size={14} />
           )}
           <div>
-            <p
-              className="text-[10px] font-semibold text-[rgba(240,237,232,0.5)]"
-            >
+            <p className="text-[10px] font-semibold text-[rgba(240,237,232,0.5)]">
               {dataImagesLoading ? "Loading…" : "Upload Photos"}
             </p>
             <p className="text-[8px] text-[rgba(240,237,232,0.22)]">
@@ -135,9 +121,7 @@ export function DataImagesPanel({
 
       {autoDetectedColumns.length > 0 && (
         <div className="mt-1.5">
-          <p
-            className="text-[8px] text-[rgba(240,237,232,0.22)] mb-[3px] leading-[1.4]"
-          >
+          <p className="text-[8px] text-[rgba(240,237,232,0.22)] mb-[3px] leading-[1.4]">
             Photo fields — click to place:
           </p>
           <div className="flex flex-col gap-0.5">
@@ -162,27 +146,23 @@ export function DataImagesPanel({
                     color: cnt > 0 ? "#63b3ed" : "rgba(240,237,232,0.55)",
                   }}
                 >
-                  <div
-                    className="flex items-center gap-[5px] min-w-0"
-                  >
-                    <span className="text-[10px] shrink-0"><IconCamera size={10} /></span>
-                    <span
-                      className="font-mono text-[9px] overflow-hidden text-ellipsis whitespace-nowrap"
-                    >
+                  <div className="flex items-center gap-[5px] min-w-0 leading-none">
+                    <span className="flex items-center leading-[0] shrink-0 translate-y-[-2px]">
+                      <IconCamera size={10} />
+                    </span>
+                    <span className="font-mono text-[9px] overflow-hidden text-ellipsis whitespace-nowrap">
                       {col}
                     </span>
                   </div>
-                  <span
-                    className="flex items-center gap-[3px] shrink-0"
-                  >
+                  <span className="flex items-center gap-[3px] shrink-0">
                     {cnt > 0 && (
-                      <span
-                        className="bg-[rgba(99,179,237,0.2)] text-[#63b3ed] rounded-md px-1 py-0 text-[8px] font-bold"
-                      >
+                      <span className="flex items-center bg-[rgba(99,179,237,0.2)] text-[#63b3ed] rounded-md px-1 py-0 text-[8px] font-bold">
                         {cnt}
                       </span>
                     )}
-                    <span className="text-[10px] opacity-40">+</span>
+                    <span className="flex items-center opacity-40 text-[10px]">
+                      +
+                    </span>
                   </span>
                 </button>
               );
@@ -221,9 +201,7 @@ export function DataImageInfo({
   const currentRow = rows[baseRowIndex] ?? null;
 
   return (
-    <div
-      className="p-2.5 rounded-md bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.25)] flex flex-col gap-2"
-    >
+    <div className="p-2.5 rounded-md bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.25)] flex flex-col gap-2">
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 10, color: "rgba(240,237,232,0.45)" }}>
           Photo column

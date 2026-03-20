@@ -1,5 +1,12 @@
 import type { RowData } from "../types/index";
-import { IconMinus, IconFitScreen, IconChevronsLeft, IconChevronLeft, IconChevronRight, IconChevronsRight } from "@/components/Icons";
+import {
+  IconMinus,
+  IconFitScreen,
+  IconChevronsLeft,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronsRight,
+} from "@/components/Icons";
 
 // ─── ZoomControls ─────────────────────────────────────────────────────────────
 
@@ -15,7 +22,7 @@ export function ZoomControls({
   onFit: () => void;
 }) {
   return (
-    <div className="absolute bottom-5 right-5 z-30 flex flex-col gap-[3px]">
+    <div className="absolute bottom-5 right-5 z-30 flex flex-col">
       <div
         className="flex flex-col bg-[rgba(12,12,20,0.92)] border border-[rgba(255,255,255,0.1)] rounded-lg overflow-hidden"
         style={{
@@ -26,7 +33,7 @@ export function ZoomControls({
         <button
           onClick={() => onZoom(0.1)}
           title="Zoom In"
-          className="w-8 h-8 flex items-center justify-center border-none text-[rgba(240,237,232,0.7)] cursor-pointer text-[16px] border-b border-b-[rgba(255,255,255,0.07)]"
+          className="w-7 h-6 flex items-center justify-center border-none text-[rgba(240,237,232,0.7)] cursor-pointer text-[16px] border-b border-b-[rgba(255,255,255,0.07)]"
           style={{ background: "none" }}
           onMouseEnter={(e) =>
             (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
@@ -39,7 +46,7 @@ export function ZoomControls({
         <button
           onClick={onReset}
           title="Reset Zoom"
-          className="w-8 h-8 flex items-center justify-center border-none text-[#e8ff47] cursor-pointer text-[8px] font-bold tracking-[0.02em] border-b border-b-[rgba(255,255,255,0.07)] p-0"
+          className="w-7 h-6 flex items-center justify-center border-none text-[#e8ff47] cursor-pointer text-[8px] font-bold tracking-[0.02em] border-b border-b-[rgba(255,255,255,0.07)] p-0"
           style={{ background: "none" }}
           onMouseEnter={(e) =>
             (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
@@ -52,7 +59,7 @@ export function ZoomControls({
         <button
           onClick={() => onZoom(-0.1)}
           title="Zoom Out"
-          className="w-8 h-8 flex items-center justify-center border-none text-[rgba(240,237,232,0.7)] cursor-pointer text-[16px] border-b border-b-[rgba(255,255,255,0.07)]"
+          className="w-7 h-6 flex items-center justify-center border-none text-[rgba(240,237,232,0.7)] cursor-pointer text-[16px] border-b border-b-[rgba(255,255,255,0.07)]"
           style={{ background: "none" }}
           onMouseEnter={(e) =>
             (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
@@ -65,7 +72,7 @@ export function ZoomControls({
         <button
           onClick={onFit}
           title="Fit to Screen"
-          className="w-8 h-8 flex items-center justify-center border-none text-[rgba(240,237,232,0.5)] cursor-pointer text-[11px]"
+          className="w-7 h-6 flex items-center justify-center border-none text-[rgba(240,237,232,0.5)] cursor-pointer text-[11px]"
           style={{ background: "none" }}
           onMouseEnter={(e) =>
             (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
@@ -96,7 +103,7 @@ export function FloatingPageNav({
 
   return (
     <div
-      className="absolute bottom-5 z-30 flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[rgba(12,12,20,0.92)] border border-[rgba(255,255,255,0.1)]"
+      className="absolute bottom-5 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[rgba(12,12,20,0.92)] border border-[rgba(255,255,255,0.1)]"
       style={{
         left: "50%",
         transform: "translateX(-50%)",
@@ -122,7 +129,7 @@ export function FloatingPageNav({
           key={i}
           onClick={btn.action}
           disabled={btn.disabled}
-          className="w-[22px] h-[22px] rounded-md bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] flex items-center justify-center"
+          className="w-[20px] h-[20px] rounded-md bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] flex items-center justify-center"
           style={{
             color: btn.disabled
               ? "rgba(240,237,232,0.15)"
@@ -134,12 +141,10 @@ export function FloatingPageNav({
         </button>
       ))}
 
-      <div className="text-center min-w-[90px]">
+      <div className="text-center min-w-[80px]">
         <div className="text-[11px] font-bold text-[#f0ede8]">
           Row {pageIndex + 1}{" "}
-          <span className="text-[rgba(240,237,232,0.3)]">
-            / {rows.length}
-          </span>
+          <span className="text-[rgba(240,237,232,0.3)]">/ {rows.length}</span>
         </div>
         <div className="text-[9px] text-[rgba(240,237,232,0.35)] mt-px">
           {rows[pageIndex]
@@ -164,7 +169,7 @@ export function FloatingPageNav({
           key={i}
           onClick={btn.action}
           disabled={btn.disabled}
-          className="w-[22px] h-[22px] rounded-md bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] flex items-center justify-center"
+          className="w-[20px] h-[20px] rounded-md bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] flex items-center justify-center"
           style={{
             color: btn.disabled
               ? "rgba(240,237,232,0.15)"
@@ -184,9 +189,7 @@ export function FloatingPageNav({
 export function KbdHint({ keys, label }: { keys: string[]; label: string }) {
   return (
     <div className="flex items-center justify-between px-0 py-0.5">
-      <span className="text-[10px] text-[rgba(240,237,232,0.33)]">
-        {label}
-      </span>
+      <span className="text-[10px] text-[rgba(240,237,232,0.33)]">{label}</span>
       <div className="flex gap-0.5">
         {keys.map((k) => (
           <span

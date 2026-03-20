@@ -62,7 +62,10 @@ import {
   IconFitScreen,
   IconTrash,
   IconRotate,
+  IconSettings,
+  IconLogOut,
 } from "@/components/Icons";
+import { signOut } from "@/lib/auth/actions";
 import { ChevronUpIcon } from "lucide-react";
 
 // ─── Unified undo state ───────────────────────────────────────────────────────
@@ -150,7 +153,7 @@ interface EditorProps {
   watermark?: boolean;
   onSave?: (state: { objects: CanvasObject[]; canvasSize: CanvasSize }) => void;
   projectId?: string | null;
-  user?: { plan: string } | null;
+  user?: { plan: string; displayName?: string } | null;
 }
 
 export default function Editor({
@@ -1300,7 +1303,7 @@ export default function Editor({
   };
 
   return (
-    <div className="dark flex flex-col h-screen overflow-hidden bg-[#0a0a10] text-[#f0ede8] font-[DM_Sans,sans-serif]">
+    <div className="dark fixed inset-0 flex flex-col overflow-hidden bg-app-bg text-app-text font-[DM_Sans,sans-serif] z-50">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
         // *{box-sizing:border-box;margin:0;padding:0;}
@@ -1361,16 +1364,19 @@ export default function Editor({
       )}
 
       {/* Header */}
-      <header className="flex items-center justify-between px-4 h-[50px] border-b border-b-[rgba(255,255,255,0.06)] bg-[#0c0c14] shrink-0 z-20">
+      <header className="flex items-center justify-between px-4 h-[50px] border-b border-border/60 bg-app-bg-deep shrink-0 z-20">
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-[7px]">
-            <div className="w-[26px] h-[26px] bg-[#e8ff47] rounded-md flex items-center justify-center text-xs font-black text-[#0a0a10]">
+          <a
+            href={user ? "/dashboard" : "/"}
+            className="flex items-center gap-[7px] no-underline"
+          >
+            <div className="w-[26px] h-[26px] bg-app-accent rounded-md flex items-center justify-center text-xs font-black text-app-bg">
               <IconSparkle size={12} />
             </div>
-            <span className="font-bold text-[13px] tracking-[-0.02em]">
+            <span className="font-bold text-[13px] tracking-[-0.02em] text-app-text">
               Templify
             </span>
-          </div>
+          </a>
           <div className="w-px h-[18px] bg-[rgba(255,255,255,0.08)]" />
           <div className="flex gap-0.5">
             <button
@@ -1390,7 +1396,7 @@ export default function Editor({
               <IconUndo size={13} style={{ transform: "scaleX(-1)" }} />
             </button>
           </div>
-          <div className="flex items-center gap-[5px] py-1 px-[9px] rounded-md bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]">
+          <div className="flex items-center gap-[5px] py-1 px-2.5 rounded-md bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]">
             <span className="text-[9px] text-[rgba(240,237,232,0.3)]">
               Canvas
             </span>
@@ -1399,8 +1405,8 @@ export default function Editor({
             </span>
           </div>
           {selectedIds.size > 1 && (
-            <div className="flex items-center gap-[5px] py-1 px-[9px] rounded-md bg-[rgba(232,255,71,0.08)] border border-[rgba(232,255,71,0.2)]">
-              <span className="text-[10px] font-bold text-[#e8ff47]">
+            <div className="flex items-center gap-[5px] py-1 px-2.5 rounded-md bg-[rgba(232,255,71,0.08)] border border-[rgba(232,255,71,0.2)]">
+              <span className="text-[10px] font-bold text-app-accent">
                 {selectedIds.size} selected
               </span>
               <button
@@ -1412,18 +1418,71 @@ export default function Editor({
             </div>
           )}
         </div>
-        <button
-          onClick={() => setShowImpositionModal(true)}
-          className="flex items-center gap-1.5 px-3.5 h-8 rounded-md text-[11px] font-bold cursor-pointer bg-[#e8ff47] border-none text-[#0a0a10]"
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#d4eb3f")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#e8ff47")}
-        >
-          <IconGrid size={12} />
-          <span>Print Imposition & Export</span>
-          <span className="text-[8px] bg-[rgba(0,0,0,0.12)] px-[5px] py-px rounded-md tracking-[0.04em]">
-            GA
-          </span>
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImpositionModal(true)}
+            className="flex items-center gap-1.5 px-3.5 h-8 rounded-md text-[11px] font-bold cursor-pointer bg-app-accent border-none text-app-bg"
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#d4eb3f")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+          >
+            <IconGrid size={12} />
+            <span>Print Imposition & Export</span>
+            <span className="text-[8px] bg-[rgba(0,0,0,0.12)] px-[5px] py-px rounded-md tracking-[0.04em]">
+              GA
+            </span>
+          </button>
+
+          {user && (
+            <>
+              <div className="w-px h-[18px] bg-[rgba(255,255,255,0.08)]" />
+
+              {/* Plan badge */}
+              <span
+                className="text-[10px] font-semibold uppercase tracking-[0.06em] rounded-md px-2 py-0.5 shrink-0"
+                style={{
+                  color:
+                    user.plan !== "free" ? "#e8ff47" : "rgba(240,237,232,0.4)",
+                  background:
+                    user.plan !== "free"
+                      ? "rgba(232,255,71,0.08)"
+                      : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${user.plan !== "free" ? "rgba(232,255,71,0.2)" : "rgba(255,255,255,0.08)"}`,
+                }}
+              >
+                {user.plan !== "free" ? "Pro" : "Free"}
+              </span>
+
+              {/* User name */}
+              {user.displayName && (
+                <span
+                  className="text-[12px] text-[rgba(240,237,232,0.5)] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap shrink"
+                  title={user.displayName}
+                >
+                  {user.displayName}
+                </span>
+              )}
+
+              {/* Settings */}
+              <a
+                href="/settings"
+                className="flex items-center justify-center w-7 h-7 rounded-md text-[rgba(240,237,232,0.4)] hover:text-[rgba(240,237,232,0.7)] hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+                title="Settings"
+              >
+                <IconSettings size={14} />
+              </a>
+
+              {/* Sign out */}
+              <button
+                onClick={() => signOut()}
+                className="flex items-center justify-center w-7 h-7 rounded-md bg-transparent border-none text-[rgba(240,237,232,0.4)] hover:text-[rgba(240,237,232,0.7)] hover:bg-[rgba(255,255,255,0.06)] cursor-pointer transition-colors"
+                title="Sign out"
+              >
+                <IconLogOut size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -1650,7 +1709,7 @@ export default function Editor({
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
                           }}
-                        >{`{{${col}}}`}</span>
+                        >{`${col}`}</span>
                         <span
                           style={{
                             display: "flex",
@@ -2171,19 +2230,6 @@ export default function Editor({
                         </p>
                       ) : null}
                     </div>
-
-                    {multiSelected && (
-                      <p
-                        style={{
-                          fontSize: 9,
-                          color: "rgba(232,255,71,0.45)",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        Style changes apply to all {selectedIds.size} selected
-                        objects. Position/size only affects the primary object.
-                      </p>
-                    )}
 
                     {multiSelected && (
                       <div className="mt-1.5">

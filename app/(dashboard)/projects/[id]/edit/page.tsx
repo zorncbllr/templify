@@ -25,7 +25,7 @@ export default async function ProjectEditPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("plan")
+    .select("full_name, plan")
     .eq("id", user.id)
     .single();
 
@@ -37,6 +37,8 @@ export default async function ProjectEditPage({
       .createSignedUrl(project.data_file_path, 3600); // 1 hour
     dataFileUrl = signedData?.signedUrl ?? null;
   }
+
+  const displayName = profile?.full_name || user.email || "User";
 
   return (
     <ProjectEditor
@@ -51,6 +53,7 @@ export default async function ProjectEditPage({
         data_file_path: project.data_file_path,
       }}
       userPlan={profile?.plan ?? "free"}
+      displayName={displayName}
     />
   );
 }

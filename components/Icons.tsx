@@ -343,3 +343,23 @@ export const IconTrash = multiPath([
   { d: "M3 6h18" },
   { d: "M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" },
 ]);
+
+// Clock / time
+export const IconClock = multiPath([
+  { d: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", stroke: "current", fill: "none" },
+  { d: "M12 6v6l4 2", stroke: "current", fill: "none" },
+]);
+
+// Layers / stack
+export const IconLayers = multiPath([
+  { d: "M12 2L2 7l10 5 10-5-10-5z", stroke: "current", fill: "none" },
+  { d: "M2 17l10 5 10-5", stroke: "current", fill: "none" },
+  { d: "M2 12l10 5 10-5", stroke: "current", fill: "none" },
+]);
+
+// External link / open
+export const IconExternalLink = multiPath([
+  { d: "M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6", stroke: "current", fill: "none" },
+  { d: "M15 3h6v6", stroke: "current", fill: "none" },
+  { d: "M10 14L21 3", stroke: "current", fill: "none" },
+]);

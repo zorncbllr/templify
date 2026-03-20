@@ -89,6 +89,9 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // Store checkout info so payment-success page can verify directly
+      sessionStorage.setItem('checkout_session_id', data.sessionId);
+      sessionStorage.setItem('checkout_gateway', data.gateway);
       window.location.href = data.checkoutUrl;
     } catch (err: any) {
       setCheckoutError(err.message ?? "Something went wrong");

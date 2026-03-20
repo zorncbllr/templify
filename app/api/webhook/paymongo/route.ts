@@ -37,8 +37,15 @@ export async function POST(req: NextRequest) {
   const userId: string = metadata.user_id;
   const plan: string = metadata.plan;
   const paymentId: string = session?.id ?? '';
-  const amount: number = session?.attributes?.amount ?? 0;
-  const currency: string = session?.attributes?.currency ?? 'PHP';
+  // PayMongo checkout sessions store amount in line_items or payment_intent, not at the top level
+  const amount: number =
+    session?.attributes?.payment_intent?.attributes?.amount
+    ?? session?.attributes?.line_items?.[0]?.amount
+    ?? 0;
+  const currency: string =
+    session?.attributes?.payment_intent?.attributes?.currency
+    ?? session?.attributes?.line_items?.[0]?.currency
+    ?? 'PHP';
 
   if (!userId || !plan || !paymentId) {
     return new NextResponse('Missing metadata', { status: 400 });

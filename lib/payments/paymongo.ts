@@ -20,7 +20,7 @@ export interface CreateCheckoutParams {
   metadata: Record<string, string>;
 }
 
-export async function createCheckoutSession(params: CreateCheckoutParams): Promise<string> {
+export async function createCheckoutSession(params: CreateCheckoutParams): Promise<{ checkoutUrl: string; sessionId: string }> {
   const res = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
     method: 'POST',
     headers: {
@@ -51,7 +51,19 @@ export async function createCheckoutSession(params: CreateCheckoutParams): Promi
   }
 
   const json = await res.json();
-  return json.data.attributes.checkout_url as string;
+  return {
+    checkoutUrl: json.data.attributes.checkout_url as string,
+    sessionId: json.data.id as string,
+  };
+}
+
+export async function retrieveCheckoutSession(sessionId: string): Promise<any> {
+  const res = await fetch(`https://api.paymongo.com/v1/checkout_sessions/${sessionId}`, {
+    headers: { Authorization: authHeader() },
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.data;
 }
 
 export function verifyWebhookSignature(

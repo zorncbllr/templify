@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import type { CanvasObject, ImageObject, TextField } from "../types/index";
-import { IconCamera, IconImage, IconDragHandle, IconClose, IconRotate } from "@/components/Icons";
+import {
+  IconCamera,
+  IconImage,
+  IconDragHandle,
+  IconClose,
+  IconRotate,
+} from "@/components/Icons";
 
 // ─── LayerItem ────────────────────────────────────────────────────────────────
 
@@ -29,7 +35,7 @@ export function LayerItem({
     ? imgObj!.isDataImage
       ? imgObj!.dataImageColumn || "Data Photo"
       : imgObj!.name
-    : `{{${(obj as TextField).column}}}`;
+    : `${(obj as TextField).column}`;
   const isBg = isImg && imgObj!.isBackground;
   const offset = !isImg ? (obj as TextField).columnOffset : 0;
   const isDragging = dragHandlers.draggingId === obj.id;
@@ -51,16 +57,20 @@ export function LayerItem({
         opacity: isDragging ? 0.4 : 1,
       }}
     >
-      <div
-        className="flex items-center gap-1.5 min-w-0"
-      >
-        <span
-          className="text-[9px] text-[rgba(240,237,232,0.2)] shrink-0"
-        >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-[9px] text-[rgba(240,237,232,0.2)] shrink-0">
           <IconDragHandle size={10} />
         </span>
         <span className="text-[11px] shrink-0">
-          {isImg ? (imgObj!.isDataImage ? <IconCamera size={12} /> : <IconImage size={12} />) : "T"}
+          {isImg ? (
+            imgObj!.isDataImage ? (
+              <IconCamera size={12} />
+            ) : (
+              <IconImage size={12} />
+            )
+          ) : (
+            "T"
+          )}
         </span>
         <span
           className="text-[10px] font-medium overflow-hidden text-ellipsis whitespace-nowrap"
@@ -71,23 +81,17 @@ export function LayerItem({
           {label}
         </span>
         {isBg && (
-          <span
-            className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.12)] text-[#e8ff47] font-bold shrink-0"
-          >
+          <span className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.12)] text-[#e8ff47] font-bold shrink-0">
             BG
           </span>
         )}
         {isImg && imgObj!.isDataImage && !isBg && (
-          <span
-            className="text-[8px] px-1 py-px rounded-md bg-[rgba(99,179,237,0.15)] text-[#63b3ed] font-bold shrink-0"
-          >
+          <span className="text-[8px] px-1 py-px rounded-md bg-[rgba(99,179,237,0.15)] text-[#63b3ed] font-bold shrink-0">
             AUTO
           </span>
         )}
         {!isImg && offset !== 0 && (
-          <span
-            className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.08)] text-[#e8ff47] font-bold shrink-0"
-          >
+          <span className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.08)] text-[#e8ff47] font-bold shrink-0">
             {offset > 0 ? `+${offset}` : offset}
           </span>
         )}
@@ -201,23 +205,18 @@ export function DimensionInputs({
       if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
     };
 
-  const inputClassName = "w-full px-[7px] py-1 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[11px] font-mono text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const inputClassName =
+    "w-full px-[7px] py-1 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[11px] font-mono text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
   const labelClassName = "text-[9px] text-[rgba(240,237,232,0.25)] mb-[3px]";
 
   return (
     <div>
-      <div
-        className="flex items-center justify-between mb-[7px]"
-      >
-        <p
-          className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]"
-        >
+      <div className="flex items-center justify-between mb-[7px]">
+        <p className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]">
           Size & Position
         </p>
         {isImage && (
-          <span
-            className="text-[8px] text-[rgba(240,237,232,0.25)] tracking-[0.04em]"
-          >
+          <span className="text-[8px] text-[rgba(240,237,232,0.25)] tracking-[0.04em]">
             AR locked
           </span>
         )}
@@ -228,8 +227,20 @@ export function DimensionInputs({
           { label: "H", str: hStr, set: setHStr, commit: commitH, field: "h" },
           ...(!hidePosition
             ? [
-                { label: "X", str: xStr, set: setXStr, commit: commitX, field: "x" },
-                { label: "Y", str: yStr, set: setYStr, commit: commitY, field: "y" },
+                {
+                  label: "X",
+                  str: xStr,
+                  set: setXStr,
+                  commit: commitX,
+                  field: "x",
+                },
+                {
+                  label: "Y",
+                  str: yStr,
+                  set: setYStr,
+                  commit: commitY,
+                  field: "y",
+                },
               ]
             : []),
         ].map(({ label, str, set, commit, field }) => (
@@ -256,7 +267,14 @@ export function DimensionInputs({
       {!hidePosition && (
         <div className="mt-1.5">
           <p className={labelClassName}>
-            <IconRotate size={8} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
+            <IconRotate
+              size={8}
+              style={{
+                display: "inline",
+                verticalAlign: "middle",
+                marginRight: 3,
+              }}
+            />
             Rotation
           </p>
           <div className="relative" style={{ width: 80 }}>
@@ -264,8 +282,13 @@ export function DimensionInputs({
               type="number"
               value={rotStr}
               onChange={(e) => setRotStr(e.target.value)}
-              onFocus={() => { focusedField.current = "rot"; }}
-              onBlur={() => { focusedField.current = null; commitRot(); }}
+              onFocus={() => {
+                focusedField.current = "rot";
+              }}
+              onBlur={() => {
+                focusedField.current = null;
+                commitRot();
+              }}
               onKeyDown={onKey(commitRot)}
               className={inputClassName}
               style={{ paddingRight: 24 }}

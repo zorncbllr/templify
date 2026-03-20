@@ -13,8 +13,42 @@ export default function PaymentSuccessPage() {
     const supabase = createClient();
     let attempts = 0;
     const MAX_ATTEMPTS = 15;
+    let verified = false;
+
+    async function tryVerifyDirectly() {
+      // Read checkout info stored before redirect
+      const sessionId = sessionStorage.getItem("checkout_session_id");
+      const gateway = sessionStorage.getItem("checkout_gateway");
+      if (!sessionId || !gateway) return false;
+
+      try {
+        const res = await fetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, gateway }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (data.plan && data.plan !== "free") {
+          sessionStorage.removeItem("checkout_session_id");
+          sessionStorage.removeItem("checkout_gateway");
+          setPlan(data.plan);
+          setPolling(false);
+          return true;
+        }
+      } catch {
+        // fall through to polling
+      }
+      return false;
+    }
 
     async function checkPlan() {
+      // On first attempt, try direct verification with the gateway
+      if (attempts === 0 && !verified) {
+        verified = await tryVerifyDirectly();
+        if (verified) return;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -33,6 +67,13 @@ export default function PaymentSuccessPage() {
       }
 
       attempts++;
+
+      // Try direct verification again at attempt 5 (gives gateway time to settle)
+      if (attempts === 5 && !verified) {
+        verified = await tryVerifyDirectly();
+        if (verified) return;
+      }
+
       if (attempts >= MAX_ATTEMPTS) {
         setPolling(false);
         setTimedOut(true);

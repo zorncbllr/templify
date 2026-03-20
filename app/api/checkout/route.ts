@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { checkoutUrl } = await routePayment({
+    const { checkoutUrl, sessionId, gateway } = await routePayment({
       plan: plan as PlanKey,
       paymentMethod: paymentMethod as PaymentMethod,
       locale,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       userEmail: profile.email ?? user.email ?? '',
     });
 
-    return NextResponse.json({ checkoutUrl });
+    return NextResponse.json({ checkoutUrl, sessionId, gateway });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Payment routing failed' }, { status: 500 });
   }

@@ -14,7 +14,7 @@ export interface StripeCheckoutParams {
   cancelUrl: string;
 }
 
-export async function createStripeCheckoutSession(params: StripeCheckoutParams): Promise<string> {
+export async function createStripeCheckoutSession(params: StripeCheckoutParams): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripeClient();
 
   const priceId = params.plan === 'pro_monthly'
@@ -33,7 +33,7 @@ export async function createStripeCheckoutSession(params: StripeCheckoutParams):
   });
 
   if (!session.url) throw new Error('Stripe session URL is null');
-  return session.url;
+  return { url: session.url, sessionId: session.id };
 }
 
 export function getStripeClient_exported(): Stripe {

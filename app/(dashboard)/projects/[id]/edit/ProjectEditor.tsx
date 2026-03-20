@@ -23,11 +23,13 @@ interface ProjectEditorProps {
     data_file_path: string | null;
   };
   userPlan: string;
+  displayName: string;
 }
 
 export default function ProjectEditor({
   project,
   userPlan,
+  displayName,
 }: ProjectEditorProps) {
   const [rows, setRows] = useState<RowData[]>([]);
   const [dataImages] = useState<DataImageMap>({});
@@ -104,7 +106,7 @@ export default function ProjectEditor({
       }
       initialDataImagesLabel={project.data_images_label}
       watermark={userPlan === "free"}
-      user={{ plan: userPlan }}
+      user={{ plan: userPlan, displayName }}
       onSave={handleSave}
     />
   );

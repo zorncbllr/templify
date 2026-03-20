@@ -15,6 +15,7 @@ interface RoutePaymentParams {
 interface RoutePaymentResult {
   gateway: 'paymongo' | 'stripe';
   checkoutUrl: string;
+  sessionId: string;
 }
 
 export async function routePayment(params: RoutePaymentParams): Promise<RoutePaymentResult> {
@@ -39,14 +40,14 @@ export async function routePayment(params: RoutePaymentParams): Promise<RoutePay
   // Card + intl → Stripe
   if (paymentMethod === 'card' && locale === 'intl') {
     if (plan === 'pro_quarterly') throw new Error('Quarterly plan not available for international users');
-    const checkoutUrl = await createStripeCheckoutSession({
+    const { url: checkoutUrl, sessionId } = await createStripeCheckoutSession({
       plan: plan as 'pro_monthly' | 'pro_annual',
       userId,
       userEmail,
       successUrl,
       cancelUrl,
     });
-    return { gateway: 'stripe', checkoutUrl };
+    return { gateway: 'stripe', checkoutUrl, sessionId };
   }
 
   // gcash, maya, or card+ph → PayMongo
@@ -57,7 +58,7 @@ export async function routePayment(params: RoutePaymentParams): Promise<RoutePay
     ? ['card']
     : [paymentMethod];
 
-  const checkoutUrl = await paymongoCheckout({
+  const { checkoutUrl, sessionId } = await paymongoCheckout({
     amount: pricing.amount,
     currency: pricing.currency,
     lineItemName: `Templify Pro (${plan.replace('_', ' ')})`,
@@ -67,5 +68,5 @@ export async function routePayment(params: RoutePaymentParams): Promise<RoutePay
     metadata: { user_id: userId, plan },
   });
 
-  return { gateway: 'paymongo', checkoutUrl };
+  return { gateway: 'paymongo', checkoutUrl, sessionId };
 }

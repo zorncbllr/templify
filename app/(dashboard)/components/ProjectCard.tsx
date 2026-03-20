@@ -1,13 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { IconEdit } from "@/components/Icons";
+import { IconEdit, IconClock } from "@/components/Icons";
 import DeleteProjectButton from "./DeleteProjectButton";
 
-function formatDate(iso: string) {
+function formatRelative(iso: string) {
   try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
     return new Date(iso).toLocaleDateString("en-US", {
-      year: "numeric",
       month: "short",
       day: "numeric",
     });
@@ -18,97 +25,49 @@ function formatDate(iso: string) {
 
 export default function ProjectCard({ project }: { project: any }) {
   return (
-    <div
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 12,
-        padding: 20,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        transition: "background 0.15s",
-        position: "relative",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background =
-          "rgba(255,255,255,0.05)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.background =
-          "rgba(255,255,255,0.03)";
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <Link
-          href={`/projects/${project.id}/edit`}
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-            color: "#f0ede8",
-            textDecoration: "none",
-            flex: 1,
-            lineHeight: 1.3,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={project.name}
-        >
-          {project.name || "Untitled Project"}
-        </Link>
-        <DeleteProjectButton projectId={project.id} />
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {project.updated_at && (
-          <span
-            style={{
-              fontSize: 11,
-              color: "rgba(240,237,232,0.4)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            Last updated: {formatDate(project.updated_at)}
-          </span>
-        )}
-        {typeof project.row_count === "number" && (
-          <span
-            style={{
-              fontSize: 11,
-              color: "rgba(240,237,232,0.4)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            Rows: {project.row_count}
-          </span>
-        )}
-      </div>
-
+    <div className="group relative flex flex-col rounded-xl border border-white/[0.06] bg-white/[0.02] transition-colors hover:border-white/[0.1] hover:bg-white/[0.04]">
+      {/* Card header / thumbnail area */}
       <Link
         href={`/projects/${project.id}/edit`}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          fontSize: 12,
-          color: "#e8ff47",
-          textDecoration: "none",
-          fontWeight: 500,
-          marginTop: "auto",
-          width: "fit-content",
-        }}
+        className="flex h-32 items-center justify-center rounded-t-xl border-b border-white/[0.04] bg-white/[0.01] no-underline"
       >
-        <IconEdit size={12} color="#e8ff47" />
-        Open Editor
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04] transition-colors group-hover:bg-app-accent/[0.08]">
+          <IconEdit
+            size={20}
+            color="rgba(240,237,232,0.2)"
+            className="transition-colors group-hover:!text-app-accent"
+          />
+        </div>
       </Link>
+
+      {/* Card body */}
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <Link
+            href={`/projects/${project.id}/edit`}
+            className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-semibold leading-snug text-app-text no-underline transition-colors hover:text-app-accent"
+            title={project.name}
+          >
+            {project.name || "Untitled Project"}
+          </Link>
+          <DeleteProjectButton projectId={project.id} />
+        </div>
+
+        {/* Meta info */}
+        <div className="mt-auto flex items-center gap-3 text-[11px] text-app-text/35">
+          {project.updated_at && (
+            <span className="flex items-center gap-1 tabular-nums">
+              <IconClock size={11} color="currentColor" />
+              {formatRelative(project.updated_at)}
+            </span>
+          )}
+          {typeof project.row_count === "number" && (
+            <span className="tabular-nums">
+              {project.row_count} row{project.row_count !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

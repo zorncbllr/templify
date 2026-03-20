@@ -11,7 +11,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [locale, setLocale] = useState<"ph" | "intl">("intl");
   const [cancelConfirm, setCancelConfirm] = useState(false);
-  const [cancelStatus, setCancelStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [cancelStatus, setCancelStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >("idle");
   const [cancelDate, setCancelDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function SettingsPage() {
       .from("profiles")
       .update({ locale: newLocale })
       .eq("id", profile!.id);
-    setProfile((p) => p ? { ...p, locale: newLocale } : p);
+    setProfile((p) => (p ? { ...p, locale: newLocale } : p));
   }
 
   async function handleCancelSubscription() {
@@ -66,7 +68,11 @@ export default function SettingsPage() {
     ? new Date(profile.plan_expires_at).toLocaleDateString()
     : null;
   const planLabel = profile?.plan
-    ? profile.plan.replace("pro_", "Pro ").replace("monthly", "Monthly").replace("quarterly", "Quarterly").replace("annual", "Annual")
+    ? profile.plan
+        .replace("pro_", "Pro ")
+        .replace("monthly", "Monthly")
+        .replace("quarterly", "Quarterly")
+        .replace("annual", "Annual")
     : "Free";
 
   if (loading) {
@@ -154,10 +160,23 @@ export default function SettingsPage() {
             </div>
           )}
           <div>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#f0ede8", margin: 0 }}>
+            <p
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#f0ede8",
+                margin: 0,
+              }}
+            >
               {profile?.full_name ?? "Unknown"}
             </p>
-            <p style={{ fontSize: 12, color: "rgba(240,237,232,0.45)", margin: 0 }}>
+            <p
+              style={{
+                fontSize: 12,
+                color: "rgba(240,237,232,0.45)",
+                margin: 0,
+              }}
+            >
               {profile?.email}
             </p>
           </div>
@@ -220,7 +239,13 @@ export default function SettingsPage() {
         </div>
 
         {isPro && expiryDate && (
-          <p style={{ fontSize: 12, color: "rgba(240,237,232,0.45)", margin: "0 0 12px" }}>
+          <p
+            style={{
+              fontSize: 12,
+              color: "rgba(240,237,232,0.45)",
+              margin: "0 0 12px",
+            }}
+          >
             {isStripe ? "Renews" : "Expires"} on {expiryDate}
           </p>
         )}
@@ -253,8 +278,8 @@ export default function SettingsPage() {
             }}
           >
             <p style={{ fontSize: 13, color: "#f0ede8", marginBottom: 12 }}>
-              Your Pro features will remain active until {expiryDate}. After that
-              you&apos;ll return to the free plan.
+              Your Pro features will remain active until {expiryDate}. After
+              that you&apos;ll return to the free plan.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -271,7 +296,9 @@ export default function SettingsPage() {
                   cursor: "pointer",
                 }}
               >
-                {cancelStatus === "loading" ? "Cancelling..." : "Confirm Cancel"}
+                {cancelStatus === "loading"
+                  ? "Cancelling..."
+                  : "Confirm Cancel"}
               </button>
               <button
                 onClick={() => setCancelConfirm(false)}
@@ -289,7 +316,13 @@ export default function SettingsPage() {
               </button>
             </div>
             {cancelStatus === "error" && (
-              <p style={{ fontSize: 12, color: "rgba(220,60,60,0.8)", marginTop: 8 }}>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "rgba(220,60,60,0.8)",
+                  marginTop: 8,
+                }}
+              >
                 Cancellation failed. Please try again.
               </p>
             )}
@@ -297,15 +330,31 @@ export default function SettingsPage() {
         )}
 
         {cancelStatus === "done" && cancelDate && (
-          <p style={{ fontSize: 12, color: "rgba(240,237,232,0.45)", marginTop: 8 }}>
-            Subscription cancels on {cancelDate}. Pro features remain active until then.
+          <p
+            style={{
+              fontSize: 12,
+              color: "rgba(240,237,232,0.45)",
+              marginTop: 8,
+            }}
+          >
+            Subscription cancels on {cancelDate}. Pro features remain active
+            until then.
           </p>
         )}
 
         {isPro && !isStripe && (
-          <p style={{ fontSize: 12, color: "rgba(240,237,232,0.4)", marginTop: 4 }}>
+          <p
+            style={{
+              fontSize: 12,
+              color: "rgba(240,237,232,0.4)",
+              marginTop: 4,
+            }}
+          >
             Your plan expires on {expiryDate}.{" "}
-            <a href="/pricing" style={{ color: "#e8ff47", textDecoration: "none" }}>
+            <a
+              href="/pricing"
+              style={{ color: "#e8ff47", textDecoration: "none" }}
+            >
               Renew
             </a>
           </p>
@@ -334,7 +383,13 @@ export default function SettingsPage() {
         >
           Region
         </p>
-        <p style={{ fontSize: 12, color: "rgba(240,237,232,0.45)", marginBottom: 14 }}>
+        <p
+          style={{
+            fontSize: 12,
+            color: "rgba(240,237,232,0.45)",
+            marginBottom: 14,
+          }}
+        >
           Controls pricing currency and available payment methods.
         </p>
         <div style={{ display: "flex", gap: 8 }}>
@@ -348,7 +403,8 @@ export default function SettingsPage() {
                 padding: "7px 16px",
                 borderRadius: 7,
                 border: `1px solid ${locale === l ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.1)"}`,
-                background: locale === l ? "rgba(232,255,71,0.1)" : "transparent",
+                background:
+                  locale === l ? "rgba(232,255,71,0.1)" : "transparent",
                 color: locale === l ? "#e8ff47" : "rgba(240,237,232,0.5)",
                 cursor: "pointer",
               }}

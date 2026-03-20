@@ -40,9 +40,9 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Invalid metadata', { status: 400 });
     }
 
-    // Amount verification
+    // Amount verification — skip if amount_total is null (e.g. trials)
     const expectedAmount = PRICING[plan]['intl']?.amount;
-    if (expectedAmount && session.amount_total !== expectedAmount) {
+    if (expectedAmount && session.amount_total != null && session.amount_total !== expectedAmount) {
       return new NextResponse('Amount mismatch', { status: 400 });
     }
 
