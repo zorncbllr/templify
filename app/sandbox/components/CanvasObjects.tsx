@@ -7,7 +7,12 @@ import type {
   DataImageMap,
 } from "../types/index";
 import { PLACEHOLDER_SRC } from "../types/constants";
-import { shadowCSS, textShadowCSS, shrinkFontSize, generateCodeDataURL } from "../utils/rendering";
+import {
+  shadowCSS,
+  textShadowCSS,
+  shrinkFontSize,
+  generateCodeDataURL,
+} from "../utils/rendering";
 import { resolveDataImageSrc } from "../utils/data";
 import { useDragResize } from "../hooks/useDragResize";
 import { SelectionHandles } from "./SelectionHandles";
@@ -88,17 +93,25 @@ export function ImageEl({
             <div
               style={{
                 position: "absolute",
-                top: 8,
-                left: 8,
-                padding: "2px 7px",
+                top: 8 / Math.min(Math.max(scale, 0.3), 3),
+                left: 8 / Math.min(Math.max(scale, 0.3), 3),
+                padding: "0 6px",
+                height: 18,
                 borderRadius: 6,
                 background: "rgba(232,255,71,0.9)",
                 color: "#0a0a10",
                 fontSize: 9,
                 fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                whiteSpace: "nowrap",
+                transform: `scale(${1 / Math.min(Math.max(scale, 0.3), 3)})`,
+                transformOrigin: "top left",
+                pointerEvents: "none",
               }}
             >
-              Background
+              <IconImage size={10} /> Background
             </div>
           </div>
         )}
@@ -216,7 +229,7 @@ export function ImageEl({
           <div
             style={{
               position: "absolute",
-              top: -24,
+              top: -(18 + 4) / Math.min(Math.max(scale, 0.3), 3),
               left: 0,
               background: "#0c0c14",
               border: "1px solid rgba(99,179,237,0.35)",
@@ -227,15 +240,29 @@ export function ImageEl({
               height: 18,
               display: "flex",
               alignItems: "center",
+              gap: 3,
               borderRadius: 6,
               whiteSpace: "nowrap",
+              transform: `scale(${1 / Math.min(Math.max(scale, 0.3), 3)})`,
+              transformOrigin: "top left",
+              pointerEvents: "none",
             }}
           >
-            {obj.isDataImage
-              ? <><IconCamera size={10} /> {obj.dataImageColumn || "Data Photo"}</>
-              : <><IconImage size={10} /> {obj.name}</>}
+            {obj.isDataImage ? (
+              <>
+                <IconCamera size={10} /> {obj.dataImageColumn || "Data Photo"}
+              </>
+            ) : (
+              <>
+                <IconImage size={10} /> {obj.name}
+              </>
+            )}
           </div>
-          <SelectionHandles onDown={handleResizeDown} onRotateDown={handleRotateDown} scale={scale} />
+          <SelectionHandles
+            onDown={handleResizeDown}
+            onRotateDown={handleRotateDown}
+            scale={scale}
+          />
         </>
       )}
     </div>
@@ -284,8 +311,14 @@ export function TextEl({
 
   const [codeDataUrl, setCodeDataUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (codeType === "text") { setCodeDataUrl(null); return; }
-    if (!rawText) { setCodeDataUrl(null); return; }
+    if (codeType === "text") {
+      setCodeDataUrl(null);
+      return;
+    }
+    if (!rawText) {
+      setCodeDataUrl(null);
+      return;
+    }
     generateCodeDataURL(rawText, codeType, obj.width, obj.height, obj.color)
       .then(setCodeDataUrl)
       .catch(() => setCodeDataUrl(null));
@@ -338,13 +371,20 @@ export function TextEl({
         style={{
           position: "absolute",
           inset: 0,
-          overflow: (obj.textOverflow ?? "visible") === "visible" && codeType === "text" ? "visible" : "hidden",
+          overflow:
+            (obj.textOverflow ?? "visible") === "visible" && codeType === "text"
+              ? "visible"
+              : "hidden",
           display: "flex",
           alignItems: "center",
-          justifyContent: codeType !== "text" ? "center"
-            : obj.textAlign === "left" ? "flex-start"
-            : obj.textAlign === "right" ? "flex-end"
-            : "center",
+          justifyContent:
+            codeType !== "text"
+              ? "center"
+              : obj.textAlign === "left"
+                ? "flex-start"
+                : obj.textAlign === "right"
+                  ? "flex-end"
+                  : "center",
           padding: codeType === "text" ? "0 3px" : 0,
           boxSizing: "border-box",
           pointerEvents: "none",
@@ -356,7 +396,12 @@ export function TextEl({
               src={codeDataUrl}
               alt={codeType}
               draggable={false}
-              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+              }}
             />
           ) : (
             // Placeholder when no data
@@ -374,10 +419,20 @@ export function TextEl({
                 boxSizing: "border-box",
               }}
             >
-              <span style={{ fontSize: 8, color: "rgba(232,255,71,0.5)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              <span
+                style={{
+                  fontSize: 8,
+                  color: "rgba(232,255,71,0.5)",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
                 {codeType === "qr" ? "QR Code" : "Barcode"}
               </span>
-              <span style={{ fontSize: 7, color: "rgba(240,237,232,0.25)" }}>{obj.column}</span>
+              <span style={{ fontSize: 7, color: "rgba(240,237,232,0.25)" }}>
+                {obj.column}
+              </span>
             </div>
           )
         ) : (
@@ -405,7 +460,13 @@ export function TextEl({
           </span>
         )}
       </div>
-      {selected && <SelectionHandles onDown={handleResizeDown} onRotateDown={handleRotateDown} scale={scale} />}
+      {selected && (
+        <SelectionHandles
+          onDown={handleResizeDown}
+          onRotateDown={handleRotateDown}
+          scale={scale}
+        />
+      )}
     </div>
   );
 }

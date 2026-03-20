@@ -47,6 +47,7 @@ export function ImpositionModal({
   onExport,
   exportProgress,
   onClose,
+  watermark = false,
 }: {
   canvasSize: CanvasSize;
   totalCards: number;
@@ -59,6 +60,7 @@ export function ImpositionModal({
   onExport: (layout: ImpositionResult, sheet: { w: number; h: number }) => void;
   exportProgress: number | null;
   onClose: () => void;
+  watermark?: boolean;
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
   const customSheet = {
@@ -695,6 +697,7 @@ export function ImpositionModal({
                               width={cardPreviewW}
                               height={cardPreviewH}
                               rotate={isRotated}
+                              watermark={watermark}
                             />
                           ) : hasRecord ? (
                             <div

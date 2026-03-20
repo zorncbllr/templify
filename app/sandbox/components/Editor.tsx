@@ -458,7 +458,12 @@ export default function Editor({
   const [dataImagesLoading, setDataImagesLoading] = useState(false);
   const [autoDetectedImageColumns, setAutoDetectedImageColumns] = useState<
     string[]
-  >([]);
+  >(() => {
+    if (initialRows && initialRows.length > 0 && initialColumns && initialColumns.length > 0) {
+      return detectImageColumns(initialRows, initialColumns);
+    }
+    return [];
+  });
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
@@ -1568,6 +1573,7 @@ export default function Editor({
           onExport={doExport}
           exportProgress={exportProgress}
           onClose={() => setShowImpositionModal(false)}
+          watermark={watermark}
         />
       )}
 
@@ -1828,7 +1834,7 @@ export default function Editor({
         <div className="flex items-center gap-2">
           {projectId && saveStatus !== "idle" && (
             <span
-              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md ${
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md flex items-center gap-1 ${
                 saveStatus === "saving"
                   ? "text-app-text/30"
                   : saveStatus === "saved"
@@ -1839,7 +1845,7 @@ export default function Editor({
               {saveStatus === "saving"
                 ? "Saving..."
                 : saveStatus === "saved"
-                  ? "Saved"
+                  ? <><IconCheckCircle size={12} /> Saved</>
                   : "Save failed"}
             </span>
           )}
@@ -2368,6 +2374,34 @@ export default function Editor({
                     />
                   ),
                 )}
+              {watermark && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 4,
+                    right: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    pointerEvents: "none",
+                    zIndex: 999999,
+                    opacity: 0.35,
+                  }}
+                >
+                  <IconSparkle size={canvasSize.width * 0.018} color="#000" />
+                  <span
+                    style={{
+                      fontSize: canvasSize.width * 0.018,
+                      fontWeight: 700,
+                      color: "#000",
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                    }}
+                  >
+                    Made with Templify
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div

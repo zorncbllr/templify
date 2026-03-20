@@ -9,6 +9,7 @@ import type {
 } from "../types/index";
 import { resolveDataImageSrc } from "../utils/data";
 import { shrinkFontSize, textShadowCSS, shadowCSS, generateCodeDataURL } from "../utils/rendering";
+import { IconSparkle } from "@/components/Icons";
 
 function ThumbnailTextField({
   f,
@@ -113,6 +114,7 @@ export function TemplateThumbnail({
   width,
   height,
   rotate,
+  watermark = false,
 }: {
   objects: CanvasObject[];
   canvasSize: CanvasSize;
@@ -122,6 +124,7 @@ export function TemplateThumbnail({
   width: number;
   height: number;
   rotate: boolean;
+  watermark?: boolean;
 }) {
   // Compute a uniform scale to fit the canvas into the thumbnail container.
   const targetW = rotate ? height : width;
@@ -260,6 +263,33 @@ export function TemplateThumbnail({
             <ThumbnailTextField key={obj.id} f={f} text={text} />
           );
         })}
+        {watermark && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 4,
+              right: 6,
+              display: "flex",
+              alignItems: "center",
+              gap: canvasSize.width * 0.004,
+              opacity: 0.35,
+              pointerEvents: "none",
+              zIndex: 999999,
+            }}
+          >
+            <IconSparkle size={canvasSize.width * 0.018} color="#000" />
+            <span
+              style={{
+                fontSize: canvasSize.width * 0.018,
+                fontWeight: 700,
+                color: "#000",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Made with Templify
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

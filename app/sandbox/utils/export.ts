@@ -159,6 +159,7 @@ export async function renderSingleCard(
   rows: RowData[],
   rowIndex: number,
   dataImages: DataImageMap,
+  watermark = false,
 ): Promise<HTMLCanvasElement> {
   const SCALE = 2;
   const canvas = document.createElement("canvas");
@@ -336,6 +337,37 @@ export async function renderSingleCard(
     }
   }
 
+  if (watermark) {
+    ctx.save();
+    const fs = Math.max(8, Math.round(canvasSize.width * 0.018));
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#000000";
+    ctx.font = `bold ${fs}px sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    const tx = canvasSize.width - 6;
+    const ty = canvasSize.height - 4;
+    ctx.fillText("Made with Templify", tx, ty);
+    // Sparkle icon
+    const textW = ctx.measureText("Made with Templify").width;
+    const iconSize = fs * 0.9;
+    const iconX = tx - textW - iconSize - 2;
+    const iconY = ty - fs * 0.85;
+    ctx.save();
+    ctx.translate(iconX, iconY);
+    ctx.scale(iconSize / 24, iconSize / 24);
+    ctx.beginPath();
+    ctx.moveTo(12, 1);
+    ctx.quadraticCurveTo(12.5, 11, 23, 12);
+    ctx.quadraticCurveTo(12.5, 13, 12, 23);
+    ctx.quadraticCurveTo(11.5, 13, 1, 12);
+    ctx.quadraticCurveTo(11.5, 11, 12, 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+
   return canvas;
 }
 
@@ -385,29 +417,6 @@ function renderImpositionSheet(
   return sheet;
 }
 
-/**
- * Apply a diagonal "Made with Templify" watermark to a composited sheet canvas.
- * Called only when watermark === true (free-tier exports).
- */
-function applyWatermark(
-  sheetCanvas: HTMLCanvasElement,
-  sheetW: number,
-  sheetH: number,
-): void {
-  const scale = 2; // matches SCALE constant used when rendering
-  const ctx = sheetCanvas.getContext("2d")!;
-  ctx.save();
-  ctx.scale(scale, scale);
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = "#000000";
-  ctx.font = `bold ${Math.round(sheetW * 0.04)}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.translate(sheetW / 2, sheetH / 2);
-  ctx.rotate(-Math.PI / 6);
-  ctx.fillText("Made with Templify", 0, 0);
-  ctx.restore();
-}
-
 export async function exportRecords(
   format: string,
   objects: CanvasObject[],
@@ -430,7 +439,7 @@ export async function exportRecords(
   const cardCanvases: HTMLCanvasElement[] = [];
   for (let i = 0; i < totalCards; i++) {
     cardCanvases.push(
-      await renderSingleCard(objects, canvasSize, rows, i, dataImages),
+      await renderSingleCard(objects, canvasSize, rows, i, dataImages, watermark),
     );
     onProgress(Math.round(5 + (i / totalCards) * 45));
   }
@@ -448,7 +457,7 @@ export async function exportRecords(
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
       const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
 
-      if (watermark) applyWatermark(sheetCanvas, sheet.w, sheet.h);
+
 
       const blob = await new Promise<Blob>((resolve) =>
         sheetCanvas.toBlob((b) => resolve(b!), "image/png"),
@@ -476,7 +485,7 @@ export async function exportRecords(
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
       const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
 
-      if (watermark) applyWatermark(sheetCanvas, sheet.w, sheet.h);
+
 
       const imgData = sheetCanvas.toDataURL("image/png");
 
