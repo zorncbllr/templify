@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { NumInput } from "./StylePanels";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
+} from "@/components/ui/command";
 import type {
   CanvasObject,
   CanvasSize,
@@ -9,7 +14,7 @@ import type {
 import { SHEET_PRESETS } from "../types/constants";
 import { runImpositionGA } from "../lib/impositionGA";
 import { TemplateThumbnail } from "./TemplateThumbnail";
-import { IconGrid, IconClose, IconArrowDown, IconRotate } from "@/components/Icons";
+import { IconGrid, IconClose, IconArrowDown, IconRotate, IconCheck, IconChevronDown } from "@/components/Icons";
 
 const PREVIEW_W = 520;
 const MM_TO_PX = 2.835;
@@ -39,12 +44,14 @@ export function ImpositionModal({
   exportProgress: number | null;
   onClose: () => void;
 }) {
+  const modalRef = useRef<HTMLDivElement>(null);
   const customSheet = {
     label: "Default",
     w: canvasSize.width,
     h: canvasSize.height,
   };
   const [selectedSheet, setSelectedSheet] = useState(customSheet);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [allowRotation, setAllowRotation] = useState(true);
   const [minBleedMm, setMinBleedMm] = useState(3);
   const [gaRunning, setGaRunning] = useState(false);
@@ -153,235 +160,178 @@ export function ImpositionModal({
 
   return (
     <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.82)",
-        zIndex: 500,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+      ref={modalRef}
+      className="dark fixed inset-0 bg-[rgba(0,0,0,0.82)] z-[500] flex items-center justify-center"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
+        className="bg-[#12121c] border border-[rgba(255,255,255,0.09)] rounded-md p-6 w-fit max-h-[90vh] flex flex-col gap-0 overflow-hidden"
         style={{
-          background: "#12121c",
-          border: "1px solid rgba(255,255,255,0.09)",
-          borderRadius: 16,
-          padding: 24,
-          width: "fit-content",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-          gap: 0,
           boxShadow: "0 40px 120px rgba(0,0,0,0.8)",
           animation: "popIn 0.18s ease",
-          overflow: "hidden",
         }}
       >
         {/* Header */}
         <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 20,
-          }}
+          className="flex items-center justify-between mb-5"
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="flex items-center gap-2.5">
             <div
-              style={{
-                width: 32,
-                height: 32,
-                background: "rgba(232,255,71,0.12)",
-                border: "1px solid rgba(232,255,71,0.3)",
-                borderRadius: 9,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 15,
-              }}
+              className="w-8 h-8 bg-[rgba(232,255,71,0.12)] border border-[rgba(232,255,71,0.3)] rounded-md flex items-center justify-center text-[15px]"
             >
               <IconGrid size={15} />
             </div>
             <div>
               <h2
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#f0ede8",
-                  letterSpacing: "-0.02em",
-                }}
+                className="text-[15px] font-bold text-[#f0ede8] tracking-[-0.02em]"
               >
                 Print Imposition & Export
               </h2>
               <p
-                style={{
-                  fontSize: 10,
-                  color: "rgba(240,237,232,0.35)",
-                  marginTop: 1,
-                }}
+                className="text-[10px] text-[rgba(240,237,232,0.35)] mt-px"
               >
                 GA-optimized card layout on print sheets
               </p>
             </div>
           </div>
           <button
+            className="bg-transparent border-none text-[rgba(240,237,232,0.3)] text-[18px] cursor-pointer w-7 h-7 flex items-center justify-center rounded-md"
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "rgba(240,237,232,0.3)",
-              fontSize: 18,
-              cursor: "pointer",
-              width: 28,
-              height: 28,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 6,
-            }}
           >
             <IconClose size={14} />
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 20, flex: 1, overflow: "hidden" }}>
+        <div className="flex gap-5 flex-1 overflow-hidden">
           {/* Left controls */}
           <div
-            style={{
-              width: 220,
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              overflowY: "auto",
-            }}
+            className="w-[220px] shrink-0 flex flex-col gap-3.5 overflow-y-auto"
           >
             {/* Sheet size dropdown */}
             <div>
               <p
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  color: "rgba(240,237,232,0.28)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 7,
-                }}
+                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-[7px]"
               >
                 Sheet Size
               </p>
-              <select
-                value={selectedSheet.label}
-                onChange={(e) => {
-                  const label = e.target.value;
-                  if (label === "Default") {
-                    setSelectedSheet(customSheet);
-                  } else {
-                    const preset = SHEET_PRESETS.find((s) => s.label === label);
-                    if (preset) setSelectedSheet(preset);
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  padding: "7px 10px",
-                  borderRadius: 7,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "#1a1a28",
-                  color: "#f0ede8",
-                  appearance: "auto",
-                }}
-              >
-                <option value="Default">
-                  Default ({customSheet.w}×{customSheet.h})
-                </option>
-                <optgroup label="ISO A Series">
-                  {SHEET_PRESETS.filter((s) => s.label.startsWith("A")).map((s) => (
-                    <option key={s.label} value={s.label}>
-                      {s.label} ({s.w}×{s.h})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="ISO B Series">
-                  {SHEET_PRESETS.filter((s) => s.label.startsWith("B")).map((s) => (
-                    <option key={s.label} value={s.label}>
-                      {s.label} ({s.w}×{s.h})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="US / North American">
-                  {SHEET_PRESETS.filter((s) =>
-                    ["Letter", "Legal", "Tabloid", "Executive"].includes(s.label)
-                  ).map((s) => (
-                    <option key={s.label} value={s.label}>
-                      {s.label} ({s.w}×{s.h})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Square / Specialty">
-                  {SHEET_PRESETS.filter((s) => s.label.startsWith("Square")).map((s) => (
-                    <option key={s.label} value={s.label}>
-                      {s.label} ({s.w}×{s.h})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+              <Popover open={sheetOpen} onOpenChange={setSheetOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className="w-full h-8 px-2.5 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[11px] font-semibold text-[#f0ede8] flex items-center justify-between cursor-pointer"
+                  >
+                    <span className="truncate">
+                      {selectedSheet.label} ({selectedSheet.w}x{selectedSheet.h})
+                    </span>
+                    <IconChevronDown size={10} style={{ opacity: 0.4, flexShrink: 0 }} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-0" align="start" container={modalRef.current} style={{ zIndex: 600 }}>
+                  <Command>
+                    <CommandInput placeholder="Search paper size..." className="text-[11px]" />
+                    <CommandList>
+                      <CommandEmpty className="text-[11px]">No size found.</CommandEmpty>
+                      <CommandGroup heading="Default">
+                        <CommandItem
+                          value="Default"
+                          onSelect={() => {
+                            setSelectedSheet(customSheet);
+                            setSheetOpen(false);
+                          }}
+                          className="text-[11px]"
+                        >
+                          Default ({customSheet.w}x{customSheet.h})
+                          {selectedSheet.label === "Default" && <IconCheck size={10} className="ml-auto" />}
+                        </CommandItem>
+                      </CommandGroup>
+                      <CommandGroup heading="ISO A Series">
+                        {SHEET_PRESETS.filter((s) => s.label.startsWith("A")).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="ISO B Series">
+                        {SHEET_PRESETS.filter((s) => s.label.startsWith("B")).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="US / North American">
+                        {SHEET_PRESETS.filter((s) =>
+                          ["Letter", "Legal", "Tabloid", "Executive"].includes(s.label)
+                        ).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="Square / Specialty">
+                        {SHEET_PRESETS.filter((s) => s.label.startsWith("Square")).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Min bleed */}
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 6,
-                }}
+              <p
+                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1"
               >
-                <p
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: "rgba(240,237,232,0.28)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Min Bleed Gap
-                </p>
-                <span
-                  style={{ fontSize: 9, color: "#e8ff47", fontWeight: 700 }}
-                >
-                  {minBleedMm}mm
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={10}
-                step={0.5}
-                value={minBleedMm}
-                onChange={(e) => setMinBleedMm(Number(e.target.value))}
-                style={{ width: "100%", height: "3px", accentColor: "#e8ff47" }}
-              />
-              <div style={{ display: "flex", gap: 4, marginTop: 7 }}>
+                Min Bleed Gap
+              </p>
+              <NumInput value={minBleedMm} min={0} max={10} step={0.5} suffix="mm" onChange={setMinBleedMm} style={{ width: 80, marginBottom: 4 }} />
+              <div className="flex gap-1 mt-[7px]">
                 {[0, 2, 3, 5, 8].map((v) => (
                   <button
                     key={v}
                     onClick={() => setMinBleedMm(v)}
+                    className="flex-1 px-0.5 py-1 rounded-md text-[9px] font-bold cursor-pointer border-none"
                     style={{
-                      flex: 1,
-                      padding: "4px 2px",
-                      borderRadius: 5,
-                      fontSize: 9,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      border: "none",
                       background:
                         minBleedMm === v
                           ? "rgba(232,255,71,0.15)"
@@ -398,58 +348,38 @@ export function ImpositionModal({
 
             {/* Card info */}
             <div
-              style={{
-                padding: "9px 10px",
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.02)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
+              className="px-2.5 py-[9px] rounded-md bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]"
             >
               <p
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  color: "rgba(240,237,232,0.28)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 6,
-                }}
+                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1.5"
               >
                 Card
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div className="flex flex-col gap-[3px]">
                 <div
-                  style={{ display: "flex", justifyContent: "space-between" }}
+                  className="flex justify-between"
                 >
                   <span
-                    style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}
+                    className="text-[9px] text-[rgba(240,237,232,0.35)]"
                   >
                     Size
                   </span>
                   <span
-                    style={{
-                      fontSize: 9,
-                      color: "#f0ede8",
-                      fontFamily: "monospace",
-                    }}
+                    className="text-[9px] text-[#f0ede8] font-mono"
                   >
                     {canvasSize.width}×{canvasSize.height}px
                   </span>
                 </div>
                 <div
-                  style={{ display: "flex", justifyContent: "space-between" }}
+                  className="flex justify-between"
                 >
                   <span
-                    style={{ fontSize: 9, color: "rgba(240,237,232,0.35)" }}
+                    className="text-[9px] text-[rgba(240,237,232,0.35)]"
                   >
                     Total cards
                   </span>
                   <span
-                    style={{
-                      fontSize: 9,
-                      color: "#f0ede8",
-                      fontFamily: "monospace",
-                    }}
+                    className="text-[9px] text-[#f0ede8] font-mono"
                   >
                     {totalCards || "—"}
                   </span>
@@ -459,24 +389,14 @@ export function ImpositionModal({
 
             {/* Optimized Result */}
             {bestResult && bestResult.count > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="flex flex-col gap-2">
                 <p
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: "rgba(240,237,232,0.28)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                  }}
+                  className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]"
                 >
                   Optimized Result
                 </p>
                 <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 6,
-                  }}
+                  className="grid grid-cols-2 gap-1.5"
                 >
                   {[
                     [
@@ -510,7 +430,7 @@ export function ImpositionModal({
                       key={label as string}
                       style={{
                         padding: "8px 10px",
-                        borderRadius: 8,
+                        borderRadius: 6,
                         background: "rgba(255,255,255,0.03)",
                         border: "1px solid rgba(255,255,255,0.06)",
                       }}
@@ -541,7 +461,7 @@ export function ImpositionModal({
                 <div
                   style={{
                     padding: "9px 12px",
-                    borderRadius: 8,
+                    borderRadius: 6,
                     background: "rgba(232,255,71,0.04)",
                     border: "1px solid rgba(232,255,71,0.15)",
                   }}
@@ -596,7 +516,7 @@ export function ImpositionModal({
             <div
               style={{
                 padding: "12px",
-                borderRadius: 10,
+                borderRadius: 6,
                 background: "rgba(232,255,71,0.04)",
                 border: "1px solid rgba(232,255,71,0.18)",
                 display: "flex",
@@ -649,7 +569,7 @@ export function ImpositionModal({
                 style={{
                   width: "100%",
                   padding: "9px 0",
-                  borderRadius: 8,
+                  borderRadius: 6,
                   fontSize: 11,
                   fontWeight: 700,
                   cursor: exportProgress !== null ? "not-allowed" : "pointer",
@@ -692,7 +612,7 @@ export function ImpositionModal({
                   style={{
                     height: 3,
                     background: "rgba(255,255,255,0.1)",
-                    borderRadius: 4,
+                    borderRadius: 6,
                   }}
                 >
                   <div
@@ -700,7 +620,7 @@ export function ImpositionModal({
                       height: "100%",
                       width: `${exportProgress}%`,
                       background: "#e8ff47",
-                      borderRadius: 4,
+                      borderRadius: 6,
                       transition: "width 0.3s",
                     }}
                   />
@@ -741,7 +661,7 @@ export function ImpositionModal({
                     width: PREVIEW_W,
                     height: previewH,
                     background: "#fff",
-                    borderRadius: 4,
+                    borderRadius: 6,
                     boxShadow:
                       "0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)",
                     flexShrink: 0,

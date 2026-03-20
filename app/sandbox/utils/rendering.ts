@@ -1,4 +1,6 @@
 import type { Shadow } from "../types/index";
+import QRCode from "qrcode";
+import JsBarcode from "jsbarcode";
 
 export const shadowCSS = (s: Shadow): string =>
   s.enabled ? `${s.x}px ${s.y}px ${s.blur}px ${s.color}` : "none";
@@ -57,6 +59,24 @@ export function shrinkFontSize(
   return size;
 }
 
+/** Measure the pixel dimensions of text with given font settings. */
+export function measureTextDimensions(
+  text: string,
+  family: string,
+  fontSize: number,
+  bold: boolean,
+  italic: boolean,
+): { width: number; height: number } {
+  if (!text || typeof document === "undefined") return { width: 60, height: fontSize * 1.4 };
+  const el = getMeasureEl();
+  el.style.fontFamily = `'${family}', serif`;
+  el.style.fontSize = `${fontSize}px`;
+  el.style.fontWeight = bold ? "bold" : "normal";
+  el.style.fontStyle = italic ? "italic" : "normal";
+  el.textContent = text;
+  return { width: el.offsetWidth + 10, height: Math.max(el.offsetHeight + 8, fontSize * 1.4) };
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -70,16 +90,105 @@ export function downloadBlob(blob: Blob, filename: string) {
   }, 1000);
 }
 
-export async function loadScript(src: string, globalKey: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if ((window as any)[globalKey]) {
-      resolve((window as any)[globalKey]);
-      return;
+export async function generateCodeDataURL(
+  text: string,
+  type: "qr" | "barcode",
+  width: number,
+  height: number,
+  color: string,
+): Promise<string | null> {
+  if (!text) return null;
+  if (type === "qr") {
+    try {
+      return await QRCode.toDataURL(text, {
+        width: Math.min(width, height),
+        margin: 1,
+        color: { dark: color, light: "#ffffff" },
+      });
+    } catch {
+      return null;
     }
+  } else {
+    const canvas = document.createElement("canvas");
+    try {
+      JsBarcode(canvas, text, {
+        format: "CODE128",
+        lineColor: color,
+        background: "#ffffff",
+        width: 2,
+        height: Math.max(20, height - 8),
+        displayValue: false,
+        margin: 4,
+      });
+      return canvas.toDataURL();
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Render a QR code or barcode directly to an HTMLCanvasElement.
+ * Used by the export path to avoid the data-URL → Image round-trip
+ * which can fail due to crossOrigin / canvas-tainting edge cases.
+ */
+export async function generateCodeCanvas(
+  text: string,
+  type: "qr" | "barcode",
+  width: number,
+  height: number,
+  color: string,
+): Promise<HTMLCanvasElement | null> {
+  if (!text) return null;
+  if (type === "qr") {
+    const canvas = document.createElement("canvas");
+    try {
+      await QRCode.toCanvas(canvas, text, {
+        width: Math.max(width, height),
+        margin: 1,
+        color: { dark: color, light: "#ffffff" },
+      });
+      return canvas;
+    } catch {
+      return null;
+    }
+  } else {
+    const canvas = document.createElement("canvas");
+    try {
+      JsBarcode(canvas, text, {
+        format: "CODE128",
+        lineColor: color,
+        background: "#ffffff",
+        width: 2,
+        height: Math.max(20, height - 8),
+        displayValue: false,
+        margin: 4,
+      });
+      return canvas;
+    } catch {
+      return null;
+    }
+  }
+}
+
+const _scriptCache: Record<string, Promise<any>> = {};
+
+export function loadScript(src: string, globalKey: string): Promise<any> {
+  if ((window as any)[globalKey]) return Promise.resolve((window as any)[globalKey]);
+  if (src in _scriptCache) return _scriptCache[src];
+  _scriptCache[src] = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = src;
-    s.onload = () => resolve((window as any)[globalKey]);
-    s.onerror = reject;
+    s.onload = () => {
+      const val = (window as any)[globalKey];
+      if (val) resolve(val);
+      else reject(new Error(`${globalKey} not found after loading ${src}`));
+    };
+    s.onerror = () => {
+      delete _scriptCache[src];
+      reject(new Error(`Failed to load script: ${src}`));
+    };
     document.head.appendChild(s);
   });
+  return _scriptCache[src];
 }

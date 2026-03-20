@@ -21,20 +21,49 @@ import {
   detectImageColumns,
   normalizeImageKey,
 } from "../utils/data";
+import { measureTextDimensions } from "../utils/rendering";
 import { exportRecords } from "../utils/export";
 import { LayerItem, DimensionInputs } from "./LayerItem";
 import { ZoomControls, FloatingPageNav, KbdHint } from "./Controls";
-import { ShadowPanel, BorderPanel } from "./StylePanels";
+import { ShadowPanel, BorderPanel, NumInput } from "./StylePanels";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { ImpositionModal } from "./ImpositionModal";
 import { useUndoRedo } from "../hooks/useUndoRedo";
 import { ImageEl, TextEl } from "./CanvasObjects";
 import { DataImageInfo, DataImagesPanel } from "./DataPanel";
 import { FontPicker } from "./FontPicker";
 import {
-  IconSparkle, IconUndo, IconClose, IconGrid, IconImage,
-  IconBarChart, IconCamera, IconDragHandle, IconArrowDown, IconArrowUp, IconMinus,
-  IconCheckCircle, IconFolder,
+  IconSparkle,
+  IconUndo,
+  IconClose,
+  IconGrid,
+  IconImage,
+  IconBarChart,
+  IconCamera,
+  IconDragHandle,
+  IconArrowDown,
+  IconArrowUp,
+  IconMinus,
+  IconCheckCircle,
+  IconFolder,
+  IconChevronDown,
+  IconType,
+  IconEyedropper,
+  IconQrCode,
+  IconBarcode,
+  IconShrink,
+  IconExpand,
+  IconFitScreen,
+  IconTrash,
+  IconRotate,
 } from "@/components/Icons";
+import { ChevronUpIcon } from "lucide-react";
 
 // ─── Unified undo state ───────────────────────────────────────────────────────
 // Keeping canvasSize alongside objects means a single undo/redo call restores
@@ -63,9 +92,8 @@ function remapObjects(
   return objects.map((o) => {
     if (o.kind === "image" && (o as ImageObject).isBackground) return o;
 
-    const shadow = o.kind === "image"
-      ? (o as ImageObject).shadow
-      : (o as TextField).shadow;
+    const shadow =
+      o.kind === "image" ? (o as ImageObject).shadow : (o as TextField).shadow;
     const scaledShadow: Shadow = {
       ...shadow,
       x: shadow.x * avg,
@@ -105,31 +133,11 @@ function remapObjects(
 
 function SLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        color: "rgba(240,237,232,0.28)",
-        textTransform: "uppercase",
-        letterSpacing: "0.08em",
-        marginBottom: 7,
-      }}
-    >
+    <p className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-[7px]">
       {children as any}
     </p>
   );
 }
-
-const TEXT_COLORS = [
-  "#1a1a1a",
-  "#ffffff",
-  "#e8ff47",
-  "#4a90e2",
-  "#e74c3c",
-  "#2ecc71",
-  "#f59e0b",
-  "#8b5cf6",
-];
 
 interface EditorProps {
   initialObjects?: CanvasObject[];
@@ -215,7 +223,9 @@ export default function Editor({
     [setEditorState],
   );
 
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRenderRef = useRef(true);
 
@@ -225,15 +235,15 @@ export default function Editor({
       return;
     }
     if (!onSave) return;
-    setSaveStatus('saving');
+    setSaveStatus("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       try {
         onSave(editorState);
-        setSaveStatus('saved');
-        setTimeout(() => setSaveStatus('idle'), 2000);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2000);
       } catch {
-        setSaveStatus('error');
+        setSaveStatus("error");
       }
     }, 800);
   }, [editorState, onSave]);
@@ -297,16 +307,23 @@ export default function Editor({
   const [exportFormat, setExportFormat] = useState("PNG");
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [rightTab, setRightTab] = useState<"layers" | "style">("layers");
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [imgDragOver, setImgDragOver] = useState(false);
   const [xlsxDragOver, setXlsxDragOver] = useState(false);
   const [columns, setColumns] = useState<string[]>(initialColumns ?? []);
   const [rows, setRows] = useState<RowData[]>(initialRows ?? []);
-  const [dataFileName, setDataFileName] = useState<string | null>(initialDataFileName ?? null);
+  const [dataFileName, setDataFileName] = useState<string | null>(
+    initialDataFileName ?? null,
+  );
   const [dataError, setDataError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [layerDraggingId, setLayerDraggingId] = useState<number | null>(null);
-  const [dataImages, setDataImages] = useState<DataImageMap>(initialDataImages ?? {});
-  const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(initialDataImagesLabel ?? null);
+  const [dataImages, setDataImages] = useState<DataImageMap>(
+    initialDataImages ?? {},
+  );
+  const [dataImagesLabel, setDataImagesLabel] = useState<string | null>(
+    initialDataImagesLabel ?? null,
+  );
   const [dataImagesLoading, setDataImagesLoading] = useState(false);
   const [autoDetectedImageColumns, setAutoDetectedImageColumns] = useState<
     string[]
@@ -320,7 +337,7 @@ export default function Editor({
   const nextZ = useRef(
     initialObjects && initialObjects.length > 0
       ? Math.max(100, ...initialObjects.map((o) => o.zIndex)) + 1
-      : 100
+      : 100,
   );
 
   const totalPages = rows.length;
@@ -510,15 +527,15 @@ export default function Editor({
   // ─── Keyboard shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
     const dn = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
       const tag = (e.target as HTMLElement).tagName;
-      if (
+      const inInput =
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
         tag === "SELECT" ||
-        (e.target as HTMLElement).isContentEditable
-      )
-        return;
-      const ctrl = e.ctrlKey || e.metaKey;
+        (e.target as HTMLElement).isContentEditable;
+      // Allow Ctrl+B / Ctrl+I even when an input is focused
+      if (inInput && !(ctrl && (e.key === "b" || e.key === "i"))) return;
       if (ctrl && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undoRef.current();
@@ -610,11 +627,16 @@ export default function Editor({
       if (ctrl && e.key === "b") {
         e.preventDefault();
         setObjects((p) =>
-          p.map((o) =>
-            ids.has(o.id) && o.kind === "field"
-              ? ({ ...o, bold: !(o as TextField).bold } as CanvasObject)
-              : o,
-          ),
+          p.map((o) => {
+            if (!ids.has(o.id) || o.kind !== "field") return o;
+            const tf = o as TextField;
+            const newBold = !tf.bold;
+            return {
+              ...tf,
+              bold: newBold,
+              fontWeight: newBold ? 700 : 400,
+            } as CanvasObject;
+          }),
         );
         return;
       }
@@ -711,7 +733,7 @@ export default function Editor({
       const imgCols = detectImageColumns(rd, cols);
       setAutoDetectedImageColumns(imgCols);
       setColumns(cols);
-      const limitedRd = user?.plan === 'free' ? rd.slice(0, 25) : rd;
+      const limitedRd = user?.plan === "free" ? rd.slice(0, 25) : rd;
       setRows(limitedRd);
       setDataFileName(file.name);
       setPageIndex(0);
@@ -840,11 +862,12 @@ export default function Editor({
       setEditorState((prev) => {
         const sid = primaryIdRef.current;
         // Fall back to the background image when nothing is selected
-        const target = sid !== null
-          ? prev.objects.find((o) => o.id === sid)
-          : prev.objects.find(
-              (o) => o.kind === "image" && (o as ImageObject).isBackground,
-            );
+        const target =
+          sid !== null
+            ? prev.objects.find((o) => o.id === sid)
+            : prev.objects.find(
+                (o) => o.kind === "image" && (o as ImageObject).isBackground,
+              );
         if (!target) return prev;
 
         const img = target as ImageObject;
@@ -899,13 +922,18 @@ export default function Editor({
         // Update the background image dimensions to match the new canvas.
         const updatedObjects = remapped.map((o) =>
           o.id === target.id
-            ? ({ ...img, x: 0, y: 0, width: baseW, height: baseH } as CanvasObject)
+            ? ({
+                ...img,
+                x: 0,
+                y: 0,
+                width: baseW,
+                height: baseH,
+              } as CanvasObject)
             : o,
         );
 
         return { objects: updatedObjects, canvasSize: newSize };
       });
-
     },
     [setEditorState],
   );
@@ -926,6 +954,7 @@ export default function Editor({
         height: 40,
         fontSize: 22,
         fontFamily: "Playfair Display",
+        fontWeight: 400,
         color: "#1a1a1a",
         bold: false,
         italic: false,
@@ -949,9 +978,7 @@ export default function Editor({
       setObjects(
         (p) =>
           p.map((o) =>
-            moveIds.has(o.id)
-              ? { ...o, x: o.x + dx, y: o.y + dy }
-              : o,
+            moveIds.has(o.id) ? { ...o, x: o.x + dx, y: o.y + dy } : o,
           ),
         live,
       );
@@ -964,47 +991,59 @@ export default function Editor({
       const ids = selectedIdsRef.current;
       const isMulti = ids.has(id) && ids.size > 1;
 
-      setObjects(
-        (p) => {
-          if (!isMulti) {
-            return p.map((o) =>
-              o.id === id ? ({ ...o, ...patch } as CanvasObject) : o,
+      setObjects((p) => {
+        if (!isMulti) {
+          return p.map((o) =>
+            o.id === id ? ({ ...o, ...patch } as CanvasObject) : o,
+          );
+        }
+
+        // Find the primary object to compute scale ratios
+        const primary = p.find((o) => o.id === id);
+        if (!primary) return p;
+
+        // Rotation-only patch → apply same rotation to all selected
+        if (
+          patch.rotation != null &&
+          patch.width == null &&
+          patch.height == null
+        ) {
+          return p.map((o) => {
+            if (!ids.has(o.id)) return o;
+            return { ...o, rotation: patch.rotation } as CanvasObject;
+          });
+        }
+
+        const sx = patch.width != null ? patch.width / primary.width : 1;
+        const sy = patch.height != null ? patch.height / primary.height : 1;
+        // How much the primary's origin shifted (for handles like nw, n, w)
+        const odx = patch.x != null ? patch.x - primary.x : 0;
+        const ody = patch.y != null ? patch.y - primary.y : 0;
+
+        return p.map((o) => {
+          if (o.id === id) return { ...o, ...patch } as CanvasObject;
+          if (!ids.has(o.id)) return o;
+
+          // Scale other selected objects proportionally
+          const relX = o.x - primary.x;
+          const relY = o.y - primary.y;
+          const updated: any = {
+            ...o,
+            x: Math.round(primary.x + odx + relX * sx),
+            y: Math.round(primary.y + ody + relY * sy),
+            width: Math.round(o.width * sx),
+            height: Math.round(o.height * sy),
+          };
+          if (o.kind === "field" && (o as TextField).fontSize) {
+            const avgScale = (sx + sy) / 2;
+            updated.fontSize = Math.max(
+              6,
+              Math.round((o as TextField).fontSize * avgScale),
             );
           }
-
-          // Find the primary object to compute scale ratios
-          const primary = p.find((o) => o.id === id);
-          if (!primary) return p;
-
-          const sx = patch.width != null ? patch.width / primary.width : 1;
-          const sy = patch.height != null ? patch.height / primary.height : 1;
-          // How much the primary's origin shifted (for handles like nw, n, w)
-          const odx = patch.x != null ? patch.x - primary.x : 0;
-          const ody = patch.y != null ? patch.y - primary.y : 0;
-
-          return p.map((o) => {
-            if (o.id === id) return { ...o, ...patch } as CanvasObject;
-            if (!ids.has(o.id)) return o;
-
-            // Scale other selected objects proportionally
-            const relX = o.x - primary.x;
-            const relY = o.y - primary.y;
-            const updated: any = {
-              ...o,
-              x: Math.round(primary.x + odx + relX * sx),
-              y: Math.round(primary.y + ody + relY * sy),
-              width: Math.round(o.width * sx),
-              height: Math.round(o.height * sy),
-            };
-            if (o.kind === "field" && (o as TextField).fontSize) {
-              const avgScale = (sx + sy) / 2;
-              updated.fontSize = Math.max(6, Math.round((o as TextField).fontSize * avgScale));
-            }
-            return updated as CanvasObject;
-          });
-        },
-        live,
-      );
+          return updated as CanvasObject;
+        });
+      }, live);
     },
     [setObjects],
   );
@@ -1145,27 +1184,38 @@ export default function Editor({
     [layerDraggingId, setObjects],
   );
 
-  const doExport = useCallback(async (layout: ImpositionResult, sheet: { w: number; h: number }) => {
-    if (exportProgress !== null) return;
-    setExportProgress(0);
-    try {
-      await exportRecords(
-        exportFormat,
-        objects,
-        canvasSize,
-        rows,
-        dataImages,
-        layout,
-        sheet,
-        watermark,
-        (pct) => setExportProgress(pct),
-      );
-    } catch (err: any) {
-      alert(`Export failed: ${err?.message || "Unknown error"}`);
-    } finally {
-      setTimeout(() => setExportProgress(null), 800);
-    }
-  }, [exportFormat, objects, canvasSize, rows, dataImages, exportProgress, watermark]);
+  const doExport = useCallback(
+    async (layout: ImpositionResult, sheet: { w: number; h: number }) => {
+      if (exportProgress !== null) return;
+      setExportProgress(0);
+      try {
+        await exportRecords(
+          exportFormat,
+          objects,
+          canvasSize,
+          rows,
+          dataImages,
+          layout,
+          sheet,
+          watermark,
+          (pct) => setExportProgress(pct),
+        );
+      } catch (err: any) {
+        alert(`Export failed: ${err?.message || "Unknown error"}`);
+      } finally {
+        setTimeout(() => setExportProgress(null), 800);
+      }
+    },
+    [
+      exportFormat,
+      objects,
+      canvasSize,
+      rows,
+      dataImages,
+      exportProgress,
+      watermark,
+    ],
+  );
 
   if (!mounted) return null;
 
@@ -1175,6 +1225,33 @@ export default function Editor({
   const stylePrimary = selectedObj;
   const styleApply = (key: string, value: unknown) =>
     updateSelected(key, value);
+
+  const styleApplyWithAutoFit = (key: string, value: unknown) => {
+    const ids = selectedIdsRef.current;
+    if (ids.size === 0) return;
+    setObjects((p) =>
+      p.map((o) => {
+        if (!ids.has(o.id)) return o;
+        const updated = { ...o, [key]: value } as CanvasObject;
+        if (updated.kind !== "field") return updated;
+        const tf = updated as TextField;
+        if ((tf.codeType ?? "text") !== "text") return updated;
+        const ci = currentRow ? rows.indexOf(currentRow) : -1;
+        const ti = ci >= 0 ? ci + tf.columnOffset : -1;
+        const text =
+          ti >= 0 && ti < rows.length ? (rows[ti][tf.column] ?? "") : "";
+        if (!text) return updated;
+        const m = measureTextDimensions(
+          text,
+          tf.fontFamily,
+          tf.fontSize,
+          tf.bold,
+          tf.italic,
+        );
+        return { ...tf, width: m.width, height: m.height } as CanvasObject;
+      }),
+    );
+  };
 
   const styleApplyPrimary = (key: string, value: unknown) => {
     // Width/height edits on the background image must go through updateBgDimension
@@ -1197,7 +1274,10 @@ export default function Editor({
       else toggleSelect(id);
     } else if (e.shiftKey) {
       rangeSelect(id, layersSorted);
-    } else if (selectedIdsRef.current.has(id) && selectedIdsRef.current.size > 1) {
+    } else if (
+      selectedIdsRef.current.has(id) &&
+      selectedIdsRef.current.size > 1
+    ) {
       // Clicking an already-selected object in a multi-selection:
       // don't deselect others yet — allow multi-drag. The deselect-to-single
       // happens on mouseUp if the user didn't drag (handled in useDragResize).
@@ -1220,20 +1300,10 @@ export default function Editor({
   };
 
   return (
-    <div
-      style={{
-        background: "#0a0a10",
-        color: "#f0ede8",
-        height: "calc(100vh - 56px)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        fontFamily: "'DM Sans',sans-serif",
-      }}
-    >
+    <div className="dark flex flex-col h-screen overflow-hidden bg-[#0a0a10] text-[#f0ede8] font-[DM_Sans,sans-serif]">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0;}
+        // *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:4px;height:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px;}
         input[type=range]{accent-color:#e8ff47;cursor:pointer;} input[type=color]{border:none;background:none;cursor:pointer;padding:0;}
         .chip:hover{background:rgba(232,255,71,0.09)!important;border-color:rgba(232,255,71,0.3)!important;color:#e8ff47!important;}
@@ -1243,71 +1313,31 @@ export default function Editor({
       `}</style>
 
       {exportProgress !== null && !showImpositionModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.7)",
-            zIndex: 500,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              background: "#14141e",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 14,
-              padding: "28px 36px",
-              minWidth: 260,
-              textAlign: "center",
-            }}
-          >
-            <div style={{ marginBottom: 14 }}>
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.7)] z-[500] flex items-center justify-center">
+          <div className="bg-[#14141e] border border-[rgba(255,255,255,0.1)] rounded-md px-9 py-7 min-w-[260px] text-center">
+            <div className="mb-3.5">
               {exportProgress < 100 ? (
                 <div
+                  className="w-9 h-9 rounded-full mx-auto"
                   style={{
-                    width: 36,
-                    height: 36,
                     border: "3px solid rgba(232,255,71,0.2)",
                     borderTop: "3px solid #e8ff47",
-                    borderRadius: "50%",
                     animation: "spin 0.7s linear infinite",
-                    margin: "0 auto",
                   }}
                 />
               ) : (
                 <IconCheckCircle size={24} color="#4ade80" />
               )}
             </div>
-            <p
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#f0ede8",
-                marginBottom: 10,
-              }}
-            >
+            <p className="text-sm font-semibold text-[#f0ede8] mb-2.5">
               {exportProgress < 100
                 ? `Exporting… ${exportProgress}%`
                 : "Export complete!"}
             </p>
-            <div
-              style={{
-                height: 4,
-                background: "rgba(255,255,255,0.1)",
-                borderRadius: 4,
-              }}
-            >
+            <div className="h-1 bg-[rgba(255,255,255,0.1)] rounded-md">
               <div
-                style={{
-                  height: "100%",
-                  width: `${exportProgress}%`,
-                  background: "#e8ff47",
-                  borderRadius: 4,
-                  transition: "width 0.3s",
-                }}
+                className="h-full bg-[#e8ff47] rounded-md transition-[width] duration-300"
+                style={{ width: `${exportProgress}%` }}
               />
             </div>
           </div>
@@ -1331,148 +1361,51 @@ export default function Editor({
       )}
 
       {/* Header */}
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 16px",
-          height: 50,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "#0c0c14",
-          flexShrink: 0,
-          zIndex: 20,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <div
-              style={{
-                width: 26,
-                height: 26,
-                background: "#e8ff47",
-                borderRadius: 7,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-                fontWeight: 900,
-                color: "#0a0a10",
-              }}
-            >
+      <header className="flex items-center justify-between px-4 h-[50px] border-b border-b-[rgba(255,255,255,0.06)] bg-[#0c0c14] shrink-0 z-20">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-[7px]">
+            <div className="w-[26px] h-[26px] bg-[#e8ff47] rounded-md flex items-center justify-center text-xs font-black text-[#0a0a10]">
               <IconSparkle size={12} />
             </div>
-            <span
-              style={{
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: "-0.02em",
-              }}
-            >
+            <span className="font-bold text-[13px] tracking-[-0.02em]">
               Templify
             </span>
           </div>
-          <div
-            style={{
-              width: 1,
-              height: 18,
-              background: "rgba(255,255,255,0.08)",
-            }}
-          />
-          <div style={{ display: "flex", gap: 2 }}>
+          <div className="w-px h-[18px] bg-[rgba(255,255,255,0.08)]" />
+          <div className="flex gap-0.5">
             <button
-              className="undob"
+              className="undob w-7 h-7 rounded-md bg-transparent border border-[rgba(255,255,255,0.08)] text-[rgba(240,237,232,0.55)] text-[13px] cursor-pointer flex items-center justify-center"
               onClick={undo}
               disabled={!canUndo}
               title="Undo (Ctrl+Z)"
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "rgba(240,237,232,0.55)",
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
             >
               <IconUndo size={13} />
             </button>
             <button
-              className="undob"
+              className="undob w-7 h-7 rounded-md bg-transparent border border-[rgba(255,255,255,0.08)] text-[rgba(240,237,232,0.55)] text-[13px] cursor-pointer flex items-center justify-center"
               onClick={redo}
               disabled={!canRedo}
               title="Redo (Ctrl+Y)"
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                background: "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "rgba(240,237,232,0.55)",
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
             >
               <IconUndo size={13} style={{ transform: "scaleX(-1)" }} />
             </button>
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              padding: "4px 9px",
-              borderRadius: 7,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <span style={{ fontSize: 9, color: "rgba(240,237,232,0.3)" }}>
+          <div className="flex items-center gap-[5px] py-1 px-[9px] rounded-md bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]">
+            <span className="text-[9px] text-[rgba(240,237,232,0.3)]">
               Canvas
             </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                color: "rgba(240,237,232,0.6)",
-                fontFamily: "monospace",
-              }}
-            >
+            <span className="text-[10px] font-semibold text-[rgba(240,237,232,0.6)] font-mono">
               {canvasSize.width}×{canvasSize.height}px
             </span>
           </div>
           {selectedIds.size > 1 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "4px 9px",
-                borderRadius: 7,
-                background: "rgba(232,255,71,0.08)",
-                border: "1px solid rgba(232,255,71,0.2)",
-              }}
-            >
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#e8ff47" }}>
+            <div className="flex items-center gap-[5px] py-1 px-[9px] rounded-md bg-[rgba(232,255,71,0.08)] border border-[rgba(232,255,71,0.2)]">
+              <span className="text-[10px] font-bold text-[#e8ff47]">
                 {selectedIds.size} selected
               </span>
               <button
                 onClick={clearSelection}
-                style={{
-                  fontSize: 9,
-                  color: "rgba(232,255,71,0.6)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
-                }}
+                className="text-[9px] text-[rgba(232,255,71,0.6)] bg-transparent border-none cursor-pointer p-0"
               >
                 <IconClose size={10} />
               </button>
@@ -1481,71 +1414,23 @@ export default function Editor({
         </div>
         <button
           onClick={() => setShowImpositionModal(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "0 14px",
-            height: 32,
-            borderRadius: 8,
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: "pointer",
-            background: "#e8ff47",
-            border: "none",
-            color: "#0a0a10",
-          }}
+          className="flex items-center gap-1.5 px-3.5 h-8 rounded-md text-[11px] font-bold cursor-pointer bg-[#e8ff47] border-none text-[#0a0a10]"
           onMouseEnter={(e) => (e.currentTarget.style.background = "#d4eb3f")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#e8ff47")}
         >
           <IconGrid size={12} />
           <span>Print Imposition & Export</span>
-          <span
-            style={{
-              fontSize: 8,
-              background: "rgba(0,0,0,0.12)",
-              padding: "1px 5px",
-              borderRadius: 3,
-              letterSpacing: "0.04em",
-            }}
-          >
+          <span className="text-[8px] bg-[rgba(0,0,0,0.12)] px-[5px] py-px rounded-md tracking-[0.04em]">
             GA
           </span>
         </button>
       </header>
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
-        <aside
-          style={{
-            width: 210,
-            flexShrink: 0,
-            borderRight: "1px solid rgba(255,255,255,0.06)",
-            display: "flex",
-            flexDirection: "column",
-            background: "#0e0e18",
-            overflow: "hidden",
-          }}
-        >
+        <aside className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] flex flex-col bg-[#0e0e18] overflow-hidden p-0">
           {/* Image upload */}
-          <div
-            style={{
-              padding: 12,
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <p
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: "rgba(240,237,232,0.28)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 8,
-              }}
-            >
-              Template / Image
-            </p>
+          <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
             <label
               onDragOver={(e) => {
                 e.preventDefault();
@@ -1557,33 +1442,25 @@ export default function Editor({
                 setImgDragOver(false);
                 handleImageFiles(e.dataTransfer.files);
               }}
+              className="flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer"
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 5,
-                padding: "12px 10px",
-                borderRadius: 9,
-                cursor: "pointer",
                 background: imgDragOver
                   ? "rgba(232,255,71,0.1)"
                   : "rgba(232,255,71,0.03)",
                 border: `1.5px dashed ${imgDragOver ? "#e8ff47" : "rgba(232,255,71,0.22)"}`,
               }}
             >
-              <IconImage size={22} />
-              <div style={{ textAlign: "center" }}>
+              <IconImage size={16} />
+              <div>
                 <p
+                  className="text-[10px] font-semibold"
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
                     color: imgDragOver ? "#e8ff47" : "rgba(240,237,232,0.6)",
-                    marginBottom: 1,
                   }}
                 >
                   Select Template
                 </p>
-                <p style={{ fontSize: 9, color: "rgba(240,237,232,0.25)" }}>
+                <p className="text-[8px] text-[rgba(240,237,232,0.22)]">
                   auto-resizes canvas
                 </p>
               </div>
@@ -1591,94 +1468,43 @@ export default function Editor({
                 type="file"
                 accept="image/*"
                 multiple
-                style={{ display: "none" }}
+                className="hidden"
                 onChange={(e) => handleImageFiles(e.target.files)}
               />
             </label>
           </div>
 
           {/* Data source */}
-          <div
-            style={{
-              padding: 12,
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <p
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: "rgba(240,237,232,0.28)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 8,
-              }}
-            >
-              Data Source
-            </p>
+          <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
             {dataFileName ? (
-              <div
-                style={{
-                  background: "rgba(232,255,71,0.04)",
-                  border: "1px solid rgba(232,255,71,0.15)",
-                  borderRadius: 8,
-                  padding: "8px 10px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 3,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      minWidth: 0,
-                    }}
-                  >
-                    <span style={{ color: "#e8ff47", flexShrink: 0 }}><IconBarChart size={12} /></span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        color: "#e8ff47",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+              <div className="bg-[rgba(232,255,71,0.04)] border border-[rgba(232,255,71,0.15)] rounded-md px-2 py-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-[5px] min-w-0">
+                    <span className="text-[#e8ff47] shrink-0">
+                      <IconBarChart size={11} />
+                    </span>
+                    <span className="text-[9px] font-semibold text-[#e8ff47] overflow-hidden text-ellipsis whitespace-nowrap">
                       {dataFileName}
+                    </span>
+                    <span className="text-[8px] text-[rgba(240,237,232,0.3)] shrink-0">
+                      {rows.length}r · {columns.length}c
                     </span>
                   </div>
                   <label
-                    style={{
-                      cursor: "pointer",
-                      fontSize: 11,
-                      color: "rgba(240,237,232,0.3)",
-                      marginLeft: 5,
-                      flexShrink: 0,
-                    }}
+                    className="cursor-pointer text-[10px] text-[rgba(240,237,232,0.3)] ml-1 shrink-0"
                     title="Replace"
                   >
                     ↺
                     <input
                       type="file"
                       accept=".xlsx,.xls,.csv,.tsv"
-                      style={{ display: "none" }}
+                      className="hidden"
                       onChange={(e) =>
                         e.target.files?.[0] && handleDataFile(e.target.files[0])
                       }
                     />
                   </label>
                 </div>
-                <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
-                  {rows.length} rows · {columns.length} cols
-                </p>
               </div>
             ) : (
               <label
@@ -1693,14 +1519,8 @@ export default function Editor({
                   const f = e.dataTransfer.files[0];
                   if (f) handleDataFile(f);
                 }}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer"
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "12px 10px",
-                  borderRadius: 9,
-                  cursor: "pointer",
                   background: xlsxDragOver
                     ? "rgba(232,255,71,0.06)"
                     : "rgba(255,255,255,0.02)",
@@ -1709,37 +1529,28 @@ export default function Editor({
               >
                 {dataLoading ? (
                   <div
+                    className="w-3.5 h-3.5 rounded-full shrink-0"
                     style={{
-                      width: 18,
-                      height: 18,
                       border: "2px solid rgba(232,255,71,0.2)",
                       borderTop: "2px solid #e8ff47",
-                      borderRadius: "50%",
                       animation: "spin 0.7s linear infinite",
                     }}
                   />
                 ) : (
-                  <IconFolder size={18} />
+                  <IconFolder size={14} />
                 )}
-                <div style={{ textAlign: "center" }}>
-                  <p
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "rgba(240,237,232,0.5)",
-                      marginBottom: 1,
-                    }}
-                  >
+                <div>
+                  <p className="text-[10px] font-semibold text-[rgba(240,237,232,0.5)]">
                     {dataLoading ? "Loading…" : "Upload Data"}
                   </p>
-                  <p style={{ fontSize: 9, color: "rgba(240,237,232,0.22)" }}>
+                  <p className="text-[8px] text-[rgba(240,237,232,0.22)]">
                     XLSX · CSV · TSV
                   </p>
                 </div>
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv,.tsv"
-                  style={{ display: "none" }}
+                  className="hidden"
                   onChange={(e) =>
                     e.target.files?.[0] && handleDataFile(e.target.files[0])
                   }
@@ -1749,9 +1560,9 @@ export default function Editor({
             {dataError && (
               <p
                 style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   color: "#f87171",
-                  marginTop: 5,
+                  marginTop: 4,
                   lineHeight: 1.4,
                 }}
               >
@@ -1775,18 +1586,18 @@ export default function Editor({
           />
 
           {/* Text fields */}
-          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "6px 10px" }}>
             <p
               style={{
-                fontSize: 9,
+                fontSize: 8,
                 fontWeight: 700,
-                color: "rgba(240,237,232,0.28)",
+                color: "rgba(240,237,232,0.25)",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                marginBottom: 6,
+                marginBottom: 4,
               }}
             >
-              Text Fields
+              Fields
             </p>
             {columns.length === 0 ? (
               <p
@@ -1799,7 +1610,7 @@ export default function Editor({
                 Upload a data file to see columns.
               </p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {columns
                   .filter((col) => !autoDetectedImageColumns.includes(col))
                   .map((col) => {
@@ -1815,9 +1626,9 @@ export default function Editor({
                         style={{
                           width: "100%",
                           textAlign: "left",
-                          padding: "5px 8px",
-                          borderRadius: 7,
-                          fontSize: 10,
+                          padding: "4px 7px",
+                          borderRadius: 6,
+                          fontSize: 9,
                           fontWeight: 500,
                           cursor: "pointer",
                           display: "flex",
@@ -1834,7 +1645,7 @@ export default function Editor({
                         <span
                           style={{
                             fontFamily: "monospace",
-                            fontSize: 9,
+                            fontSize: 8,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -1853,7 +1664,7 @@ export default function Editor({
                               style={{
                                 background: "rgba(232,255,71,0.15)",
                                 color: "#e8ff47",
-                                borderRadius: 3,
+                                borderRadius: 6,
                                 padding: "0 4px",
                                 fontSize: 8,
                                 fontWeight: 700,
@@ -1871,35 +1682,63 @@ export default function Editor({
             )}
           </div>
 
-          {/* Shortcuts */}
+          {/* Shortcuts (collapsible) */}
           <div
             style={{
-              padding: 12,
+              padding: "6px 12px",
               borderTop: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <p
+            <button
+              onClick={() => setShortcutsOpen((v) => !v)}
               style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: "rgba(240,237,232,0.28)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 6,
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
               }}
             >
-              Shortcuts
-            </p>
-            <KbdHint keys={["Ctrl", "Z"]} label="Undo" />
-            <KbdHint keys={["Ctrl", "Y"]} label="Redo" />
-            <KbdHint keys={["Ctrl", "A"]} label="Select All" />
-            <KbdHint keys={["Ctrl", "D"]} label="Duplicate" />
-            <KbdHint keys={["Ctrl", "click"]} label="Multi-select" />
-            <KbdHint keys={["Ctrl", "Shift", "click"]} label="Range select" />
-            <KbdHint keys={["Ctrl", "="]} label="Zoom In" />
-            <KbdHint keys={["Ctrl", "-"]} label="Zoom Out" />
-            <KbdHint keys={["Space", "drag"]} label="Pan" />
-            <KbdHint keys={["Del"]} label="Delete" />
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: "rgba(240,237,232,0.28)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                Shortcuts
+              </span>
+              <ChevronUpIcon
+                size={10}
+                color="rgba(240,237,232,0.28)"
+                style={{
+                  transform: shortcutsOpen ? "rotate(180deg)" : "none",
+                  transition: "transform 0.15s",
+                }}
+              />
+            </button>
+            {shortcutsOpen && (
+              <div style={{ marginTop: 6 }}>
+                <KbdHint keys={["Ctrl", "Z"]} label="Undo" />
+                <KbdHint keys={["Ctrl", "Y"]} label="Redo" />
+                <KbdHint keys={["Ctrl", "A"]} label="Select All" />
+                <KbdHint keys={["Ctrl", "D"]} label="Duplicate" />
+                <KbdHint keys={["Ctrl", "click"]} label="Multi-select" />
+                <KbdHint
+                  keys={["Ctrl", "Shift", "click"]}
+                  label="Range select"
+                />
+                <KbdHint keys={["Ctrl", "="]} label="Zoom In" />
+                <KbdHint keys={["Ctrl", "-"]} label="Zoom Out" />
+                <KbdHint keys={["Space", "drag"]} label="Pan" />
+                <KbdHint keys={["Del"]} label="Delete" />
+              </div>
+            )}
           </div>
         </aside>
 
@@ -1957,13 +1796,14 @@ export default function Editor({
             >
               <div
                 id="templify-canvas"
+                data-canvas-root
                 style={{
                   position: "absolute",
                   inset: 0,
                   background: "#ffffff",
                   boxShadow:
                     "0 20px 60px rgba(0,0,0,0.9),0 0 0 1px rgba(255,255,255,0.04)",
-                  overflow: "hidden",
+                  overflow: "visible",
                 }}
               >
                 {objects.length === 0 && (
@@ -1993,17 +1833,17 @@ export default function Editor({
                 )}
               </div>
               {bgImage && (
-                  <ImageEl
-                    obj={bgImage}
-                    selected={selectedIds.has(bgImage.id)}
-                    onSelect={(id, e) => handleModifierSelect(e, id)}
-                    onDrag={handleDrag}
-                    onResize={handleResize}
-                    scale={zoom}
-                    rows={rows.length > 0 ? rows : [{}]}
-                    baseRowIndex={pageIndex}
-                    dataImages={dataImages}
-                  />
+                <ImageEl
+                  obj={bgImage}
+                  selected={selectedIds.has(bgImage.id)}
+                  onSelect={(id, e) => handleModifierSelect(e, id)}
+                  onDrag={handleDrag}
+                  onResize={handleResize}
+                  scale={zoom}
+                  rows={rows.length > 0 ? rows : [{}]}
+                  baseRowIndex={pageIndex}
+                  dataImages={dataImages}
+                />
               )}
               {objects
                 .filter(
@@ -2012,36 +1852,36 @@ export default function Editor({
                 )
                 .map((obj) =>
                   obj.kind === "image" ? (
-                      <ImageEl
-                        key={obj.id}
-                        obj={obj as ImageObject}
-                        selected={selectedIds.has(obj.id)}
-                        onSelect={(id, e) => handleModifierSelect(e, id)}
-                        onDrag={handleDrag}
-                        onResize={handleResize}
-                        scale={zoom}
-                        rows={rows.length > 0 ? rows : [{}]}
-                        baseRowIndex={pageIndex}
-                        dataImages={dataImages}
-                        onClickUp={selectOne}
-                      />
+                    <ImageEl
+                      key={obj.id}
+                      obj={obj as ImageObject}
+                      selected={selectedIds.has(obj.id)}
+                      onSelect={(id, e) => handleModifierSelect(e, id)}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      scale={zoom}
+                      rows={rows.length > 0 ? rows : [{}]}
+                      baseRowIndex={pageIndex}
+                      dataImages={dataImages}
+                      onClickUp={selectOne}
+                    />
                   ) : (
-                      <TextEl
-                        key={obj.id}
-                        obj={obj as TextField}
-                        selected={selectedIds.has(obj.id)}
-                        onSelect={(id, e) => handleModifierSelect(e, id)}
-                        onDrag={handleDrag}
-                        onResize={handleResize}
-                        currentRow={
-                          rows.length > 0
-                            ? rows[Math.min(pageIndex, rows.length - 1)]
-                            : null
-                        }
-                        rows={rows}
-                        scale={zoom}
-                        onClickUp={selectOne}
-                      />
+                    <TextEl
+                      key={obj.id}
+                      obj={obj as TextField}
+                      selected={selectedIds.has(obj.id)}
+                      onSelect={(id, e) => handleModifierSelect(e, id)}
+                      onDrag={handleDrag}
+                      onResize={handleResize}
+                      currentRow={
+                        rows.length > 0
+                          ? rows[Math.min(pageIndex, rows.length - 1)]
+                          : null
+                      }
+                      rows={rows}
+                      scale={zoom}
+                      onClickUp={selectOne}
+                    />
                   ),
                 )}
             </div>
@@ -2058,7 +1898,8 @@ export default function Editor({
               whiteSpace: "nowrap",
             }}
           >
-            {canvasSize.width}×{canvasSize.height}px · Zoom {Math.round(zoom * 100)}%
+            {canvasSize.width}×{canvasSize.height}px · Zoom{" "}
+            {Math.round(zoom * 100)}%
           </div>
           <FloatingPageNav
             pageIndex={pageIndex}
@@ -2164,7 +2005,7 @@ export default function Editor({
                           outline: selectedIds.has(o.id)
                             ? "1px solid rgba(232,255,71,0.4)"
                             : "none",
-                          borderRadius: 7,
+                          borderRadius: 6,
                           cursor: "pointer",
                         }}
                       >
@@ -2191,7 +2032,11 @@ export default function Editor({
                   <br />
                   Ctrl+click or Ctrl+Shift+click to multi-select.
                   <br />
-                  Drag <IconDragHandle size={8} style={{ display: "inline" }} /> handle to reorder layers.
+                  Drag <IconDragHandle
+                    size={8}
+                    style={{ display: "inline" }}
+                  />{" "}
+                  handle to reorder layers.
                 </p>
               </div>
             )}
@@ -2200,10 +2045,10 @@ export default function Editor({
             {rightTab === "style" && (
               <div
                 style={{
-                  padding: 12,
+                  padding: "8px 10px",
                   display: "flex",
                   flexDirection: "column",
-                  gap: 16,
+                  gap: 10,
                   minWidth: 0,
                   overflow: "hidden",
                 }}
@@ -2214,7 +2059,7 @@ export default function Editor({
                     <div
                       style={{
                         padding: "7px 9px",
-                        borderRadius: 7,
+                        borderRadius: 6,
                         background: "rgba(232,255,71,0.05)",
                         border: "1px solid rgba(232,255,71,0.12)",
                       }}
@@ -2258,7 +2103,7 @@ export default function Editor({
                     <div
                       style={{
                         padding: "7px 9px",
-                        borderRadius: 7,
+                        borderRadius: 6,
                         background: "rgba(232,255,71,0.05)",
                         border: "1px solid rgba(232,255,71,0.12)",
                       }}
@@ -2307,11 +2152,22 @@ export default function Editor({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {stylePrimary.kind === "image"
-                            ? (stylePrimary as ImageObject).isDataImage
-                              ? <><IconCamera size={10} /> {(stylePrimary as ImageObject).dataImageColumn || "Data Photo"}</>
-                              : <><IconImage size={10} /> {(stylePrimary as ImageObject).name}</>
-                            : `T  {{${(stylePrimary as TextField).column}}}`}
+                          {stylePrimary.kind === "image" ? (
+                            (stylePrimary as ImageObject).isDataImage ? (
+                              <>
+                                <IconCamera size={10} />{" "}
+                                {(stylePrimary as ImageObject)
+                                  .dataImageColumn || "Data Photo"}
+                              </>
+                            ) : (
+                              <>
+                                <IconImage size={10} />{" "}
+                                {(stylePrimary as ImageObject).name}
+                              </>
+                            )
+                          ) : (
+                            `T  {{${(stylePrimary as TextField).column}}}`
+                          )}
                         </p>
                       ) : null}
                     </div>
@@ -2329,6 +2185,42 @@ export default function Editor({
                       </p>
                     )}
 
+                    {multiSelected && (
+                      <div className="mt-1.5">
+                        <p className="text-[9px] text-[rgba(240,237,232,0.25)] mb-[3px]">
+                          <IconRotate
+                            size={8}
+                            style={{
+                              display: "inline",
+                              verticalAlign: "middle",
+                              marginRight: 3,
+                            }}
+                          />
+                          Rotation
+                        </p>
+                        <div className="relative" style={{ width: 80 }}>
+                          <input
+                            type="number"
+                            value={stylePrimary?.rotation ?? 0}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              if (isFinite(v))
+                                styleApply("rotation", ((v % 360) + 360) % 360);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === "Escape")
+                                e.currentTarget.blur();
+                            }}
+                            className="w-full px-[7px] py-1 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[11px] font-mono text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            style={{ paddingRight: 24 }}
+                          />
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[rgba(240,237,232,0.25)] pointer-events-none">
+                            deg
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {!multiSelected && stylePrimary && (
                       <DimensionInputs
                         selectedObj={
@@ -2343,65 +2235,72 @@ export default function Editor({
                     )}
 
                     {!multiSelected && !isBackgroundSelected && anySelected && (
-                      <div>
-                        <SLabel>Layer Order</SLabel>
-                        <div style={{ display: "flex", gap: 5 }}>
-                          <button
-                            onClick={() => {
-                              if (selectedId)
-                                setObjects((p) =>
-                                  p.map((o) =>
-                                    o.id === selectedId
-                                      ? ({
-                                          ...o,
-                                          zIndex: nextZ.current++,
-                                        } as CanvasObject)
-                                      : o,
-                                  ),
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 3,
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        <button
+                          title="Bring Forward"
+                          onClick={() => {
+                            if (selectedId)
+                              setObjects((p) =>
+                                p.map((o) =>
+                                  o.id === selectedId
+                                    ? ({
+                                        ...o,
+                                        zIndex: nextZ.current++,
+                                      } as CanvasObject)
+                                    : o,
+                                ),
+                              );
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            color: "rgba(240,237,232,0.5)",
+                            fontSize: 9,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 3,
+                          }}
+                        >
+                          <IconArrowUp size={9} /> Fwd
+                        </button>
+                        <button
+                          title="Send Backward"
+                          onClick={() => {
+                            if (selectedId)
+                              setObjects((p) => {
+                                const m =
+                                  Math.min(...p.map((o) => o.zIndex)) - 1;
+                                return p.map((o) =>
+                                  o.id === selectedId
+                                    ? ({ ...o, zIndex: m } as CanvasObject)
+                                    : o,
                                 );
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: "5px 0",
-                              borderRadius: 6,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              cursor: "pointer",
-                              background: "rgba(255,255,255,0.04)",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              color: "rgba(240,237,232,0.6)",
-                            }}
-                          >
-                            <IconArrowUp size={10} /> Fwd
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (selectedId)
-                                setObjects((p) => {
-                                  const m =
-                                    Math.min(...p.map((o) => o.zIndex)) - 1;
-                                  return p.map((o) =>
-                                    o.id === selectedId
-                                      ? ({ ...o, zIndex: m } as CanvasObject)
-                                      : o,
-                                  );
-                                });
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: "5px 0",
-                              borderRadius: 6,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              cursor: "pointer",
-                              background: "rgba(255,255,255,0.04)",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              color: "rgba(240,237,232,0.6)",
-                            }}
-                          >
-                            <IconArrowDown size={10} /> Back
-                          </button>
-                        </div>
+                              });
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            color: "rgba(240,237,232,0.5)",
+                            fontSize: 9,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 3,
+                          }}
+                        >
+                          <IconArrowDown size={9} /> Back
+                        </button>
                       </div>
                     )}
 
@@ -2429,84 +2328,34 @@ export default function Editor({
                                 />
                               )}
                             <div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  marginBottom: 5,
-                                }}
-                              >
-                                <SLabel>Opacity</SLabel>
-                                <span
-                                  style={{
-                                    fontSize: 9,
-                                    color: "#e8ff47",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {Math.round((img?.opacity ?? 1) * 100)}%
-                                </span>
-                              </div>
-                              <input
-                                type="range"
+                              <SLabel>Opacity</SLabel>
+                              <NumInput
+                                value={Math.round((img?.opacity ?? 1) * 100)}
                                 min={0}
                                 max={100}
-                                value={Math.round((img?.opacity ?? 1) * 100)}
-                                onChange={(e) =>
-                                  styleApply(
-                                    "opacity",
-                                    Number(e.target.value) / 100,
-                                  )
-                                }
-                                style={{
-                                  width: "100%",
-                                  height: "3px",
-                                  accentColor: "#e8ff47",
-                                }}
+                                suffix="%"
+                                onChange={(v) => styleApply("opacity", v / 100)}
+                                style={{ width: 72 }}
                               />
                             </div>
                             {!img?.isBackground && (
                               <div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    marginBottom: 5,
-                                  }}
-                                >
-                                  <SLabel>Corner Radius</SLabel>
-                                  <span
-                                    style={{
-                                      fontSize: 9,
-                                      color: "#e8ff47",
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {img?.borderRadius ?? 0}px
-                                  </span>
-                                </div>
-                                <input
-                                  type="range"
+                                <SLabel>Corner Radius</SLabel>
+                                <NumInput
+                                  value={img?.borderRadius ?? 0}
                                   min={0}
                                   max={
                                     img
                                       ? Math.round(
                                           Math.min(img.width, img.height) / 2,
                                         )
-                                      : 100
+                                      : 999
                                   }
-                                  value={img?.borderRadius ?? 0}
-                                  onChange={(e) =>
-                                    styleApply(
-                                      "borderRadius",
-                                      Number(e.target.value),
-                                    )
+                                  suffix="px"
+                                  onChange={(v) =>
+                                    styleApply("borderRadius", v)
                                   }
-                                  style={{
-                                    width: "100%",
-                                    height: "3px",
-                                    accentColor: "#e8ff47",
-                                  }}
+                                  style={{ width: 72 }}
                                 />
                               </div>
                             )}
@@ -2526,7 +2375,6 @@ export default function Editor({
                         );
                       })()}
 
-
                     {/* ── TEXT STYLES ─────────────────────────────────────── */}
                     {(allText ||
                       (!multiSelected && stylePrimary?.kind === "field")) &&
@@ -2534,129 +2382,450 @@ export default function Editor({
                         const f = stylePrimary as TextField | null;
                         return (
                           <>
-                            <div>
-                              <SLabel>Font</SLabel>
-                              <FontPicker
-                                value={f?.fontFamily ?? "Playfair Display"}
-                                onChange={(v) => styleApply("fontFamily", v)}
-                              />
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-end",
+                              }}
+                            >
+                              <div>
+                                <SLabel>Display As</SLabel>
+                                <div style={{ display: "flex", gap: 3 }}>
+                                  {(["text", "qr", "barcode"] as const).map(
+                                    (mode) => {
+                                      const active =
+                                        (f?.codeType ?? "text") === mode;
+                                      const icons: Record<
+                                        string,
+                                        React.ReactNode
+                                      > = {
+                                        text: <IconType size={12} />,
+                                        qr: <IconQrCode size={12} />,
+                                        barcode: <IconBarcode size={12} />,
+                                      };
+                                      return (
+                                        <button
+                                          key={mode}
+                                          title={
+                                            mode === "text"
+                                              ? "Text"
+                                              : mode === "qr"
+                                                ? "QR Code"
+                                                : "Barcode"
+                                          }
+                                          onClick={() => {
+                                            const ids = selectedIdsRef.current;
+                                            if (ids.size === 0) return;
+                                            setObjects((p) =>
+                                              p.map((o) => {
+                                                if (
+                                                  !ids.has(o.id) ||
+                                                  o.kind !== "field"
+                                                )
+                                                  return o;
+                                                const tf = o as TextField;
+                                                const prev =
+                                                  tf.codeType ?? "text";
+                                                if (prev === mode) return o;
+                                                let w = tf.width,
+                                                  h = tf.height;
+                                                if (mode === "qr") {
+                                                  const side = Math.max(w, h);
+                                                  w = side;
+                                                  h = side;
+                                                } else if (mode === "barcode") {
+                                                  w = Math.max(w, h * 2.5);
+                                                  h = Math.min(h, w * 0.4);
+                                                } else {
+                                                  // Auto-fit to text content
+                                                  const ci = currentRow
+                                                    ? rows.indexOf(currentRow)
+                                                    : -1;
+                                                  const ti =
+                                                    ci >= 0
+                                                      ? ci + tf.columnOffset
+                                                      : -1;
+                                                  const text =
+                                                    ti >= 0 && ti < rows.length
+                                                      ? (rows[ti][tf.column] ??
+                                                        "")
+                                                      : "";
+                                                  if (text) {
+                                                    const m =
+                                                      measureTextDimensions(
+                                                        text,
+                                                        tf.fontFamily,
+                                                        tf.fontSize,
+                                                        tf.bold,
+                                                        tf.italic,
+                                                      );
+                                                    w = m.width;
+                                                    h = m.height;
+                                                  } else {
+                                                    h = Math.round(
+                                                      tf.fontSize * 1.4 + 8,
+                                                    );
+                                                  }
+                                                }
+                                                return {
+                                                  ...tf,
+                                                  codeType: mode,
+                                                  width: w,
+                                                  height: h,
+                                                } as CanvasObject;
+                                              }),
+                                            );
+                                          }}
+                                          style={{
+                                            width: 32,
+                                            height: 28,
+                                            borderRadius: 6,
+                                            cursor: "pointer",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background: active
+                                              ? "rgba(232,255,71,0.12)"
+                                              : "rgba(255,255,255,0.04)",
+                                            border: `1px solid ${active ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                            color: active
+                                              ? "#e8ff47"
+                                              : "rgba(240,237,232,0.5)",
+                                          }}
+                                        >
+                                          {icons[mode]}
+                                        </button>
+                                      );
+                                    },
+                                  )}
+                                </div>
+                              </div>
+                              {(f?.codeType ?? "text") === "text" && (
+                                <div>
+                                  <SLabel>Text Fit</SLabel>
+                                  <div style={{ display: "flex", gap: 3 }}>
+                                    {(
+                                      [
+                                        [
+                                          "shrink",
+                                          "Auto Shrink",
+                                          <IconShrink size={12} />,
+                                        ],
+                                        [
+                                          "visible",
+                                          "Overflow Visible",
+                                          <IconExpand size={12} />,
+                                        ],
+                                      ] as [string, string, React.ReactNode][]
+                                    ).map(([mode, label, icon]) => {
+                                      const active =
+                                        (f?.textOverflow ?? "visible") === mode;
+                                      return (
+                                        <button
+                                          key={mode}
+                                          title={label}
+                                          onClick={() =>
+                                            styleApply("textOverflow", mode)
+                                          }
+                                          style={{
+                                            width: 28,
+                                            height: 28,
+                                            borderRadius: 6,
+                                            cursor: "pointer",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            background: active
+                                              ? "rgba(232,255,71,0.12)"
+                                              : "rgba(255,255,255,0.04)",
+                                            border: `1px solid ${active ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                            color: active
+                                              ? "#e8ff47"
+                                              : "rgba(240,237,232,0.5)",
+                                          }}
+                                        >
+                                          {icon}
+                                        </button>
+                                      );
+                                    })}
+                                    <button
+                                      title="Auto Fit to text content"
+                                      onClick={() => {
+                                        const ids = selectedIdsRef.current;
+                                        if (ids.size === 0) return;
+                                        setObjects((p) =>
+                                          p.map((o) => {
+                                            if (
+                                              !ids.has(o.id) ||
+                                              o.kind !== "field"
+                                            )
+                                              return o;
+                                            const tf = o as TextField;
+                                            const ci = currentRow
+                                              ? rows.indexOf(currentRow)
+                                              : -1;
+                                            const ti =
+                                              ci >= 0
+                                                ? ci + tf.columnOffset
+                                                : -1;
+                                            const text =
+                                              ti >= 0 && ti < rows.length
+                                                ? (rows[ti][tf.column] ?? "")
+                                                : "";
+                                            if (!text) return o;
+                                            const m = measureTextDimensions(
+                                              text,
+                                              tf.fontFamily,
+                                              tf.fontSize,
+                                              tf.bold,
+                                              tf.italic,
+                                            );
+                                            return {
+                                              ...tf,
+                                              width: m.width,
+                                              height: m.height,
+                                            } as CanvasObject;
+                                          }),
+                                        );
+                                      }}
+                                      style={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: 6,
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        background: "rgba(255,255,255,0.04)",
+                                        border:
+                                          "1px solid rgba(255,255,255,0.08)",
+                                        color: "rgba(240,237,232,0.5)",
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.background =
+                                          "rgba(232,255,71,0.12)";
+                                        e.currentTarget.style.borderColor =
+                                          "rgba(232,255,71,0.3)";
+                                        e.currentTarget.style.color = "#e8ff47";
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.background =
+                                          "rgba(255,255,255,0.04)";
+                                        e.currentTarget.style.borderColor =
+                                          "rgba(255,255,255,0.08)";
+                                        e.currentTarget.style.color =
+                                          "rgba(240,237,232,0.5)";
+                                      }}
+                                    >
+                                      <IconFitScreen size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
+                            {(f?.codeType ?? "text") === "text" && (
+                              <>
+                                <div>
+                                  <SLabel>Font</SLabel>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: 4,
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <FontPicker
+                                        value={
+                                          f?.fontFamily ?? "Playfair Display"
+                                        }
+                                        onChange={(v) =>
+                                          styleApply("fontFamily", v)
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div style={{ display: "flex", gap: 3 }}>
+                                    {(
+                                      [
+                                        "left",
+                                        "center",
+                                        "right",
+                                        "justify",
+                                      ] as const
+                                    ).map((align) => (
+                                      <button
+                                        key={align}
+                                        onClick={() =>
+                                          styleApply("textAlign", align)
+                                        }
+                                        style={{
+                                          flex: 1,
+                                          padding: "5px 2px",
+                                          borderRadius: 6,
+                                          cursor: "pointer",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          background:
+                                            f?.textAlign === align
+                                              ? "rgba(232,255,71,0.15)"
+                                              : "rgba(255,255,255,0.04)",
+                                          border: `1px solid ${f?.textAlign === align ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
+                                        }}
+                                      >
+                                        <svg
+                                          width="11"
+                                          height="9"
+                                          viewBox="0 0 12 10"
+                                          fill={
+                                            f?.textAlign === align
+                                              ? "#e8ff47"
+                                              : "rgba(240,237,232,0.4)"
+                                          }
+                                        >
+                                          <rect
+                                            x="0"
+                                            y="0"
+                                            width="12"
+                                            height="1.5"
+                                            rx=".75"
+                                          />
+                                          <rect
+                                            x={
+                                              align === "center"
+                                                ? 2
+                                                : align === "right"
+                                                  ? 4
+                                                  : 0
+                                            }
+                                            y="3.5"
+                                            width={align === "justify" ? 12 : 8}
+                                            height="1.5"
+                                            rx=".75"
+                                          />
+                                          <rect
+                                            x="0"
+                                            y="7"
+                                            width="12"
+                                            height="1.5"
+                                            rx=".75"
+                                          />
+                                        </svg>
+                                      </button>
+                                    ))}
+                                    <div
+                                      style={{
+                                        width: 1,
+                                        background: "rgba(255,255,255,0.06)",
+                                        margin: "0 1px",
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() =>
+                                        styleApply("italic", !f?.italic)
+                                      }
+                                      title="Italic"
+                                      style={{
+                                        width: 28,
+                                        padding: "5px 0",
+                                        borderRadius: 6,
+                                        fontSize: 11,
+                                        fontStyle: "italic",
+                                        fontWeight: 600,
+                                        cursor: "pointer",
+                                        flexShrink: 0,
+                                        background: f?.italic
+                                          ? "rgba(232,255,71,0.12)"
+                                          : "rgba(255,255,255,0.04)",
+                                        border: `1px solid ${f?.italic ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                        color: f?.italic
+                                          ? "#e8ff47"
+                                          : "rgba(240,237,232,0.5)",
+                                      }}
+                                    >
+                                      I
+                                    </button>
+                                  </div>
+                                </div>
+                                <div>
+                                  <SLabel>Weight</SLabel>
+                                  <div className="flex gap-2 items-center">
+                                    <Select
+                                      value={String(
+                                        f?.fontWeight ?? (f?.bold ? 700 : 400),
+                                      )}
+                                      onValueChange={(v) => {
+                                        const w = Number(v);
+                                        styleApply("fontWeight", w);
+                                        styleApply("bold", w >= 700);
+                                      }}
+                                    >
+                                      <SelectTrigger
+                                        size="sm"
+                                        className="w-full h-7 text-[10px] font-mono"
+                                      >
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent className="dark">
+                                        {[
+                                          100, 200, 300, 400, 500, 600, 700,
+                                          800, 900,
+                                        ].map((w) => {
+                                          const labels: Record<number, string> =
+                                            {
+                                              100: "Thin",
+                                              200: "Extra Light",
+                                              300: "Light",
+                                              400: "Regular",
+                                              500: "Medium",
+                                              600: "Semi Bold",
+                                              700: "Bold",
+                                              800: "Extra Bold",
+                                              900: "Black",
+                                            };
+                                          return (
+                                            <SelectItem
+                                              key={w}
+                                              value={String(w)}
+                                              className="text-[10px] font-mono"
+                                            >
+                                              {w} — {labels[w]}
+                                            </SelectItem>
+                                          );
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                    <NumInput
+                                      value={f?.fontSize ?? 22}
+                                      min={4}
+                                      max={999}
+                                      suffix="px"
+                                      onChange={(v) =>
+                                        styleApplyWithAutoFit("fontSize", v)
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </>
+                            )}
                             <div>
+                              <SLabel>Color</SLabel>
                               <div
                                 style={{
                                   display: "flex",
-                                  justifyContent: "space-between",
+                                  gap: 4,
                                   alignItems: "center",
-                                  marginBottom: 6,
                                 }}
                               >
-                                <SLabel>Font Size</SLabel>
-                                <span
-                                  style={{
-                                    fontSize: 9,
-                                    color: "#e8ff47",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {f?.fontSize ?? 22}px
-                                </span>
-                              </div>
-                              <input
-                                type="range"
-                                min={6}
-                                max={120}
-                                value={f?.fontSize ?? 22}
-                                onChange={(e) =>
-                                  styleApply("fontSize", Number(e.target.value))
-                                }
-                                style={{
-                                  width: "100%",
-                                  height: "3px",
-                                  accentColor: "#e8ff47",
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <SLabel>Alignment</SLabel>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                {(
-                                  [
-                                    "left",
-                                    "center",
-                                    "right",
-                                    "justify",
-                                  ] as const
-                                ).map((align) => (
-                                  <button
-                                    key={align}
-                                    onClick={() =>
-                                      styleApply("textAlign", align)
-                                    }
-                                    style={{
-                                      flex: 1,
-                                      padding: "7px 2px",
-                                      borderRadius: 6,
-                                      cursor: "pointer",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      background:
-                                        f?.textAlign === align
-                                          ? "rgba(232,255,71,0.15)"
-                                          : "rgba(255,255,255,0.04)",
-                                      border: `1px solid ${f?.textAlign === align ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
-                                    }}
-                                  >
-                                    <svg
-                                      width="12"
-                                      height="10"
-                                      viewBox="0 0 12 10"
-                                      fill={
-                                        f?.textAlign === align
-                                          ? "#e8ff47"
-                                          : "rgba(240,237,232,0.4)"
-                                      }
-                                    >
-                                      <rect
-                                        x="0"
-                                        y="0"
-                                        width="12"
-                                        height="1.5"
-                                        rx=".75"
-                                      />
-                                      <rect
-                                        x={
-                                          align === "center"
-                                            ? 2
-                                            : align === "right"
-                                              ? 4
-                                              : 0
-                                        }
-                                        y="3.5"
-                                        width={align === "justify" ? 12 : 8}
-                                        height="1.5"
-                                        rx=".75"
-                                      />
-                                      <rect
-                                        x="0"
-                                        y="7"
-                                        width="12"
-                                        height="1.5"
-                                        rx=".75"
-                                      />
-                                    </svg>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div>
-                              <SLabel>Color</SLabel>
-                              <div style={{ display: "flex", gap: 6 }}>
                                 <div
                                   style={{
                                     position: "relative",
-                                    width: 28,
-                                    height: 28,
+                                    width: 26,
+                                    height: 26,
                                     borderRadius: 6,
                                     overflow: "hidden",
                                     border: "1px solid rgba(255,255,255,0.12)",
@@ -2685,100 +2854,50 @@ export default function Editor({
                                     styleApply("color", e.target.value)
                                   }
                                   style={{
-                                    flex: 1,
-                                    padding: "5px 7px",
+                                    // flex: 1,
+                                    width: 72,
+                                    // minWidth: 0,
+                                    padding: "5px 6px",
                                     borderRadius: 6,
                                     background: "rgba(255,255,255,0.05)",
                                     border: "1px solid rgba(255,255,255,0.1)",
                                     color: "#f0ede8",
-                                    fontSize: 11,
+                                    fontSize: 10,
                                     fontFamily: "monospace",
                                     outline: "none",
                                   }}
                                 />
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 4,
-                                  marginTop: 7,
-                                }}
-                              >
-                                {TEXT_COLORS.map((c) => (
+                                {"EyeDropper" in window && (
                                   <button
-                                    key={c}
-                                    onClick={() => styleApply("color", c)}
-                                    style={{
-                                      width: 20,
-                                      height: 20,
-                                      borderRadius: 4,
-                                      background: c,
-                                      border: "none",
-                                      cursor: "pointer",
-                                      outline:
-                                        f?.color === c
-                                          ? "2px solid #e8ff47"
-                                          : "none",
-                                      outlineOffset: 1,
+                                    title="Pick color from screen"
+                                    onClick={async () => {
+                                      try {
+                                        const ed = new (
+                                          window as any
+                                        ).EyeDropper();
+                                        const result = await ed.open();
+                                        if (result?.sRGBHex)
+                                          styleApply("color", result.sRGBHex);
+                                      } catch {}
                                     }}
-                                    onMouseEnter={(e) =>
-                                      (e.currentTarget.style.transform =
-                                        "scale(1.2)")
-                                    }
-                                    onMouseLeave={(e) =>
-                                      (e.currentTarget.style.transform =
-                                        "scale(1)")
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                            <div>
-                              <SLabel>Style</SLabel>
-                              <div style={{ display: "flex", gap: 5 }}>
-                                <button
-                                  onClick={() => styleApply("bold", !f?.bold)}
-                                  style={{
-                                    flex: 1,
-                                    padding: "6px 0",
-                                    borderRadius: 6,
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    cursor: "pointer",
-                                    background: f?.bold
-                                      ? "rgba(232,255,71,0.12)"
-                                      : "rgba(255,255,255,0.04)",
-                                    border: `1px solid ${f?.bold ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                                    color: f?.bold
-                                      ? "#e8ff47"
-                                      : "rgba(240,237,232,0.5)",
-                                  }}
-                                >
-                                  B
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    styleApply("italic", !f?.italic)
-                                  }
-                                  style={{
-                                    flex: 1,
-                                    padding: "6px 0",
-                                    borderRadius: 6,
-                                    fontSize: 12,
-                                    fontStyle: "italic",
-                                    fontWeight: 600,
-                                    cursor: "pointer",
-                                    background: f?.italic
-                                      ? "rgba(232,255,71,0.12)"
-                                      : "rgba(255,255,255,0.04)",
-                                    border: `1px solid ${f?.italic ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                                    color: f?.italic
-                                      ? "#e8ff47"
-                                      : "rgba(240,237,232,0.5)",
-                                  }}
-                                >
-                                  I
-                                </button>
+                                    style={{
+                                      width: 26,
+                                      height: 26,
+                                      borderRadius: 6,
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      background: "rgba(255,255,255,0.04)",
+                                      border:
+                                        "1px solid rgba(255,255,255,0.08)",
+                                      color: "rgba(240,237,232,0.5)",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <IconEyedropper size={12} />
+                                  </button>
+                                )}
                               </div>
                             </div>
                             <ShadowPanel
@@ -2792,14 +2911,20 @@ export default function Editor({
 
                     {/* Delete */}
                     <button
+                      title={
+                        multiSelected
+                          ? `Remove ${selectedIds.size} objects`
+                          : "Remove object"
+                      }
                       onClick={deleteSelected}
                       style={{
-                        width: "100%",
-                        padding: "7px 0",
-                        borderRadius: 7,
-                        fontSize: 11,
-                        fontWeight: 600,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
                         cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         background: "rgba(239,68,68,0.07)",
                         border: "1px solid rgba(239,68,68,0.18)",
                         color: "rgba(248,113,113,0.85)",
@@ -2813,69 +2938,13 @@ export default function Editor({
                           "rgba(239,68,68,0.07)")
                       }
                     >
-                      {multiSelected
-                        ? `Remove ${selectedIds.size} objects`
-                        : "Remove object"}
+                      <IconTrash size={12} />
                     </button>
                   </>
                 )}
               </div>
             )}
           </div>
-
-          {/* Row data preview */}
-          {currentRow && (
-            <div
-              style={{
-                borderTop: "1px solid rgba(255,255,255,0.06)",
-                padding: 12,
-                flexShrink: 0,
-                maxHeight: 200,
-                overflowY: "auto",
-              }}
-            >
-              <p
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  color: "rgba(240,237,232,0.28)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  marginBottom: 7,
-                }}
-              >
-                Row {pageIndex + 1} of {rows.length}
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {Object.entries(currentRow).map(([k, v]) => (
-                  <div key={k}>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        color: "rgba(240,237,232,0.22)",
-                        fontFamily: "monospace",
-                        display: "block",
-                      }}
-                    >
-                      {k}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        color: "rgba(240,237,232,0.7)",
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {v}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </aside>
       </div>
     </div>

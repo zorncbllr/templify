@@ -1,6 +1,6 @@
 import type { CanvasObject, CanvasSize, RowData, DataImageMap, ImageObject, TextField, ImpositionResult } from "../types";
 import { resolveDataImageSrc } from "./data";
-import { shrinkFontSize, loadScript, downloadBlob } from "./rendering";
+import { shrinkFontSize, loadScript, downloadBlob, generateCodeCanvas } from "./rendering";
 
 /** Load an image from a src URL and return it as an HTMLImageElement. */
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -95,6 +95,15 @@ export async function renderSingleCard(
       ctx.save();
       ctx.globalAlpha = imgObj.opacity;
 
+      // Rotation
+      if (!imgObj.isBackground && imgObj.rotation) {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((imgObj.rotation * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+
       // Drop shadow
       if (imgObj.shadow?.enabled) {
         ctx.shadowOffsetX = imgObj.shadow.x;
@@ -138,24 +147,49 @@ export async function renderSingleCard(
         ti >= 0 && ti < rows.length ? (rows[ti][f.column] ?? "") : "";
       if (!text) continue;
 
-      const fs = shrinkFontSize(
-        text,
-        f.width,
-        f.height,
-        f.fontFamily,
-        f.fontSize,
-        f.bold,
-        f.italic,
-      );
+      const codeType = f.codeType ?? "text";
 
       ctx.save();
-      // Clip to text field bounds
-      ctx.beginPath();
-      ctx.rect(f.x, f.y, f.width, f.height);
-      ctx.clip();
+
+      // Rotation
+      if (f.rotation) {
+        const cx = f.x + f.width / 2;
+        const cy = f.y + f.height / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate((f.rotation * Math.PI) / 180);
+        ctx.translate(-cx, -cy);
+      }
+
+      if (codeType === "qr" || codeType === "barcode") {
+        const codeCanvas = await generateCodeCanvas(text, codeType, f.width, f.height, f.color);
+        if (codeCanvas) {
+          ctx.drawImage(codeCanvas, f.x, f.y, f.width, f.height);
+        }
+        ctx.restore();
+        continue;
+      }
+
+      const fs = f.textOverflow === "shrink"
+        ? shrinkFontSize(
+            text,
+            f.width,
+            f.height,
+            f.fontFamily,
+            f.fontSize,
+            f.bold,
+            f.italic,
+          )
+        : f.fontSize;
+
+      // Clip to text field bounds (only when shrinking)
+      if (f.textOverflow === "shrink") {
+        ctx.beginPath();
+        ctx.rect(f.x, f.y, f.width, f.height);
+        ctx.clip();
+      }
 
       const fontStyle = f.italic ? "italic" : "normal";
-      const fontWeight = f.bold ? "bold" : "normal";
+      const fontWeight = f.fontWeight ?? (f.bold ? 700 : 400);
       ctx.font = `${fontStyle} ${fontWeight} ${fs}px '${f.fontFamily}', serif`;
       ctx.fillStyle = f.color;
 

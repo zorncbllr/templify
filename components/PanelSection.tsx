@@ -9,21 +9,9 @@ function PanelSection({
 }) {
   return (
     <div
-      style={{
-        padding: "9px 10px",
-        borderBottom: noBorder ? "none" : "1px solid rgba(255,255,255,0.06)",
-      }}
+      className={`px-[10px] py-[9px] ${noBorder ? "" : "border-b border-white/[0.06]"}`}
     >
-      <p
-        style={{
-          fontSize: 8,
-          fontWeight: 700,
-          color: "rgba(240,237,232,0.28)",
-          textTransform: "uppercase" as const,
-          letterSpacing: "0.08em",
-          marginBottom: 7,
-        }}
-      >
+      <p className="text-[8px] font-bold text-app-text/[0.28] uppercase tracking-[0.08em] mb-[7px]">
         {label}
       </p>
       {children}

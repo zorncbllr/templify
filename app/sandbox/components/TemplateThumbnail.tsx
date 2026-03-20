@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type {
   CanvasObject,
   CanvasSize,
@@ -8,7 +8,101 @@ import type {
   TextField,
 } from "../types/index";
 import { resolveDataImageSrc } from "../utils/data";
-import { shrinkFontSize, textShadowCSS, shadowCSS } from "../utils/rendering";
+import { shrinkFontSize, textShadowCSS, shadowCSS, generateCodeDataURL } from "../utils/rendering";
+
+function ThumbnailTextField({
+  f,
+  text,
+}: {
+  f: TextField;
+  text: string;
+}) {
+  const codeType = f.codeType ?? "text";
+
+  const [codeDataUrl, setCodeDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (codeType === "text") { setCodeDataUrl(null); return; }
+    if (!text) { setCodeDataUrl(null); return; }
+    generateCodeDataURL(text, codeType, f.width, f.height, f.color)
+      .then(setCodeDataUrl)
+      .catch(() => setCodeDataUrl(null));
+  }, [text, codeType, f.width, f.height, f.color]);
+
+  const fs = codeType === "text" && f.textOverflow === "shrink"
+    ? shrinkFontSize(text, f.width, f.height, f.fontFamily, f.fontSize, f.bold, f.italic)
+    : f.fontSize;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: f.x,
+        top: f.y,
+        width: f.width,
+        height: f.height,
+        overflow: codeType !== "text" ? "hidden" : "visible",
+        transform: f.rotation ? `rotate(${f.rotation}deg)` : undefined,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: codeType !== "text" ? "center"
+          : f.textAlign === "right" ? "flex-end"
+          : f.textAlign === "center" ? "center"
+          : "flex-start",
+        padding: codeType === "text" ? "0 3px" : 0,
+        boxSizing: "border-box",
+      }}
+    >
+      {codeType !== "text" ? (
+        codeDataUrl ? (
+          <img
+            src={codeDataUrl}
+            alt={codeType}
+            draggable={false}
+            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px dashed rgba(232,255,71,0.25)",
+              borderRadius: 4,
+              boxSizing: "border-box",
+            }}
+          >
+            <span style={{ fontSize: 6, color: "rgba(232,255,71,0.5)", fontWeight: 700, textTransform: "uppercase" }}>
+              {codeType === "qr" ? "QR" : "BC"}
+            </span>
+          </div>
+        )
+      ) : (
+        <span
+          style={{
+            display: "inline",
+            lineHeight: 1.2,
+            whiteSpace: "nowrap",
+            overflow: "visible",
+            fontFamily: `'${f.fontFamily}', serif`,
+            fontSize: fs,
+            color: f.color,
+            fontWeight: f.bold ? "bold" : "normal",
+            fontStyle: f.italic ? "italic" : "normal",
+            textAlign: f.textAlign,
+            textShadow:
+              f.shadow.enabled || (f.shadow.thickness && f.shadow.thickness > 0)
+                ? textShadowCSS(f.shadow)
+                : "none",
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function TemplateThumbnail({
   objects,
@@ -122,6 +216,7 @@ export function TemplateThumbnail({
                   height: obj.height,
                   overflow: "hidden",
                   borderRadius: imgObj.borderRadius ?? 0,
+                  transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
                   filter: imgObj.shadow?.enabled
                     ? `drop-shadow(${shadowCSS(imgObj.shadow)})`
                     : undefined,
@@ -161,60 +256,8 @@ export function TemplateThumbnail({
               ? (rows[ti][f.column] ?? "")
               : f.column;
 
-          const fs = shrinkFontSize(
-            text,
-            f.width,
-            f.height,
-            f.fontFamily,
-            f.fontSize,
-            f.bold,
-            f.italic,
-          );
-
           return (
-            <div
-              key={obj.id}
-              style={{
-                position: "absolute",
-                left: obj.x,
-                top: obj.y,
-                width: obj.width,
-                height: obj.height,
-                overflow: "visible",
-                display: "flex",
-                alignItems: "center",
-                justifyContent:
-                  f.textAlign === "right"
-                    ? "flex-end"
-                    : f.textAlign === "center"
-                      ? "center"
-                      : "flex-start",
-                padding: "0 3px",
-                boxSizing: "border-box",
-              }}
-            >
-              <span
-                style={{
-                  display: "inline",
-                  lineHeight: 1.2,
-                  whiteSpace: "nowrap",
-                  overflow: "visible",
-                  fontFamily: `'${f.fontFamily}', serif`,
-                  fontSize: fs,
-                  color: f.color,
-                  fontWeight: f.bold ? "bold" : "normal",
-                  fontStyle: f.italic ? "italic" : "normal",
-                  textAlign: f.textAlign,
-                  textShadow:
-                    f.shadow.enabled ||
-                    (f.shadow.thickness && f.shadow.thickness > 0)
-                      ? textShadowCSS(f.shadow)
-                      : "none",
-                }}
-              >
-                {text}
-              </span>
-            </div>
+            <ThumbnailTextField key={obj.id} f={f} text={text} />
           );
         })}
       </div>

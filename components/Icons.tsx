@@ -150,6 +150,9 @@ export const IconRuler = multiPath([
 // Smart shrink - minimize arrows
 export const IconShrink = svg("M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7");
 
+// Text overflow visible - arrows expanding outward
+export const IconExpand = svg("M14 10h6V4M4 20v-6h6M20 4l-7 7M4 20l7-7");
+
 // Bar chart / batch layout
 export const IconBarChart = multiPath([
   { d: "M18 20V10", stroke: "current", fill: "none" },
@@ -285,6 +288,14 @@ export const IconRotate = svg("M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 
 export const IconEyedropper = multiPath([
   { d: "M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-3.54 3.54 1.06 1.06-4.6 4.6a2 2 0 00-.59 1.42V16h2.09a2 2 0 001.42-.59l4.6-4.6 1.06 1.06 3.54-3.54a1 1 0 000-1.41z" },
   { d: "M6 20l-3 3" },
+]);
+
+export const IconQrCode = multiPath([
+  { d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14v3h-3M14 20h3M20 20h1v1h-1z" },
+]);
+
+export const IconBarcode = multiPath([
+  { d: "M2 4h2v16H2zM6 4h1v16H6zM9 4h2v16H9zM13 4h1v16h-1zM16 4h2v16h-2zM20 4h2v16h-2z" },
 ]);
 
 // ─── Brand / Auth Icons ─────────────────────────────────────────────────────

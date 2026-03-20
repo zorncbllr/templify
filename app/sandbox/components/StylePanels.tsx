@@ -1,4 +1,73 @@
+import { useState, useEffect } from "react";
 import type { Shadow, Border } from "../types/index";
+
+// ─── NumInput ─────────────────────────────────────────────────────────────────
+// A number input that lets you freely type (including clearing) and only commits
+// the value on Enter, blur, or spinner click.
+
+export function NumInput({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  suffix,
+  style: extraStyle,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+  style?: React.CSSProperties;
+}) {
+  const [str, setStr] = useState(String(value));
+  useEffect(() => {
+    setStr(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const v =
+      step != null && step % 1 !== 0 ? parseFloat(str) : parseInt(str, 10);
+    if (isNaN(v)) {
+      setStr(String(value));
+      return;
+    }
+    const clamped = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, v));
+    onChange(clamped);
+    setStr(String(clamped));
+  };
+
+  return (
+    <div className="relative flex justify-between w-30" style={extraStyle}>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={str}
+        onChange={(e) => setStr(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        className="w-full rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[10px] font-mono outline-none box-border [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        style={{
+          padding: suffix ? "8px 18px 8px 8px" : "8px 8px",
+        }}
+      />
+      {suffix && (
+        <span className="absolute text-xs text-[rgba(240,237,232,0.25)] pointer-events-none right-2 top-1/2 transform -translate-y-1/2">
+          {suffix}
+        </span>
+      )}
+    </div>
+  );
+}
 
 // ─── ToggleSwitch ─────────────────────────────────────────────────────────────
 
@@ -12,28 +81,17 @@ export function ToggleSwitch({
   return (
     <button
       onClick={() => onChange(!value)}
+      className="w-[30px] h-4 rounded-lg border-none cursor-pointer relative shrink-0 transition-[background] duration-200"
       style={{
-        width: 30,
-        height: 16,
-        borderRadius: 8,
         background: value ? "#e8ff47" : "rgba(255,255,255,0.1)",
-        border: "none",
-        cursor: "pointer",
-        position: "relative",
-        transition: "background 0.2s",
-        flexShrink: 0,
       }}
     >
       <span
+        className="absolute w-3 h-3 rounded-full transition-[left] duration-150"
         style={{
-          position: "absolute",
           top: 2,
           left: value ? 14 : 2,
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
           background: value ? "#0a0a10" : "white",
-          transition: "left 0.15s",
           boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
         }}
       />
@@ -56,189 +114,71 @@ export function ShadowPanel({
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-          }}
-        >
-          Shadow
-        </span>
+      <div className="flex items-center justify-start gap-2 mb-1.5">
         <ToggleSwitch
           value={shadow.enabled}
           onChange={(v) => set("enabled", v)}
         />
+        <span className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]">
+          Shadow
+        </span>
       </div>
 
       {shadow.enabled && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 7,
-            padding: "9px",
-            borderRadius: 7,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            minWidth: 0,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ display: "flex", gap: 5 }}>
-            <div
-              style={{
-                position: "relative",
-                width: 26,
-                height: 26,
-                borderRadius: 5,
-                overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.1)",
-                flexShrink: 0,
-              }}
-            >
+        <div className="flex flex-col gap-[7px] p-[9px] rounded-md bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] min-w-0 overflow-hidden">
+          <div className="flex gap-[5px]">
+            <div className="relative w-[26px] h-[26px] rounded-md overflow-hidden border border-[rgba(255,255,255,0.1)] shrink-0">
               <input
                 type="color"
                 value={shadow.color.startsWith("r") ? "#000000" : shadow.color}
                 onChange={(e) => set("color", e.target.value)}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  transform: "scale(1.5)",
-                }}
+                className="absolute inset-0 w-full h-full scale-150"
               />
             </div>
             <input
               value={shadow.color}
               onChange={(e) => set("color", e.target.value)}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                padding: "4px 7px",
-                borderRadius: 5,
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "#f0ede8",
-                fontSize: 10,
-                fontFamily: "monospace",
-                outline: "none",
-              }}
+              className="flex-1 min-w-0 px-[7px] py-1 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[10px] font-mono outline-none"
             />
           </div>
 
-          {(
-            [
-              ["X", "x", -20, 20],
-              ["Y", "y", -20, 20],
-              ["Blur", "blur", 0, 40],
-            ] as [string, keyof Shadow, number, number][]
-          ).map(([label, k, min, max]) => (
-            <div
-              key={k as string}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                minWidth: 0,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  width: 20,
-                  flexShrink: 0,
-                }}
-              >
-                {label}
-              </span>
-              <input
-                type="range"
-                min={min}
-                max={max}
-                value={shadow[k] as number}
-                onChange={(e) => set(k, Number(e.target.value))}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  height: "3px",
-                  accentColor: "#e8ff47",
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#e8ff47",
-                  width: 28,
-                  textAlign: "right",
-                  flexShrink: 0,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {shadow[k]}px
-              </span>
-            </div>
-          ))}
+          <div className="flex gap-1">
+            {(
+              [
+                ["X", "x", -50, 50],
+                ["Y", "y", -50, 50],
+                ["Blur", "blur", 0, 50],
+              ] as [string, keyof Shadow, number, number][]
+            ).map(([label, k, min, max]) => (
+              <div key={k as string} className="flex-1 min-w-0">
+                <span className="text-[8px] text-[rgba(240,237,232,0.3)] block mb-0.5">
+                  {label}
+                </span>
+                <NumInput
+                  value={shadow[k] as number}
+                  min={min}
+                  max={max}
+                  suffix="px"
+                  onChange={(v) => set(k, v)}
+                />
+              </div>
+            ))}
+          </div>
 
           {isText && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                minWidth: 0,
-                paddingTop: 4,
-                borderTop: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.3)",
-                  width: 20,
-                  flexShrink: 0,
-                }}
-              >
-                Wt
+            <div className="pt-1 border-t border-[rgba(255,255,255,0.06)]">
+              <span className="text-[8px] text-[rgba(240,237,232,0.3)] block mb-0.5">
+                Thickness
               </span>
-              <input
-                type="range"
+              <NumInput
+                value={shadow.thickness ?? 0}
                 min={0}
                 max={8}
                 step={0.5}
-                value={shadow.thickness ?? 0}
-                onChange={(e) => set("thickness", Number(e.target.value))}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  height: "3px",
-                  accentColor: "#e8ff47",
-                }}
+                suffix="px"
+                onChange={(v) => set("thickness", v)}
+                style={{ width: 72 }}
               />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#e8ff47",
-                  width: 28,
-                  textAlign: "right",
-                  flexShrink: 0,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {shadow.thickness ?? 0}px
-              </span>
             </div>
           )}
         </div>
@@ -267,161 +207,62 @@ export function BorderPanel({
   ];
 
   return (
-    <div style={{ minWidth: 0 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.08em",
-          }}
-        >
-          {label}
-        </span>
+    <div className="min-w-0">
+      <div className="flex items-center justify-start gap-2 mb-1.5">
         <ToggleSwitch
           value={border.enabled}
           onChange={(v) => set("enabled", v)}
         />
+        <span className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]">
+          {label}
+        </span>
       </div>
 
       {border.enabled && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 7,
-            padding: "8px",
-            borderRadius: 7,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            minWidth: 0,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ display: "flex", gap: 6, minWidth: 0 }}>
-            <div
-              style={{
-                position: "relative",
-                width: 24,
-                height: 24,
-                borderRadius: 5,
-                overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.1)",
-                flexShrink: 0,
-              }}
-            >
+        <div className="flex flex-col gap-[7px] p-2 rounded-md bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] min-w-0 overflow-hidden">
+          <div className="flex gap-1.5 min-w-0">
+            <div className="relative w-6 h-6 rounded-md overflow-hidden border border-[rgba(255,255,255,0.1)] shrink-0">
               <input
                 type="color"
                 value={border.color}
                 onChange={(e) => set("color", e.target.value)}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  transform: "scale(1.5)",
-                }}
+                className="absolute inset-0 w-full h-full scale-150"
               />
             </div>
             <input
               value={border.color}
               onChange={(e) => set("color", e.target.value)}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                padding: "3px 6px",
-                borderRadius: 5,
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "#f0ede8",
-                fontSize: 10,
-                fontFamily: "monospace",
-                outline: "none",
-              }}
+              className="flex-1 min-w-0 px-1.5 py-[3px] rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[10px] font-mono outline-none"
             />
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              minWidth: 0,
-            }}
-          >
-            <span
-              style={{
-                fontSize: 9,
-                color: "rgba(240,237,232,0.3)",
-                width: 24,
-                flexShrink: 0,
-              }}
-            >
-              W
+          <div>
+            <span className="text-[8px] text-[rgba(240,237,232,0.3)] block mb-0.5">
+              Width
             </span>
-            <input
-              type="range"
+            <NumInput
+              value={border.width}
               min={1}
               max={20}
-              value={border.width}
-              onChange={(e) => set("width", Number(e.target.value))}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                height: "3px",
-                accentColor: "#e8ff47",
-              }}
+              suffix="px"
+              onChange={(v) => set("width", v)}
+              style={{ width: 72 }}
             />
-            <span
-              style={{
-                fontSize: 9,
-                color: "#e8ff47",
-                width: 26,
-                textAlign: "right",
-                flexShrink: 0,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {border.width}px
-            </span>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 3,
-              minWidth: 0,
-            }}
-          >
+          <div className="grid grid-cols-2 gap-[3px] min-w-0">
             {BORDER_STYLES.map((s) => (
               <button
                 key={s}
                 onClick={() => set("style", s)}
+                className="px-0 py-[3px] rounded-md text-[8px] font-bold cursor-pointer border-none uppercase tracking-[0.04em]"
                 style={{
-                  padding: "3px 0",
-                  borderRadius: 4,
-                  fontSize: 8,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  border: "none",
                   background:
                     border.style === s
                       ? "rgba(232,255,71,0.15)"
                       : "rgba(255,255,255,0.05)",
                   color:
                     border.style === s ? "#e8ff47" : "rgba(240,237,232,0.4)",
-                  textTransform: "uppercase" as const,
-                  letterSpacing: "0.04em",
                 }}
               >
                 {s}
@@ -430,20 +271,12 @@ export function BorderPanel({
           </div>
 
           <div
+            className="h-6 rounded-md bg-[rgba(255,255,255,0.04)] box-border flex items-center justify-center min-w-0 overflow-hidden"
             style={{
-              height: 24,
-              borderRadius: 4,
-              background: "rgba(255,255,255,0.04)",
               border: `${border.width}px ${border.style} ${border.color}`,
-              boxSizing: "border-box",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: 0,
-              overflow: "hidden",
             }}
           >
-            <span style={{ fontSize: 8, color: "rgba(240,237,232,0.25)" }}>
+            <span className="text-[8px] text-[rgba(240,237,232,0.25)]">
               preview
             </span>
           </div>

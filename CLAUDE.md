@@ -56,6 +56,14 @@ Key patterns:
 - Export uses Canvas 2D API (not html2canvas) for cross-origin safety
 - `TemplateThumbnail` renders at full canvas size then CSS `transform: scale()` for pixel-accurate previews
 
+## Package Manager
+
+Always use **bun** instead of npm, yarn, or pnpm for all commands:
+- `bun install` (not npm install)
+- `bun run dev` (not npm run dev)
+- `bun add <pkg>` (not npm install <pkg>)
+- `bun remove <pkg>` (not npm uninstall <pkg>)
+
 ## No Emojis
 
 Never use emoji characters anywhere in the codebase — not in JSX, string literals, comments, labels, or button text. Always use SVG icons from `@/components/Icons` (mapped to `components/Icons.tsx`). If a needed icon doesn't exist, add it to that file following the existing `svg()` / `multiPath()` pattern.

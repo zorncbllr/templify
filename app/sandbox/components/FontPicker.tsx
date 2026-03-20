@@ -1,5 +1,20 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
 import { GOOGLE_FONTS, FONT_CATS } from "../types/constants";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 import { IconChevronDown } from "@/components/Icons";
 
 export function FontPicker({
@@ -10,28 +25,7 @@ export function FontPicker({
   onChange: (f: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
-  const ref = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(
-    () =>
-      GOOGLE_FONTS.filter(
-        (f) =>
-          (cat === "All" || f.category === cat) &&
-          f.name.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [cat, search],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [open]);
 
   const loadFont = useCallback((name: string) => {
     const id = `gf-${name.replace(/\s+/g, "-")}`;
@@ -39,60 +33,65 @@ export function FontPicker({
       const l = document.createElement("link");
       l.id = id;
       l.rel = "stylesheet";
-      l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:wght@400;700&display=swap`;
+      l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap`;
       document.head.appendChild(l);
     }
   }, []);
 
-  useEffect(() => { loadFont(value); }, [value, loadFont]);
+  useEffect(() => {
+    loadFont(value);
+  }, [value, loadFont]);
+
+  const filtered =
+    cat === "All"
+      ? GOOGLE_FONTS
+      : GOOGLE_FONTS.filter((f) => f.category === cat);
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        onClick={() => setOpen((p) => !p)}
-        style={{
-          width: "100%", padding: "7px 10px", borderRadius: 7,
-          background: "rgba(255,255,255,0.05)",
-          border: `1px solid ${open ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.1)"}`,
-          color: "#f0ede8", fontSize: 13, fontFamily: `'${value}',serif`,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          cursor: "pointer", outline: "none",
-        }}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="w-full px-2 rounded-md bg-[rgba(255,255,255,0.05)] text-[#f0ede8] text-xs py-2 flex items-center justify-between cursor-pointer outline-none"
+          style={{
+            border: `1px solid ${open ? "rgba(232,255,71,0.4)" : "rgba(255,255,255,0.1)"}`,
+            fontFamily: `'${value}',serif`,
+          }}
+        >
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+            {value}
+          </span>
+          <IconChevronDown
+            style={{ opacity: 0.4, flexShrink: 0, marginLeft: 4 }}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[220px] p-0 dark"
+        align="start"
+        sideOffset={4}
       >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
-        <IconChevronDown size={10} style={{ opacity: 0.4, flexShrink: 0, marginLeft: 4 }} />
-      </button>
+        <Command
+          filter={(value, search) => {
+            if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+            return 0;
+          }}
+        >
+          <CommandInput
+            placeholder="Search fonts..."
+            className="h-8 text-[11px]"
+          />
 
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-          background: "#1a1a26", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 10, zIndex: 300, boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
-          overflow: "hidden",
-        }}>
-          <div style={{ padding: "8px 8px 4px" }}>
-            <input
-              autoFocus
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{
-                width: "100%", padding: "5px 9px", borderRadius: 6,
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                color: "#f0ede8", fontSize: 11, outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: 3, padding: "0 8px 6px", flexWrap: "wrap" }}>
+          <div className="flex gap-1 px-2 py-1.5 flex-wrap">
             {FONT_CATS.map((c) => (
               <button
                 key={c}
                 onClick={() => setCat(c)}
+                className="px-1.5 py-0.5 rounded text-[9px] font-semibold border-none cursor-pointer"
                 style={{
-                  padding: "2px 7px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                  cursor: "pointer", border: "none",
-                  background: cat === c ? "rgba(232,255,71,0.15)" : "rgba(255,255,255,0.05)",
+                  background:
+                    cat === c
+                      ? "rgba(232,255,71,0.15)"
+                      : "rgba(255,255,255,0.05)",
                   color: cat === c ? "#e8ff47" : "rgba(240,237,232,0.4)",
                 }}
               >
@@ -101,35 +100,39 @@ export function FontPicker({
             ))}
           </div>
 
-          <div style={{ maxHeight: 180, overflowY: "auto", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            {filtered.map((f) => {
-              loadFont(f.name);
-              return (
-                <button
-                  key={f.name}
-                  onClick={() => { onChange(f.name); setOpen(false); setSearch(""); }}
-                  style={{
-                    width: "100%", padding: "7px 10px", display: "flex",
-                    alignItems: "center", justifyContent: "space-between",
-                    background: value === f.name ? "rgba(232,255,71,0.08)" : "transparent",
-                    border: "none", cursor: "pointer",
-                  }}
-                >
-                  <span style={{ fontFamily: `'${f.name}',serif`, fontSize: 13, color: value === f.name ? "#e8ff47" : "#f0ede8" }}>
-                    {f.name}
-                  </span>
-                  <span style={{ fontSize: 9, opacity: 0.3, fontFamily: "DM Sans,sans-serif" }}>{f.category}</span>
-                </button>
-              );
-            })}
-            {!filtered.length && (
-              <p style={{ padding: "10px", fontSize: 11, color: "rgba(240,237,232,0.25)", textAlign: "center" }}>
-                No fonts found
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+          <CommandList className="max-h-[180px]">
+            <CommandEmpty className="py-3 text-[11px]">
+              No fonts found
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map((f) => {
+                loadFont(f.name);
+                return (
+                  <CommandItem
+                    key={f.name}
+                    value={f.name}
+                    onSelect={() => {
+                      onChange(f.name);
+                      setOpen(false);
+                    }}
+                    className="flex items-center justify-between px-2 py-1.5 cursor-pointer"
+                  >
+                    <span
+                      style={{ fontFamily: `'${f.name}',serif` }}
+                      className={`text-xs ${value === f.name ? "font-medium" : ""}`}
+                    >
+                      {f.name}
+                    </span>
+                    <span className="text-[9px] opacity-30 font-[DM_Sans,sans-serif]">
+                      {f.category}
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

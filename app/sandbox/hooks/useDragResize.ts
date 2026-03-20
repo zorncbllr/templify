@@ -146,5 +146,48 @@ export function useDragResize(
     window.addEventListener("mouseup", up);
   };
 
-  return { handleMouseDown, handleResizeDown };
+  const handleRotateDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+
+    const canvasEl = document.getElementById("templify-canvas");
+    const rect = canvasEl?.getBoundingClientRect();
+    if (!rect) return;
+
+    const startAngle = Math.atan2(
+      (e.clientY - rect.top) / scale - cy,
+      (e.clientX - rect.left) / scale - cx,
+    );
+    const startRotation = obj.rotation ?? 0;
+
+    const mv = (ev: MouseEvent) => {
+      const angle = Math.atan2(
+        (ev.clientY - rect.top) / scale - cy,
+        (ev.clientX - rect.left) / scale - cx,
+      );
+      let deg = startRotation + ((angle - startAngle) * 180) / Math.PI;
+      // Snap to 15-degree increments when holding Shift
+      if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
+      deg = ((deg % 360) + 360) % 360;
+      onResize(obj.id, { rotation: Math.round(deg) } as any, true);
+    };
+    const up = (ev: MouseEvent) => {
+      const angle = Math.atan2(
+        (ev.clientY - rect.top) / scale - cy,
+        (ev.clientX - rect.left) / scale - cx,
+      );
+      let deg = startRotation + ((angle - startAngle) * 180) / Math.PI;
+      if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
+      deg = ((deg % 360) + 360) % 360;
+      onResize(obj.id, { rotation: Math.round(deg) } as any, false);
+      window.removeEventListener("mousemove", mv);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", mv);
+    window.addEventListener("mouseup", up);
+  };
+
+  return { handleMouseDown, handleResizeDown, handleRotateDown };
 }

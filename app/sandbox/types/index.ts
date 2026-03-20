@@ -23,6 +23,7 @@ export type BaseObj = {
   width: number;
   height: number;
   zIndex: number;
+  rotation?: number;
 };
 
 export type ImageObject = BaseObj & {
@@ -46,12 +47,15 @@ export type TextField = BaseObj & {
   column: string;
   fontSize: number;
   fontFamily: string;
+  fontWeight: number;
   color: string;
   bold: boolean;
   italic: boolean;
   shadow: Shadow;
   columnOffset: number;
   textAlign: "left" | "center" | "right" | "justify";
+  codeType?: "text" | "qr" | "barcode";
+  textOverflow?: "shrink" | "visible";
 };
 
 export type CanvasObject = ImageObject | TextField;

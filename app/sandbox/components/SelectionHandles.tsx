@@ -2,6 +2,7 @@ import type { HandleKey } from "../types/index";
 
 const HANDLE_SIZE = 10;
 const HANDLE_OFFSET = -HANDLE_SIZE / 2;
+const ROTATE_DISTANCE = 28;
 
 const HANDLES: {
   key: HandleKey;
@@ -20,9 +21,11 @@ const HANDLES: {
 
 export function SelectionHandles({
   onDown,
+  onRotateDown,
   scale = 1,
 }: {
   onDown: (h: HandleKey, e: React.MouseEvent) => void;
+  onRotateDown?: (e: React.MouseEvent) => void;
   scale?: number;
 }) {
   const inv = 1 / scale;
@@ -40,6 +43,49 @@ export function SelectionHandles({
           boxSizing: "border-box",
         }}
       />
+      {/* Rotation handle — above top center */}
+      {onRotateDown && (
+        <>
+          {/* Connecting line */}
+          <div
+            style={{
+              position: "absolute",
+              top: -ROTATE_DISTANCE * inv,
+              left: "50%",
+              width: 1.5 * inv,
+              height: ROTATE_DISTANCE * inv,
+              background: "#e8ff47",
+              marginLeft: -(1.5 * inv) / 2,
+              pointerEvents: "none",
+            }}
+          />
+          {/* Rotation dot */}
+          <div
+            data-handle="rotate"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onRotateDown(e);
+            }}
+            style={{
+              position: "absolute",
+              top: -ROTATE_DISTANCE * inv,
+              left: "50%",
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              background: "#e8ff47",
+              border: "2px solid #fff",
+              boxShadow: "0 1px 5px rgba(0,0,0,0.4)",
+              cursor: "grab",
+              zIndex: 10,
+              transform: `scale(${inv})`,
+              marginTop: -7,
+              marginLeft: -7,
+            }}
+          />
+        </>
+      )}
       {/* Resize handles — counter-scale so they stay a fixed screen size */}
       {HANDLES.map(({ key, cursor, pos }) => (
         <div
@@ -57,10 +103,6 @@ export function SelectionHandles({
             cursor,
             zIndex: 10,
             transform: `scale(${inv})`,
-            // Position at the edge, then shift by half the handle size
-            // so the handle center sits on the edge.
-            // Margin is constant because transform: scale(inv) scales around
-            // the element center — the layout offset stays the same at any zoom.
             ...pos,
             marginTop:
               pos.top !== undefined ? HANDLE_OFFSET : undefined,

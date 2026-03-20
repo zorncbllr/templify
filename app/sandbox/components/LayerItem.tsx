@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { CanvasObject, ImageObject, TextField } from "../types/index";
-import { IconCamera, IconImage, IconDragHandle, IconClose } from "@/components/Icons";
+import { IconCamera, IconImage, IconDragHandle, IconClose, IconRotate } from "@/components/Icons";
 
 // ─── LayerItem ────────────────────────────────────────────────────────────────
 
@@ -42,14 +42,8 @@ export function LayerItem({
       onDrop={dragHandlers.onDrop}
       onDragEnd={dragHandlers.onDragEnd}
       onClick={onSelect}
+      className="flex items-center justify-between px-2 py-1.5 rounded-md cursor-grab select-none"
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "6px 8px",
-        borderRadius: 7,
-        cursor: "grab",
-        userSelect: "none",
         background: selected
           ? "rgba(232,255,71,0.07)"
           : "rgba(255,255,255,0.02)",
@@ -58,23 +52,19 @@ export function LayerItem({
       }}
     >
       <div
-        style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}
+        className="flex items-center gap-1.5 min-w-0"
       >
         <span
-          style={{ fontSize: 9, color: "rgba(240,237,232,0.2)", flexShrink: 0 }}
+          className="text-[9px] text-[rgba(240,237,232,0.2)] shrink-0"
         >
           <IconDragHandle size={10} />
         </span>
-        <span style={{ fontSize: 11, flexShrink: 0 }}>
+        <span className="text-[11px] shrink-0">
           {isImg ? (imgObj!.isDataImage ? <IconCamera size={12} /> : <IconImage size={12} />) : "T"}
         </span>
         <span
+          className="text-[10px] font-medium overflow-hidden text-ellipsis whitespace-nowrap"
           style={{
-            fontSize: 10,
-            fontWeight: 500,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
             color: selected ? "#e8ff47" : "rgba(240,237,232,0.75)",
           }}
         >
@@ -82,45 +72,21 @@ export function LayerItem({
         </span>
         {isBg && (
           <span
-            style={{
-              fontSize: 8,
-              padding: "1px 4px",
-              borderRadius: 3,
-              background: "rgba(232,255,71,0.12)",
-              color: "#e8ff47",
-              fontWeight: 700,
-              flexShrink: 0,
-            }}
+            className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.12)] text-[#e8ff47] font-bold shrink-0"
           >
             BG
           </span>
         )}
         {isImg && imgObj!.isDataImage && !isBg && (
           <span
-            style={{
-              fontSize: 8,
-              padding: "1px 4px",
-              borderRadius: 3,
-              background: "rgba(99,179,237,0.15)",
-              color: "#63b3ed",
-              fontWeight: 700,
-              flexShrink: 0,
-            }}
+            className="text-[8px] px-1 py-px rounded-md bg-[rgba(99,179,237,0.15)] text-[#63b3ed] font-bold shrink-0"
           >
             AUTO
           </span>
         )}
         {!isImg && offset !== 0 && (
           <span
-            style={{
-              fontSize: 8,
-              padding: "1px 4px",
-              borderRadius: 3,
-              background: "rgba(232,255,71,0.08)",
-              color: "#e8ff47",
-              fontWeight: 700,
-              flexShrink: 0,
-            }}
+            className="text-[8px] px-1 py-px rounded-md bg-[rgba(232,255,71,0.08)] text-[#e8ff47] font-bold shrink-0"
           >
             {offset > 0 ? `+${offset}` : offset}
           </span>
@@ -131,18 +97,9 @@ export function LayerItem({
           e.stopPropagation();
           onDelete();
         }}
+        className="w-4 h-4 flex items-center justify-center text-[10px] bg-transparent border-none cursor-pointer shrink-0"
         style={{
-          width: 16,
-          height: 16,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 10,
-          background: "none",
-          border: "none",
-          cursor: "pointer",
           color: "rgba(240,237,232,0.2)",
-          flexShrink: 0,
         }}
         onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}
         onMouseLeave={(e) =>
@@ -175,6 +132,7 @@ export function DimensionInputs({
   );
   const [xStr, setXStr] = useState(() => String(Math.round(selectedObj.x)));
   const [yStr, setYStr] = useState(() => String(Math.round(selectedObj.y)));
+  const [rotStr, setRotStr] = useState(() => String(selectedObj.rotation ?? 0));
 
   const prevIdRef = useRef<number>(selectedObj.id);
   useEffect(() => {
@@ -184,6 +142,7 @@ export function DimensionInputs({
       setHStr(String(Math.round(selectedObj.height)));
       setXStr(String(Math.round(selectedObj.x)));
       setYStr(String(Math.round(selectedObj.y)));
+      setRotStr(String(selectedObj.rotation ?? 0));
     }
   }, [selectedObj]);
 
@@ -204,6 +163,10 @@ export function DimensionInputs({
     if (focusedField.current !== "y")
       setYStr(String(Math.round(selectedObj.y)));
   }, [selectedObj.y]);
+  useEffect(() => {
+    if (focusedField.current !== "rot")
+      setRotStr(String(selectedObj.rotation ?? 0));
+  }, [selectedObj.rotation]);
 
   const commitW = () => {
     const v = parseInt(wStr, 10);
@@ -227,64 +190,39 @@ export function DimensionInputs({
     if (isFinite(v)) updateObj("y", v);
     else setYStr(String(Math.round(selectedObj.y)));
   };
+  const commitRot = () => {
+    const v = parseFloat(rotStr);
+    if (isFinite(v)) updateObj("rotation", ((v % 360) + 360) % 360);
+    else setRotStr(String(selectedObj.rotation ?? 0));
+  };
 
   const onKey =
     (commit: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
     };
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "4px 7px",
-    borderRadius: 6,
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    color: "#f0ede8",
-    fontSize: 11,
-    fontFamily: "monospace",
-    textAlign: "center",
-    outline: "none",
-  };
-  const labelStyle: React.CSSProperties = {
-    fontSize: 9,
-    color: "rgba(240,237,232,0.25)",
-    marginBottom: 3,
-  };
+  const inputClassName = "w-full px-[7px] py-1 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#f0ede8] text-[11px] font-mono text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const labelClassName = "text-[9px] text-[rgba(240,237,232,0.25)] mb-[3px]";
 
   return (
     <div>
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 7,
-        }}
+        className="flex items-center justify-between mb-[7px]"
       >
         <p
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(240,237,232,0.28)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-          }}
+          className="text-[10px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]"
         >
           Size & Position
         </p>
         {isImage && (
           <span
-            style={{
-              fontSize: 8,
-              color: "rgba(240,237,232,0.25)",
-              letterSpacing: "0.04em",
-            }}
+            className="text-[8px] text-[rgba(240,237,232,0.25)] tracking-[0.04em]"
           >
             AR locked
           </span>
         )}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+      <div className="grid grid-cols-2 gap-1.5">
         {[
           { label: "W", str: wStr, set: setWStr, commit: commitW, field: "w" },
           { label: "H", str: hStr, set: setHStr, commit: commitH, field: "h" },
@@ -296,29 +234,12 @@ export function DimensionInputs({
             : []),
         ].map(({ label, str, set, commit, field }) => (
           <div key={field}>
-            <p style={labelStyle}>{label}</p>
+            <p className={labelClassName}>{label}</p>
             <input
               type="number"
               value={str}
               step={isImage && (field === "w" || field === "h") ? 10 : 1}
-              onChange={(e) => {
-                const newVal = e.target.value;
-                set(newVal);
-                // Only commit on spinner clicks (not typing).
-                // Spinner clicks produce inputType !== "insertText".
-                const evt = e.nativeEvent as InputEvent;
-                const isSpinner = evt.inputType && evt.inputType !== "insertText";
-                if (isSpinner && (field === "w" || field === "h")) {
-                  const v = parseInt(newVal, 10);
-                  if (isFinite(v) && v > 0) {
-                    if (field === "w") {
-                      isImage ? updateBgDimension("width", v) : updateObj("width", v);
-                    } else {
-                      isImage ? updateBgDimension("height", v) : updateObj("height", v);
-                    }
-                  }
-                }
-              }}
+              onChange={(e) => set(e.target.value)}
               onFocus={() => {
                 focusedField.current = field;
               }}
@@ -327,11 +248,34 @@ export function DimensionInputs({
                 commit();
               }}
               onKeyDown={onKey(commit)}
-              style={inputStyle}
+              className={inputClassName}
             />
           </div>
         ))}
       </div>
+      {!hidePosition && (
+        <div className="mt-1.5">
+          <p className={labelClassName}>
+            <IconRotate size={8} style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
+            Rotation
+          </p>
+          <div className="relative" style={{ width: 80 }}>
+            <input
+              type="number"
+              value={rotStr}
+              onChange={(e) => setRotStr(e.target.value)}
+              onFocus={() => { focusedField.current = "rot"; }}
+              onBlur={() => { focusedField.current = null; commitRot(); }}
+              onKeyDown={onKey(commitRot)}
+              className={inputClassName}
+              style={{ paddingRight: 24 }}
+            />
+            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[rgba(240,237,232,0.25)] pointer-events-none">
+              deg
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

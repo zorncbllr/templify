@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type {
   ImageObject,
   TextField,
@@ -7,7 +7,7 @@ import type {
   DataImageMap,
 } from "../types/index";
 import { PLACEHOLDER_SRC } from "../types/constants";
-import { shadowCSS, textShadowCSS, shrinkFontSize } from "../utils/rendering";
+import { shadowCSS, textShadowCSS, shrinkFontSize, generateCodeDataURL } from "../utils/rendering";
 import { resolveDataImageSrc } from "../utils/data";
 import { useDragResize } from "../hooks/useDragResize";
 import { SelectionHandles } from "./SelectionHandles";
@@ -48,7 +48,7 @@ export function ImageEl({
     dataImages,
   );
 
-  const { handleMouseDown, handleResizeDown } = useDragResize(
+  const { handleMouseDown, handleResizeDown, handleRotateDown } = useDragResize(
     obj,
     onSelect,
     onDrag,
@@ -91,7 +91,7 @@ export function ImageEl({
                 top: 8,
                 left: 8,
                 padding: "2px 7px",
-                borderRadius: 4,
+                borderRadius: 6,
                 background: "rgba(232,255,71,0.9)",
                 color: "#0a0a10",
                 fontSize: 9,
@@ -126,6 +126,7 @@ export function ImageEl({
         userSelect: "none",
         overflow: "visible",
         outline: selected ? "1.5px solid #e8ff47" : "1.5px solid transparent",
+        transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
         filter: obj.shadow.enabled
           ? `drop-shadow(${shadowCSS(obj.shadow)})`
           : "none",
@@ -226,7 +227,7 @@ export function ImageEl({
               height: 18,
               display: "flex",
               alignItems: "center",
-              borderRadius: 4,
+              borderRadius: 6,
               whiteSpace: "nowrap",
             }}
           >
@@ -234,7 +235,7 @@ export function ImageEl({
               ? <><IconCamera size={10} /> {obj.dataImageColumn || "Data Photo"}</>
               : <><IconImage size={10} /> {obj.name}</>}
           </div>
-          <SelectionHandles onDown={handleResizeDown} scale={scale} />
+          <SelectionHandles onDown={handleResizeDown} onRotateDown={handleRotateDown} scale={scale} />
         </>
       )}
     </div>
@@ -264,7 +265,7 @@ export function TextEl({
   scale: number;
   onClickUp?: (id: number) => void;
 }) {
-  const { handleMouseDown, handleResizeDown } = useDragResize(
+  const { handleMouseDown, handleResizeDown, handleRotateDown } = useDragResize(
     obj,
     onSelect,
     onDrag,
@@ -280,25 +281,40 @@ export function TextEl({
     return ti >= 0 && ti < rows.length ? (rows[ti][obj.column] ?? "") : "";
   }, [currentRow, rows, obj.column, obj.columnOffset]);
 
+  const codeType = obj.codeType ?? "text";
+
+  const [codeDataUrl, setCodeDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (codeType === "text") { setCodeDataUrl(null); return; }
+    if (!rawText) { setCodeDataUrl(null); return; }
+    generateCodeDataURL(rawText, codeType, obj.width, obj.height, obj.color)
+      .then(setCodeDataUrl)
+      .catch(() => setCodeDataUrl(null));
+  }, [rawText, codeType, obj.width, obj.height, obj.color]);
+
   const displaySize = useMemo(
     () =>
-      shrinkFontSize(
-        rawText,
-        obj.width,
-        obj.height,
-        obj.fontFamily,
-        obj.fontSize,
-        obj.bold,
-        obj.italic,
-      ),
+      codeType === "text" && obj.textOverflow === "shrink"
+        ? shrinkFontSize(
+            rawText,
+            obj.width,
+            obj.height,
+            obj.fontFamily,
+            obj.fontSize,
+            obj.bold,
+            obj.italic,
+          )
+        : obj.fontSize,
     [
       rawText,
+      codeType,
       obj.width,
       obj.height,
       obj.fontFamily,
       obj.fontSize,
       obj.bold,
       obj.italic,
+      obj.textOverflow,
     ],
   );
 
@@ -316,49 +332,81 @@ export function TextEl({
         cursor: "move",
         userSelect: "none",
         overflow: "visible",
+        transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
       }}
     >
       <div
         style={{
           position: "absolute",
           inset: 0,
-          overflow: "visible",
+          overflow: (obj.textOverflow ?? "visible") === "visible" && codeType === "text" ? "visible" : "hidden",
           display: "flex",
           alignItems: "center",
-          justifyContent:
-            obj.textAlign === "right"
-              ? "flex-end"
-              : obj.textAlign === "center"
-                ? "center"
-                : "flex-start",
-          padding: "0 3px",
+          justifyContent: codeType !== "text" ? "center"
+            : obj.textAlign === "left" ? "flex-start"
+            : obj.textAlign === "right" ? "flex-end"
+            : "center",
+          padding: codeType === "text" ? "0 3px" : 0,
           boxSizing: "border-box",
           pointerEvents: "none",
         }}
       >
-        <span
-          style={{
-            display: "inline",
-            lineHeight: 1.2,
-            whiteSpace: "nowrap",
-            overflow: "visible",
-            fontFamily: `'${obj.fontFamily}', serif`,
-            fontSize: displaySize,
-            color: obj.color,
-            fontWeight: obj.bold ? "bold" : "normal",
-            fontStyle: obj.italic ? "italic" : "normal",
-            textAlign: obj.textAlign,
-            textShadow:
-              obj.shadow.enabled ||
-              (obj.shadow.thickness && obj.shadow.thickness > 0)
-                ? textShadowCSS(obj.shadow)
-                : "none",
-          }}
-        >
-          {rawText}
-        </span>
+        {codeType !== "text" ? (
+          codeDataUrl ? (
+            <img
+              src={codeDataUrl}
+              alt={codeType}
+              draggable={false}
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+            />
+          ) : (
+            // Placeholder when no data
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 3,
+                border: "1.5px dashed rgba(232,255,71,0.25)",
+                borderRadius: 6,
+                boxSizing: "border-box",
+              }}
+            >
+              <span style={{ fontSize: 8, color: "rgba(232,255,71,0.5)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                {codeType === "qr" ? "QR Code" : "Barcode"}
+              </span>
+              <span style={{ fontSize: 7, color: "rgba(240,237,232,0.25)" }}>{obj.column}</span>
+            </div>
+          )
+        ) : (
+          <span
+            style={{
+              display: obj.textAlign === "justify" ? "block" : "inline",
+              width: obj.textAlign === "justify" ? "100%" : undefined,
+              lineHeight: 1.2,
+              whiteSpace: obj.textAlign === "justify" ? "normal" : "nowrap",
+              overflow: "visible",
+              fontFamily: `'${obj.fontFamily}', serif`,
+              fontSize: displaySize,
+              color: obj.color,
+              fontWeight: obj.fontWeight ?? (obj.bold ? 700 : 400),
+              fontStyle: obj.italic ? "italic" : "normal",
+              textAlign: obj.textAlign,
+              textShadow:
+                obj.shadow.enabled ||
+                (obj.shadow.thickness && obj.shadow.thickness > 0)
+                  ? textShadowCSS(obj.shadow)
+                  : "none",
+            }}
+          >
+            {rawText}
+          </span>
+        )}
       </div>
-      {selected && <SelectionHandles onDown={handleResizeDown} scale={scale} />}
+      {selected && <SelectionHandles onDown={handleResizeDown} onRotateDown={handleRotateDown} scale={scale} />}
     </div>
   );
 }

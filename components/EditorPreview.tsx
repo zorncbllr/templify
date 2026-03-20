@@ -2,10 +2,24 @@ import { useState } from "react";
 import PanelSection from "./PanelSection";
 import RLabel from "./RLabel";
 import {
-  IconSparkle, IconUndo, IconImage, IconBarChart, IconCamera,
-  IconClose, IconGrid, IconDragHandle, IconMinus, IconFitScreen,
-  IconChevronsLeft, IconChevronLeft, IconChevronRight, IconChevronsRight,
-  IconChevronDown, IconFolder, IconArrowUp, IconArrowDown,
+  IconSparkle,
+  IconUndo,
+  IconImage,
+  IconBarChart,
+  IconCamera,
+  IconClose,
+  IconGrid,
+  IconDragHandle,
+  IconMinus,
+  IconFitScreen,
+  IconChevronsLeft,
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronsRight,
+  IconChevronDown,
+  IconFolder,
+  IconArrowUp,
+  IconArrowDown,
 } from "./Icons";
 
 const sampleData = [
@@ -49,70 +63,24 @@ function EditorPreview() {
 
   return (
     <div
-      style={{
-        fontFamily: "'DM Sans', sans-serif",
-        background: "#0c0c14",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        overflow: "hidden",
-        boxShadow: "0 40px 120px rgba(0,0,0,0.85)",
-        userSelect: "none",
-      }}
+      className="font-[DM_Sans,sans-serif] bg-app-bg-deep border border-white/[0.08] rounded-md overflow-hidden select-none"
+      style={{ boxShadow: "0 40px 120px rgba(0,0,0,0.85)" }}
     >
-      {/* ── Top bar ── */}
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 14px",
-          height: 44,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "#0c0c14",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div
-              style={{
-                width: 24,
-                height: 24,
-                background: "#e8ff47",
-                borderRadius: 6,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#0a0a10",
-              }}
-            >
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-[14px] h-[44px] border-b border-white/[0.06] bg-app-bg-deep">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 bg-app-accent rounded-md flex items-center justify-center text-app-bg">
               <IconSparkle size={10} />
             </div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#f0ede8" }}>
-              Templify
-            </span>
+            <span className="text-xs font-bold text-app-text">Templify</span>
           </div>
-          <div
-            style={{
-              width: 1,
-              height: 14,
-              background: "rgba(255,255,255,0.08)",
-            }}
-          />
-          <div style={{ display: "flex", gap: 2 }}>
+          <div className="w-px h-3.5 bg-white/[0.08]" />
+          <div className="flex gap-0.5">
             {[false, true].map((flip, i) => (
               <div
                 key={i}
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 5,
-                  background: "transparent",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "rgba(240,237,232,0.28)",
-                }}
+                className="w-6 h-6 rounded-md border border-white/[0.08] flex items-center justify-center text-app-text/[0.28]"
               >
                 <IconUndo
                   size={11}
@@ -121,241 +89,93 @@ function EditorPreview() {
               </div>
             ))}
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "3px 8px",
-              borderRadius: 6,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <span style={{ fontSize: 8, color: "rgba(240,237,232,0.3)" }}>
-              Canvas
-            </span>
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 600,
-                color: "rgba(240,237,232,0.6)",
-                fontFamily: "monospace",
-              }}
-            >
+          <div className="flex items-center gap-1 px-2 py-[3px] rounded-md bg-white/[0.04] border border-white/[0.08]">
+            <span className="text-[8px] text-app-text/[0.3]">Canvas</span>
+            <span className="text-[9px] font-semibold text-app-text/[0.6] font-mono">
               960x540px
             </span>
           </div>
         </div>
-        <button
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            padding: "0 12px",
-            height: 28,
-            borderRadius: 7,
-            fontSize: 10,
-            fontWeight: 700,
-            cursor: "default",
-            background: "#e8ff47",
-            border: "none",
-            color: "#0a0a10",
-          }}
-        >
+        <button className="flex items-center gap-[5px] px-3 h-7 rounded-md text-[10px] font-bold cursor-default bg-app-accent border-none text-app-bg">
           <IconGrid size={10} />
           <span>Print Imposition & Export</span>
-          <span
-            style={{
-              fontSize: 7,
-              background: "rgba(0,0,0,0.12)",
-              padding: "1px 4px",
-              borderRadius: 3,
-              letterSpacing: "0.04em",
-            }}
-          >
+          <span className="text-[7px] bg-black/[0.12] px-1 py-px rounded-md tracking-[0.04em]">
             GA
           </span>
         </button>
       </header>
 
-      {/* ── Body ── */}
-      <div style={{ display: "flex", height: "full" }}>
+      {/* Body */}
+      <div className="flex h-full">
         {/* LEFT PANEL */}
-        <div
-          style={{
-            width: 172,
-            borderRight: "1px solid rgba(255,255,255,0.06)",
-            background: "#0e0e18",
-            display: "flex",
-            height: "37.5rem",
-            flexDirection: "column",
-            flexShrink: 0,
-          }}
-        >
+        <div className="w-[172px] border-r border-white/[0.06] bg-app-panel flex h-[37.5rem] flex-col shrink-0">
           <PanelSection label="Template / Image">
-            <label
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 4,
-                padding: "10px 8px",
-                borderRadius: 8,
-                cursor: "default",
-                border: "1.5px dashed rgba(232,255,71,0.22)",
-                background: "rgba(232,255,71,0.03)",
-              }}
-            >
+            <label className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg cursor-default border-[1.5px] border-dashed border-app-accent/[0.22] bg-app-accent/[0.03]">
               <IconImage size={18} color="rgba(240,237,232,0.4)" />
-              <p
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: "rgba(240,237,232,0.5)",
-                  margin: 0,
-                }}
-              >
+              <p className="text-[10px] font-semibold text-app-text/[0.5] m-0">
                 Select Template
               </p>
-              <p
-                style={{
-                  fontSize: 8,
-                  color: "rgba(240,237,232,0.22)",
-                  margin: 0,
-                }}
-              >
+              <p className="text-[8px] text-app-text/[0.22] m-0">
                 auto-resizes canvas
               </p>
             </label>
           </PanelSection>
 
           <PanelSection label="Data Source">
-            <div
-              style={{
-                background: "rgba(232,255,71,0.04)",
-                border: "1px solid rgba(232,255,71,0.15)",
-                borderRadius: 8,
-                padding: "7px 9px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 2,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div className="bg-app-accent/[0.04] border border-app-accent/[0.15] rounded-lg px-[9px] py-[7px]">
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-[5px]">
                   <IconBarChart size={10} color="#e8ff47" />
-                  <span
-                    style={{ fontSize: 10, fontWeight: 600, color: "#e8ff47" }}
-                  >
+                  <span className="text-[10px] font-semibold text-app-accent">
                     test.xlsx
                   </span>
                 </div>
-                <span style={{ fontSize: 10, color: "rgba(240,237,232,0.3)" }}>
+                <span className="text-[10px] text-app-text/[0.3]">
                   ↺
                 </span>
               </div>
-              <p
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.35)",
-                  margin: 0,
-                }}
-              >
+              <p className="text-[9px] text-app-text/[0.35] m-0">
                 3 rows · 4 cols
               </p>
             </div>
           </PanelSection>
 
           <PanelSection label="Photo Data">
-            <div
-              style={{
-                background: "rgba(99,179,237,0.05)",
-                border: "1px solid rgba(99,179,237,0.2)",
-                borderRadius: 8,
-                padding: "7px 9px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 2,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div className="bg-app-accent-blue/[0.05] border border-app-accent-blue/[0.2] rounded-lg px-[9px] py-[7px]">
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-[5px]">
                   <IconCamera size={10} color="#63b3ed" />
-                  <span
-                    style={{ fontSize: 10, fontWeight: 600, color: "#63b3ed" }}
-                  >
+                  <span className="text-[10px] font-semibold text-app-accent-blue">
                     3 photos
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: "rgba(240,237,232,0.35)",
-                      textDecoration: "underline",
-                    }}
-                  >
+                <div className="flex gap-1.5 items-center">
+                  <span className="text-[9px] text-app-text/[0.35] underline">
                     Replace
                   </span>
                   <IconClose size={8} color="rgba(240,237,232,0.25)" />
                 </div>
               </div>
-              <p
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.35)",
-                  margin: 0,
-                }}
-              >
+              <p className="text-[9px] text-app-text/[0.35] m-0">
                 3 photos loaded
               </p>
             </div>
-            <div style={{ marginTop: 7 }}>
-              <p
-                style={{
-                  fontSize: 8,
-                  color: "rgba(240,237,232,0.22)",
-                  marginBottom: 4,
-                }}
-              >
+            <div className="mt-[7px]">
+              <p className="text-[8px] text-app-text/[0.22] mb-1">
                 Photo field — click to place:
               </p>
-              <div
-                style={{
-                  padding: "4px 7px",
-                  borderRadius: 6,
-                  fontSize: 9,
-                  fontWeight: 500,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  color: "rgba(240,237,232,0.55)",
-                }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div className="px-[7px] py-1 rounded-md text-[9px] font-medium flex items-center justify-between bg-white/[0.02] border border-white/[0.07] text-app-text/[0.55]">
+                <span className="flex items-center gap-1">
                   <IconCamera size={9} />
-                  <span style={{ fontFamily: "monospace", fontSize: 8 }}>
-                    Image_Path
-                  </span>
+                  <span className="font-mono text-[8px]">Image_Path</span>
                 </span>
-                <span style={{ opacity: 0.4 }}>+</span>
+                <span className="opacity-40">+</span>
               </div>
             </div>
           </PanelSection>
 
           <PanelSection label="Text Fields">
-            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div className="flex flex-col gap-[3px]">
               {[
                 { col: "Name", placed: true },
                 { col: "Age", placed: false },
@@ -363,41 +183,20 @@ function EditorPreview() {
               ].map(({ col, placed }) => (
                 <div
                   key={col}
-                  style={{
-                    padding: "4px 7px",
-                    borderRadius: 6,
-                    fontSize: 9,
-                    fontWeight: 500,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    background: placed
-                      ? "rgba(232,255,71,0.05)"
-                      : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${placed ? "rgba(232,255,71,0.15)" : "rgba(255,255,255,0.06)"}`,
-                    color: placed ? "#e8ff47" : "rgba(240,237,232,0.6)",
-                    fontFamily: "monospace",
-                  }}
+                  className={`px-[7px] py-1 rounded-md text-[9px] font-medium font-mono flex items-center justify-between ${
+                    placed
+                      ? "bg-app-accent/[0.05] border border-app-accent/[0.15] text-app-accent"
+                      : "bg-white/[0.02] border border-white/[0.06] text-app-text/[0.6]"
+                  }`}
                 >
                   {`{{${col}}}`}
-                  <span
-                    style={{ display: "flex", alignItems: "center", gap: 3 }}
-                  >
+                  <span className="flex items-center gap-[3px]">
                     {placed && (
-                      <span
-                        style={{
-                          background: "rgba(232,255,71,0.15)",
-                          color: "#e8ff47",
-                          borderRadius: 3,
-                          padding: "0 3px",
-                          fontSize: 7,
-                          fontWeight: 700,
-                        }}
-                      >
+                      <span className="bg-app-accent/[0.15] text-app-accent rounded-md px-[3px] text-[7px] font-bold">
                         1
                       </span>
                     )}
-                    <span style={{ opacity: 0.4, fontSize: 10 }}>+</span>
+                    <span className="opacity-40 text-[10px]">+</span>
                   </span>
                 </div>
               ))}
@@ -406,23 +205,11 @@ function EditorPreview() {
         </div>
 
         {/* CANVAS */}
-        <div
-          style={{
-            flex: 1,
-            background: "#07070e",
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "37.5rem",
-          }}
-        >
+        <div className="flex-1 bg-app-canvas relative flex items-center justify-center h-[37.5rem]">
           {/* dot grid */}
           <div
+            className="absolute inset-0 pointer-events-none"
             style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
               backgroundImage:
                 "radial-gradient(rgba(255,255,255,0.025) 1px,transparent 1px)",
               backgroundSize: "22px 22px",
@@ -431,57 +218,20 @@ function EditorPreview() {
 
           {/* White canvas */}
           <div
+            className="mx-12 my-12 w-[540px] h-[304px] bg-white rounded-md relative overflow-hidden"
             style={{
-              margin: "3rem 3rem",
-              width: 540,
-              height: 304,
-              background: "#ffffff",
-              borderRadius: 3,
-              position: "relative",
-              overflow: "hidden",
               boxShadow:
                 "0 20px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05)",
             }}
           >
-            {/* The selected {{Name}} field */}
-            <div
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                transform: "translate(-50%, -55%)",
-              }}
-            >
+            {/* The selected Name field */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[55%]">
               {/* Label tag above */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: -19,
-                  left: 0,
-                  background: "#0c0c14",
-                  border: "1px solid rgba(232,255,71,0.3)",
-                  color: "#e8ff47",
-                  fontSize: 8,
-                  fontWeight: 700,
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  whiteSpace: "nowrap",
-                  fontFamily: "monospace",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
+              <div className="absolute -top-[19px] left-0 bg-app-bg-deep border border-app-accent/[0.3] text-app-accent text-[8px] font-bold px-[5px] py-px rounded-md whitespace-nowrap font-mono flex items-center">
                 T {"{{Name}}"}
               </div>
               {/* Text element with selection outline */}
-              <div
-                style={{
-                  position: "relative",
-                  outline: "1.5px solid #e8ff47",
-                  padding: "3px 8px",
-                  cursor: "move",
-                }}
-              >
+              <div className="relative outline-[1.5px] outline outline-app-accent px-2 py-[3px] cursor-move">
                 <span
                   style={{
                     fontSize: Math.round(fontSize * 0.52),
@@ -510,13 +260,8 @@ function EditorPreview() {
                 ].map((pos, i) => (
                   <div
                     key={i}
+                    className="absolute w-2 h-2 rounded-sm bg-white border-[1.5px] border-app-accent"
                     style={{
-                      position: "absolute",
-                      width: 8,
-                      height: 8,
-                      borderRadius: 2,
-                      background: "#fff",
-                      border: "1.5px solid #e8ff47",
                       boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                       ...pos,
                     }}
@@ -528,87 +273,69 @@ function EditorPreview() {
 
           {/* Page nav bar */}
           <div
-            style={{
-              position: "absolute",
-              bottom: 14,
-              left: "50%",
-              transform: "translateX(-50%)",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              borderRadius: 14,
-              background: "rgba(10,10,16,0.92)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              backdropFilter: "blur(12px)",
-            }}
+            className="absolute bottom-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-app-bg/[0.92] border border-white/[0.1] backdrop-blur-[12px]"
           >
             {[
-              { icon: <IconChevronsLeft size={10} />, action: () => setRow(0), disabled: row === 0 },
-              { icon: <IconChevronLeft size={10} />, action: () => setRow((r) => Math.max(0, r - 1)), disabled: row === 0 },
+              {
+                icon: <IconChevronsLeft size={10} />,
+                action: () => setRow(0),
+                disabled: row === 0,
+              },
+              {
+                icon: <IconChevronLeft size={10} />,
+                action: () => setRow((r) => Math.max(0, r - 1)),
+                disabled: row === 0,
+              },
             ].map((btn, i) => (
               <button
                 key={i}
                 onClick={btn.action}
+                className="w-5 h-5 rounded border border-white/[0.1] bg-white/[0.06] flex items-center justify-center"
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
                   color: btn.disabled
                     ? "rgba(240,237,232,0.15)"
                     : "rgba(240,237,232,0.6)",
                   cursor: btn.disabled ? "default" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                 }}
               >
                 {btn.icon}
               </button>
             ))}
-            <div style={{ textAlign: "center", minWidth: 72 }}>
-              <div
-                style={{ fontSize: 10, fontWeight: 700, color: "#f0ede8" }}
-              >
+            <div className="text-center min-w-[72px]">
+              <div className="text-[10px] font-bold text-app-text">
                 Row {row + 1}{" "}
-                <span style={{ color: "rgba(240,237,232,0.3)" }}>
+                <span className="text-app-text/[0.3]">
                   / {sampleData.length}
                 </span>
               </div>
-              <div
-                style={{
-                  fontSize: 8,
-                  color: "rgba(240,237,232,0.35)",
-                  marginTop: 1,
-                }}
-              >
+              <div className="text-[8px] text-app-text/[0.35] mt-px">
                 {data
                   ? Object.values(data).filter(Boolean)[0]?.slice(0, 20)
                   : "—"}
               </div>
             </div>
             {[
-              { icon: <IconChevronRight size={10} />, action: () => setRow((r) => Math.min(sampleData.length - 1, r + 1)), disabled: row === sampleData.length - 1 },
-              { icon: <IconChevronsRight size={10} />, action: () => setRow(sampleData.length - 1), disabled: row === sampleData.length - 1 },
+              {
+                icon: <IconChevronRight size={10} />,
+                action: () =>
+                  setRow((r) => Math.min(sampleData.length - 1, r + 1)),
+                disabled: row === sampleData.length - 1,
+              },
+              {
+                icon: <IconChevronsRight size={10} />,
+                action: () => setRow(sampleData.length - 1),
+                disabled: row === sampleData.length - 1,
+              },
             ].map((btn, i) => (
               <button
                 key={i}
                 onClick={btn.action}
+                className="w-5 h-5 rounded border border-white/[0.1] bg-white/[0.06] flex items-center justify-center"
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
                   color: btn.disabled
                     ? "rgba(240,237,232,0.15)"
                     : "rgba(240,237,232,0.6)",
                   cursor: btn.disabled ? "default" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                 }}
               >
                 {btn.icon}
@@ -617,162 +344,51 @@ function EditorPreview() {
           </div>
 
           {/* Zoom controls */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: 14,
-              right: 14,
-              display: "flex",
-              flexDirection: "column",
-              background: "rgba(10,10,16,0.92)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 9,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "rgba(240,237,232,0.5)",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
+          <div className="absolute bottom-3.5 right-3.5 flex flex-col bg-app-bg/[0.92] border border-white/[0.1] rounded-md overflow-hidden">
+            <div className="w-7 h-7 flex items-center justify-center text-app-text/[0.5] border-b border-white/[0.07]">
               +
             </div>
-            <div
-              style={{
-                width: 28,
-                height: 20,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 7,
-                fontWeight: 700,
-                color: "#e8ff47",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
+            <div className="w-7 h-5 flex items-center justify-center text-[7px] font-bold text-app-accent border-b border-white/[0.07]">
               100%
             </div>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "rgba(240,237,232,0.5)",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
+            <div className="w-7 h-7 flex items-center justify-center text-app-text/[0.5] border-b border-white/[0.07]">
               <IconMinus size={12} />
             </div>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "rgba(240,237,232,0.5)",
-              }}
-            >
+            <div className="w-7 h-7 flex items-center justify-center text-app-text/[0.5]">
               <IconFitScreen size={12} />
             </div>
           </div>
         </div>
 
         {/* RIGHT PANEL */}
-        <div
-          style={{
-            width: 196,
-            borderLeft: "1px solid rgba(255,255,255,0.06)",
-            background: "#0e0e18",
-            display: "flex",
-            flexDirection: "column",
-            flexShrink: 0,
-            height: "37.5rem",
-          }}
-        >
-          {/* Tabs — matches actual: Layers + Style */}
-          <div
-            style={{
-              display: "flex",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              flexShrink: 0,
-            }}
-          >
+        <div className="w-[196px] border-l border-white/[0.06] bg-app-panel flex flex-col shrink-0 h-[37.5rem]">
+          {/* Tabs */}
+          <div className="flex border-b border-white/[0.06] shrink-0">
             {["Layers", "Style"].map((tab) => (
               <button
                 key={tab}
-                style={{
-                  flex: 1,
-                  padding: "9px 0",
-                  fontSize: 8,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase" as const,
-                  textAlign: "center" as const,
-                  cursor: "default",
-                  background: "transparent",
-                  border: "none",
-                  color: tab === "Style" ? "#e8ff47" : "rgba(240,237,232,0.28)",
-                  borderBottom:
-                    tab === "Style"
-                      ? "2px solid #e8ff47"
-                      : "2px solid transparent",
-                }}
+                className={`flex-1 py-[9px] text-[8px] font-bold tracking-[0.06em] uppercase text-center cursor-default bg-transparent border-none ${
+                  tab === "Style"
+                    ? "text-app-accent border-b-2 border-app-accent"
+                    : "text-app-text/[0.28] border-b-2 border-transparent"
+                }`}
               >
                 {tab}
               </button>
             ))}
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              padding: 10,
-            }}
-          >
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5">
             {/* Selected pill */}
-            <div
-              style={{
-                padding: "5px 8px",
-                borderRadius: 6,
-                marginBottom: 10,
-                background: "rgba(232,255,71,0.05)",
-                border: "1px solid rgba(232,255,71,0.12)",
-              }}
-            >
-              <p
-                style={{
-                  fontSize: 9,
-                  fontWeight: 600,
-                  color: "#e8ff47",
-                  fontFamily: "monospace",
-                  margin: 0,
-                }}
-              >
+            <div className="px-2 py-[5px] rounded-md mb-2.5 bg-app-accent/[0.05] border border-app-accent/[0.12]">
+              <p className="text-[9px] font-semibold text-app-accent font-mono m-0">
                 T {"{{Name}}"}
               </p>
             </div>
 
             {/* Size & Position */}
             <RLabel>Size & Position</RLabel>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 5,
-                marginBottom: 10,
-              }}
-            >
+            <div className="grid grid-cols-2 gap-[5px] mb-2.5">
               {[
                 ["W", "329"],
                 ["H", "76"],
@@ -780,31 +396,13 @@ function EditorPreview() {
                 ["Y", "121"],
               ].map(([l, v]) => (
                 <div key={l}>
-                  <p
-                    style={{
-                      fontSize: 8,
-                      color: "rgba(240,237,232,0.25)",
-                      marginBottom: 3,
-                    }}
-                  >
+                  <p className="text-[8px] text-app-text/[0.25] mb-[3px]">
                     {l}
                   </p>
                   <input
                     readOnly
                     value={v}
-                    style={{
-                      width: "100%",
-                      padding: "4px 6px",
-                      borderRadius: 5,
-                      textAlign: "center" as const,
-                      background: "rgba(255,255,255,0.05)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      color: "#f0ede8",
-                      fontSize: 10,
-                      fontFamily: "monospace",
-                      outline: "none",
-                      boxSizing: "border-box" as const,
-                    }}
+                    className="w-full px-1.5 py-1 rounded-md text-center bg-white/[0.05] border border-white/[0.1] text-app-text text-[10px] font-mono outline-none box-border"
                   />
                 </div>
               ))}
@@ -812,28 +410,14 @@ function EditorPreview() {
 
             {/* Layer order */}
             <RLabel>Layer Order</RLabel>
-            <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
+            <div className="flex gap-[5px] mb-2.5">
               {[
                 { icon: <IconArrowUp size={9} />, label: "Fwd" },
                 { icon: <IconArrowDown size={9} />, label: "Back" },
               ].map((b, i) => (
                 <div
                   key={i}
-                  style={{
-                    flex: 1,
-                    padding: "4px 0",
-                    borderRadius: 5,
-                    textAlign: "center" as const,
-                    fontSize: 9,
-                    fontWeight: 600,
-                    color: "rgba(240,237,232,0.6)",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.09)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 3,
-                  }}
+                  className="flex-1 py-1 rounded-md text-center text-[9px] font-semibold text-app-text/[0.6] bg-white/[0.04] border border-white/[0.09] flex items-center justify-center gap-[3px]"
                 >
                   {b.icon} {b.label}
                 </div>
@@ -842,80 +426,39 @@ function EditorPreview() {
 
             {/* Font */}
             <RLabel>Font</RLabel>
-            <div
-              style={{
-                padding: "5px 8px",
-                borderRadius: 6,
-                marginBottom: 8,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                fontFamily: "'Merriweather', serif",
-                fontSize: 11,
-                color: "#f0ede8",
-              }}
-            >
+            <div className="px-2 py-[5px] rounded-md mb-2 bg-white/[0.04] border border-white/[0.1] flex justify-between items-center font-[Merriweather,serif] text-[11px] text-app-text">
               Merriweather
               <IconChevronDown size={9} style={{ opacity: 0.4 }} />
             </div>
 
             {/* Font size */}
             <RLabel>Font Size</RLabel>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                marginBottom: 10,
-              }}
-            >
+            <div className="flex items-center gap-[5px] mb-2.5">
               <input
                 type="range"
                 min={8}
                 max={80}
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
-                style={{
-                  flex: 1,
-                  height: "3px",
-                  accentColor: "#e8ff47",
-                  minWidth: 0,
-                }}
+                className="flex-1 h-[3px] min-w-0"
+                style={{ accentColor: "#e8ff47" }}
               />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#e8ff47",
-                  fontWeight: 700,
-                  width: 28,
-                  textAlign: "right" as const,
-                }}
-              >
+              <span className="text-[9px] text-app-accent font-bold w-7 text-right">
                 {fontSize}px
               </span>
             </div>
 
             {/* Alignment */}
             <RLabel>Alignment</RLabel>
-            <div style={{ display: "flex", gap: 3, marginBottom: 10 }}>
+            <div className="flex gap-[3px] mb-2.5">
               {[0, 1, 2, 3].map((ai) => (
                 <div
                   key={ai}
-                  style={{
-                    flex: 1,
-                    height: 28,
-                    borderRadius: 5,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background:
-                      ai === 0
-                        ? "rgba(232,255,71,0.15)"
-                        : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${ai === 0 ? "rgba(232,255,71,0.35)" : "rgba(255,255,255,0.08)"}`,
-                  }}
+                  className={`flex-1 h-7 rounded-md flex items-center justify-center ${
+                    ai === 0
+                      ? "bg-app-accent/[0.15] border border-app-accent/[0.35]"
+                      : "bg-white/[0.04] border border-white/[0.08]"
+                  }`}
                 >
                   <svg
                     width="11"
@@ -939,45 +482,23 @@ function EditorPreview() {
 
             {/* Color */}
             <RLabel>Color</RLabel>
-            <div style={{ display: "flex", gap: 5, marginBottom: 5 }}>
+            <div className="flex gap-[5px] mb-[5px]">
               <div
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 5,
-                  background: color,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  flexShrink: 0,
-                }}
+                className="w-[26px] h-fit rounded-md border border-white/[0.12] shrink-0"
+                style={{ background: color }}
               />
-              <div
-                style={{
-                  flex: 1,
-                  padding: "4px 7px",
-                  borderRadius: 5,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#f0ede8",
-                  fontSize: 10,
-                  fontFamily: "monospace",
-                }}
-              >
+              <div className="flex-1 px-[7px] py-1 rounded-md bg-white/[0.05] border border-white/[0.1] text-app-text text-[10px] font-mono">
                 {color}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 3, marginBottom: 10 }}>
+            <div className="flex gap-[3px] mb-2.5">
               {SWATCH_COLORS.map((c) => (
                 <button
                   key={c}
                   onClick={() => setColor(c)}
+                  className="w-[18px] h-[18px] rounded-md border-none cursor-pointer shrink-0"
                   style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 3,
                     background: c,
-                    border: "none",
-                    cursor: "pointer",
-                    flexShrink: 0,
                     outline: color === c ? "2px solid #e8ff47" : "none",
                     outlineOffset: 1,
                   }}
@@ -987,139 +508,57 @@ function EditorPreview() {
 
             {/* Style B / I */}
             <RLabel>Style</RLabel>
-            <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+            <div className="flex gap-1 mb-2.5">
               <button
                 onClick={() => setBold((b) => !b)}
-                style={{
-                  flex: 1,
-                  padding: "5px 0",
-                  borderRadius: 5,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  background: bold
-                    ? "rgba(232,255,71,0.12)"
-                    : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${bold ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                  color: bold ? "#e8ff47" : "rgba(240,237,232,0.5)",
-                }}
+                className={`flex-1 py-[5px] rounded-md text-xs font-bold cursor-pointer ${
+                  bold
+                    ? "bg-app-accent/[0.12] border border-app-accent/[0.3] text-app-accent"
+                    : "bg-white/[0.04] border border-white/[0.08] text-app-text/[0.5]"
+                }`}
               >
                 B
               </button>
               <button
                 onClick={() => setItalic((b) => !b)}
-                style={{
-                  flex: 1,
-                  padding: "5px 0",
-                  borderRadius: 5,
-                  fontSize: 12,
-                  fontStyle: "italic",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  background: italic
-                    ? "rgba(232,255,71,0.12)"
-                    : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${italic ? "rgba(232,255,71,0.3)" : "rgba(255,255,255,0.08)"}`,
-                  color: italic ? "#e8ff47" : "rgba(240,237,232,0.5)",
-                }}
+                className={`flex-1 py-[5px] rounded-md text-xs italic font-semibold cursor-pointer ${
+                  italic
+                    ? "bg-app-accent/[0.12] border border-app-accent/[0.3] text-app-accent"
+                    : "bg-white/[0.04] border border-white/[0.08] text-app-text/[0.5]"
+                }`}
               >
                 I
               </button>
             </div>
 
             {/* Shadow toggle */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 14,
-              }}
-            >
+            <div className="flex items-center justify-between mb-3.5">
               <RLabel>Shadow</RLabel>
-              <div
-                style={{
-                  width: 28,
-                  height: 14,
-                  borderRadius: 7,
-                  background: "rgba(255,255,255,0.1)",
-                  position: "relative",
-                }}
-              >
+              <div className="w-7 h-3.5 rounded-full bg-white/[0.1] relative">
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 1,
-                    left: 1,
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    background: "white",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-                  }}
+                  className="absolute top-px left-px w-3 h-3 rounded-full bg-white"
+                  style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}
                 />
               </div>
             </div>
 
             {/* Remove */}
-            <div
-              style={{
-                padding: "6px 0",
-                borderRadius: 6,
-                textAlign: "center" as const,
-                fontSize: 10,
-                fontWeight: 600,
-                background: "rgba(239,68,68,0.07)",
-                border: "1px solid rgba(239,68,68,0.18)",
-                color: "rgba(248,113,113,0.85)",
-              }}
-            >
+            <div className="py-1.5 rounded-md text-center text-[10px] font-semibold bg-app-danger/[0.07] border border-app-danger/[0.18] text-app-danger/85">
               Remove object
             </div>
           </div>
 
           {/* Row data at bottom */}
-          <div
-            style={{
-              borderTop: "1px solid rgba(255,255,255,0.06)",
-              padding: "8px 10px",
-              flexShrink: 0,
-            }}
-          >
-            <p
-              style={{
-                fontSize: 8,
-                fontWeight: 700,
-                color: "rgba(240,237,232,0.25)",
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.08em",
-                marginBottom: 5,
-              }}
-            >
+          <div className="border-t border-white/[0.06] px-2.5 py-2 shrink-0">
+            <p className="text-[8px] font-bold text-app-text/[0.25] uppercase tracking-[0.08em] mb-[5px]">
               Row {row + 1} / {sampleData.length}
             </p>
             {Object.entries(data).map(([k, v]) => (
-              <div key={k} style={{ marginBottom: 3 }}>
-                <span
-                  style={{
-                    fontSize: 8,
-                    color: "rgba(240,237,232,0.22)",
-                    fontFamily: "monospace",
-                    display: "block",
-                  }}
-                >
+              <div key={k} className="mb-[3px]">
+                <span className="text-[8px] text-app-text/[0.22] font-mono block">
                   {k}
                 </span>
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: "rgba(240,237,232,0.65)",
-                    display: "block",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <span className="text-[9px] text-app-text/[0.65] block overflow-hidden text-ellipsis whitespace-nowrap">
                   {v}
                 </span>
               </div>

@@ -36,103 +36,51 @@ export function DataImagesPanel({
 
   return (
     <div
-      style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+      className="px-2.5 py-2 border-b border-[rgba(255,255,255,0.06)]"
     >
-      <p
-        style={{
-          fontSize: 9,
-          fontWeight: 700,
-          color: "rgba(240,237,232,0.28)",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: 8,
-        }}
-      >
-        Photo Data
-      </p>
-
       {dataImagesLabel ? (
         <div
-          style={{
-            background: "rgba(99,179,237,0.05)",
-            border: "1px solid rgba(99,179,237,0.2)",
-            borderRadius: 8,
-            padding: "8px 10px",
-          }}
+          className="bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.2)] rounded-md px-2 py-1.5"
         >
           <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 3,
-            }}
+            className="flex items-center justify-between"
           >
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                minWidth: 0,
-              }}
+              className="flex items-center gap-[5px] min-w-0"
             >
-              <span style={{ flexShrink: 0 }}><IconCamera size={12} /></span>
+              <span className="shrink-0"><IconCamera size={11} /></span>
               <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: "#63b3ed",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
+                className="text-[9px] font-semibold text-[#63b3ed] overflow-hidden text-ellipsis whitespace-nowrap"
               >
                 {dataImagesLabel}
               </span>
+              <span className="text-[8px] text-[rgba(240,237,232,0.3)] shrink-0">
+                {Math.round(imageCount)} img
+              </span>
             </div>
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                flexShrink: 0,
-                marginLeft: 5,
-              }}
+              className="flex items-center gap-1 shrink-0 ml-1"
             >
               <label
-                style={{
-                  fontSize: 9,
-                  color: "rgba(240,237,232,0.4)",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
+                className="text-[8px] text-[rgba(240,237,232,0.4)] cursor-pointer underline"
               >
                 Replace
                 <input
                   type="file"
                   accept="image/*"
                   multiple
-                  style={{ display: "none" }}
+                  className="hidden"
                   onChange={(e) => e.target.files && onUpload(e.target.files)}
                 />
               </label>
               <button
                 onClick={onClear}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "rgba(240,237,232,0.3)",
-                  cursor: "pointer",
-                  fontSize: 11,
-                }}
+                className="bg-transparent border-none text-[rgba(240,237,232,0.3)] cursor-pointer text-[10px] p-0"
               >
-                <IconClose size={10} />
+                <IconClose size={9} />
               </button>
             </div>
           </div>
-          <p style={{ fontSize: 10, color: "rgba(240,237,232,0.35)" }}>
-            {Math.round(imageCount)} photo{imageCount === 1 ? "" : "s"} loaded
-          </p>
         </div>
       ) : (
         <label
@@ -146,14 +94,8 @@ export function DataImagesPanel({
             setDragOver(false);
             if (e.dataTransfer.files) onUpload(e.dataTransfer.files);
           }}
+          className="flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer"
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 5,
-            padding: "12px 10px",
-            borderRadius: 9,
-            cursor: "pointer",
             background: dragOver
               ? "rgba(99,179,237,0.08)"
               : "rgba(255,255,255,0.02)",
@@ -162,30 +104,22 @@ export function DataImagesPanel({
         >
           {dataImagesLoading ? (
             <div
+              className="w-3.5 h-3.5 rounded-full animate-spin shrink-0"
               style={{
-                width: 18,
-                height: 18,
                 border: "2px solid rgba(99,179,237,0.2)",
                 borderTop: "2px solid #63b3ed",
-                borderRadius: "50%",
-                animation: "spin 0.7s linear infinite",
               }}
             />
           ) : (
-            <IconCamera size={18} />
+            <IconCamera size={14} />
           )}
-          <div style={{ textAlign: "center" }}>
+          <div>
             <p
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "rgba(240,237,232,0.5)",
-                marginBottom: 1,
-              }}
+              className="text-[10px] font-semibold text-[rgba(240,237,232,0.5)]"
             >
               {dataImagesLoading ? "Loading…" : "Upload Photos"}
             </p>
-            <p style={{ fontSize: 9, color: "rgba(240,237,232,0.22)" }}>
+            <p className="text-[8px] text-[rgba(240,237,232,0.22)]">
               Select multiple images
             </p>
           </div>
@@ -193,26 +127,20 @@ export function DataImagesPanel({
             type="file"
             accept="image/*"
             multiple
-            style={{ display: "none" }}
+            className="hidden"
             onChange={(e) => e.target.files && onUpload(e.target.files)}
           />
         </label>
       )}
 
       {autoDetectedColumns.length > 0 && (
-        <div style={{ marginTop: 8 }}>
+        <div className="mt-1.5">
           <p
-            style={{
-              fontSize: 9,
-              color: "rgba(240,237,232,0.22)",
-              marginBottom: 5,
-              lineHeight: 1.5,
-            }}
+            className="text-[8px] text-[rgba(240,237,232,0.22)] mb-[3px] leading-[1.4]"
           >
-            Photo field{autoDetectedColumns.length > 1 ? "s" : ""} — click to
-            place:
+            Photo fields — click to place:
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div className="flex flex-col gap-0.5">
             {autoDetectedColumns.map((col) => {
               const cnt = objects.filter(
                 (o) =>
@@ -224,18 +152,8 @@ export function DataImagesPanel({
                 <button
                   key={col}
                   onClick={() => onPlacePhoto(col)}
-                  className="chip"
+                  className="chip w-full text-left px-[7px] py-1 rounded-md text-[9px] font-medium cursor-pointer flex items-center justify-between"
                   style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "5px 8px",
-                    borderRadius: 7,
-                    fontSize: 10,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
                     background:
                       cnt > 0
                         ? "rgba(99,179,237,0.08)"
@@ -245,49 +163,26 @@ export function DataImagesPanel({
                   }}
                 >
                   <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      minWidth: 0,
-                    }}
+                    className="flex items-center gap-[5px] min-w-0"
                   >
-                    <span style={{ fontSize: 10, flexShrink: 0 }}><IconCamera size={10} /></span>
+                    <span className="text-[10px] shrink-0"><IconCamera size={10} /></span>
                     <span
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: 9,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                      className="font-mono text-[9px] overflow-hidden text-ellipsis whitespace-nowrap"
                     >
                       {col}
                     </span>
                   </div>
                   <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 3,
-                      flexShrink: 0,
-                    }}
+                    className="flex items-center gap-[3px] shrink-0"
                   >
                     {cnt > 0 && (
                       <span
-                        style={{
-                          background: "rgba(99,179,237,0.2)",
-                          color: "#63b3ed",
-                          borderRadius: 3,
-                          padding: "0 4px",
-                          fontSize: 8,
-                          fontWeight: 700,
-                        }}
+                        className="bg-[rgba(99,179,237,0.2)] text-[#63b3ed] rounded-md px-1 py-0 text-[8px] font-bold"
                       >
                         {cnt}
                       </span>
                     )}
-                    <span style={{ fontSize: 10, opacity: 0.4 }}>+</span>
+                    <span className="text-[10px] opacity-40">+</span>
                   </span>
                 </button>
               );
@@ -327,15 +222,7 @@ export function DataImageInfo({
 
   return (
     <div
-      style={{
-        padding: "10px",
-        borderRadius: 9,
-        background: "rgba(99,179,237,0.05)",
-        border: "1px solid rgba(99,179,237,0.25)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
+      className="p-2.5 rounded-md bg-[rgba(99,179,237,0.05)] border border-[rgba(99,179,237,0.25)] flex flex-col gap-2"
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 10, color: "rgba(240,237,232,0.45)" }}>
@@ -344,7 +231,7 @@ export function DataImageInfo({
         <span
           style={{
             padding: "2px 7px",
-            borderRadius: 5,
+            borderRadius: 6,
             fontSize: 9,
             fontWeight: 700,
             background: "rgba(99,179,237,0.15)",
@@ -359,7 +246,7 @@ export function DataImageInfo({
           style={{
             marginLeft: "auto",
             padding: "1px 5px",
-            borderRadius: 4,
+            borderRadius: 6,
             fontSize: 8,
             fontWeight: 700,
             background: "rgba(99,179,237,0.1)",
@@ -398,7 +285,7 @@ export function DataImageInfo({
                   width: 36,
                   height: 36,
                   objectFit: "cover",
-                  borderRadius: 4,
+                  borderRadius: 6,
                   border: "1px solid rgba(99,179,237,0.3)",
                   flexShrink: 0,
                 }}
@@ -432,7 +319,7 @@ export function DataImageInfo({
                 style={{
                   width: 36,
                   height: 36,
-                  borderRadius: 4,
+                  borderRadius: 6,
                   background: "rgba(255,255,255,0.04)",
                   border: "1px dashed rgba(255,255,255,0.1)",
                   display: "flex",

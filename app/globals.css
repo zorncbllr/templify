@@ -45,6 +45,18 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* App theme colors */
+  --color-app-bg: var(--app-bg);
+  --color-app-bg-deep: var(--app-bg-deep);
+  --color-app-panel: var(--app-panel);
+  --color-app-canvas: var(--app-canvas);
+  --color-app-text: var(--app-text);
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-blue: var(--app-accent-blue);
+  --color-app-warn: var(--app-warn);
+  --color-app-success: var(--app-success);
+  --color-app-danger: var(--app-danger);
 }
 
 :root {
@@ -114,6 +126,20 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+/* App theme variables */
+:root {
+  --app-bg: #0a0a0f;
+  --app-bg-deep: #0c0c14;
+  --app-panel: #0e0e18;
+  --app-canvas: #07070e;
+  --app-text: #f0ede8;
+  --app-accent: #e8ff47;
+  --app-accent-blue: #63b3ed;
+  --app-warn: #ffb400;
+  --app-success: #4cff91;
+  --app-danger: #ef4444;
 }
 
 @layer base {
