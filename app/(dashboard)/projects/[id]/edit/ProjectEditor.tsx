@@ -69,7 +69,7 @@ export default function ProjectEditor({
         })
         .eq("id", project.id);
     },
-    [project.id]
+    [project.id],
   );
 
   if (dataLoading) {
@@ -101,9 +101,7 @@ export default function ProjectEditor({
       initialColumns={project.columns}
       initialRows={rows}
       initialDataImages={dataImages}
-      initialDataFileName={
-        project.data_file_path?.split("/").pop() ?? null
-      }
+      initialDataFileName={project.data_file_path?.split("/").pop() ?? null}
       initialDataImagesLabel={project.data_images_label}
       watermark={userPlan === "free"}
       user={{ plan: userPlan, displayName }}

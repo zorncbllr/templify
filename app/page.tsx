@@ -26,7 +26,18 @@ import {
   IconScroll,
   IconWarning,
   IconCheck,
+  IconSettings,
+  IconLogOut,
 } from "@/components/Icons";
+import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/auth/actions";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const features = [
   {
@@ -130,9 +141,21 @@ const shrinkRows = [
 export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const [activeFormat, setActiveFormat] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) {
+        setIsLoggedIn(true);
+        setUserName(data.session.user.user_metadata?.full_name ?? null);
+        setUserAvatar(data.session.user.user_metadata?.avatar_url ?? null);
+      }
+    });
     const interval = setInterval(() => {
       setActiveFormat((p) => (p + 1) % exportFormats.length);
     }, 1800);
@@ -204,16 +227,93 @@ export default function LandingPage() {
           <span className="font-bold text-lg tracking-tight">Templify</span>
         </div>
         <div className="flex items-center gap-3">
-          <Link href={"/login"}>
-            <button className="px-6 py-2.5 rounded-full border border-white/20 text-sm font-medium hover:border-white/40 hover:bg-white/5 transition-all">
-              Sign in
-            </button>
-          </Link>
-          <Link href={"/sandbox"}>
-            <button className="px-6 py-2.5 rounded-full bg-app-accent text-app-bg text-sm font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(232,255,71,0.35)] transition-all">
-              Get started free
-            </button>
-          </Link>
+          {isLoggedIn ? (
+            <>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="cursor-pointer rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    style={{ background: "none", border: "none", padding: 0 }}
+                  >
+                    {userAvatar ? (
+                      <img
+                        src={userAvatar}
+                        alt={userName ?? "avatar"}
+                        width={36}
+                        height={36}
+                        className="rounded-full ring-1 ring-white/10 hover:ring-white/30 transition-all"
+                      />
+                    ) : (
+                      <div className="w-[36px] h-[36px] rounded-full bg-app-accent/20 border border-app-accent/30 flex items-center justify-center text-[11px] font-bold text-app-accent">
+                        {userName?.[0]}
+                      </div>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={10}
+                  className="w-[200px] p-1.5 rounded-xl border border-[rgba(255,255,255,0.08)] text-[#f0ede8]"
+                  style={{
+                    background: "rgba(10,10,18,0.97)",
+                    backdropFilter: "blur(20px)",
+                    boxShadow:
+                      "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)",
+                  }}
+                >
+                  {userName && (
+                    <>
+                      <div className="px-2.5 py-2 mb-1">
+                        <p className="text-[11px] font-semibold text-[#f0ede8] truncate">
+                          {userName}
+                        </p>
+                      </div>
+                      <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.06)] mx-0 my-1" />
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    asChild
+                    className="cursor-pointer rounded-lg px-2.5 py-2 text-[12px] text-[rgba(240,237,232,0.65)] hover:text-[#f0ede8] hover:bg-[rgba(255,255,255,0.05)] focus:bg-[rgba(255,255,255,0.05)] focus:text-[#f0ede8] outline-none transition-colors"
+                  >
+                    <Link
+                      href="/settings"
+                      className="flex items-center gap-2.5"
+                    >
+                      <IconSettings size={13} />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.06)] mx-0 my-1" />
+                  <DropdownMenuItem
+                    onClick={signOut}
+                    className="cursor-pointer rounded-lg px-2.5 py-2 text-[12px]  text-[rgba(240,237,232,0.65)] hover:text-[#f0ede8] hover:bg-[rgba(220,60,60,0.06)] focus:bg-[rgba(220,60,60,0.06)] focus:text-[#f0ede8] outline-none transition-colors flex items-center gap-2.5"
+                  >
+                    <IconLogOut size={13} />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="w-px h-5 bg-white/10" />
+              <Link href="/dashboard">
+                <button className="px-6 py-2.5 rounded-full bg-app-accent text-app-bg text-sm font-bold hover:-translate-y-0.5 transition-all">
+                  Open app
+                </button>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <button className="px-6 py-2.5 rounded-full border border-white/20 text-sm font-medium hover:border-white/40 hover:bg-white/5 transition-all">
+                  Sign in
+                </button>
+              </Link>
+              <Link href="/sandbox">
+                <button className="px-6 py-2.5 rounded-full bg-app-accent text-app-bg text-sm font-bold hover:-translate-y-0.5 hover:shadow-[0_8px_32px_rgba(232,255,71,0.35)] transition-all">
+                  Get started free
+                </button>
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -269,10 +369,17 @@ export default function LandingPage() {
               className="px-5 py-2 rounded-full text-sm font-semibold tracking-wider border transition-all duration-300"
               style={{
                 background:
-                  activeFormat === i ? "var(--app-accent)" : "rgba(255,255,255,0.05)",
-                color: activeFormat === i ? "var(--app-bg)" : "rgba(240,237,232,0.5)",
+                  activeFormat === i
+                    ? "var(--app-accent)"
+                    : "rgba(255,255,255,0.05)",
+                color:
+                  activeFormat === i
+                    ? "var(--app-bg)"
+                    : "rgba(240,237,232,0.5)",
                 borderColor:
-                  activeFormat === i ? "var(--app-accent)" : "rgba(255,255,255,0.1)",
+                  activeFormat === i
+                    ? "var(--app-accent)"
+                    : "rgba(255,255,255,0.1)",
               }}
             >
               {f}
