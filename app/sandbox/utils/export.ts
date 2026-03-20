@@ -112,7 +112,6 @@ export async function renderThumbnail(
       if (!text) continue;
 
       const codeType = f.codeType ?? "text";
-      if (codeType === "qr" || codeType === "barcode") continue; // skip codes in thumbnail
 
       ctx.save();
 
@@ -122,6 +121,15 @@ export async function renderThumbnail(
         ctx.translate(cx, cy);
         ctx.rotate((f.rotation * Math.PI) / 180);
         ctx.translate(-cx, -cy);
+      }
+
+      if (codeType === "qr" || codeType === "barcode") {
+        const codeCanvas = await generateCodeCanvas(text, codeType, f.width, f.height, f.color);
+        if (codeCanvas) {
+          ctx.drawImage(codeCanvas, f.x, f.y, f.width, f.height);
+        }
+        ctx.restore();
+        continue;
       }
 
       const fs = f.textOverflow === "shrink"
