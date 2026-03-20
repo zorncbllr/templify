@@ -1,8 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { NumInput } from "./StylePanels";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
-  Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
 } from "@/components/ui/command";
 import type {
   CanvasObject,
@@ -14,7 +23,14 @@ import type {
 import { SHEET_PRESETS } from "../types/constants";
 import { runImpositionGA } from "../lib/impositionGA";
 import { TemplateThumbnail } from "./TemplateThumbnail";
-import { IconGrid, IconClose, IconArrowDown, IconRotate, IconCheck, IconChevronDown } from "@/components/Icons";
+import {
+  IconGrid,
+  IconClose,
+  IconArrowDown,
+  IconRotate,
+  IconCheck,
+  IconChevronDown,
+} from "@/components/Icons";
 
 const PREVIEW_W = 520;
 const MM_TO_PX = 2.835;
@@ -174,24 +190,16 @@ export function ImpositionModal({
         }}
       >
         {/* Header */}
-        <div
-          className="flex items-center justify-between mb-5"
-        >
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 bg-[rgba(232,255,71,0.12)] border border-[rgba(232,255,71,0.3)] rounded-md flex items-center justify-center text-[15px]"
-            >
+            <div className="w-8 h-8 bg-[rgba(232,255,71,0.12)] border border-[rgba(232,255,71,0.3)] rounded-md flex items-center justify-center text-[15px]">
               <IconGrid size={15} />
             </div>
             <div>
-              <h2
-                className="text-[15px] font-bold text-[#f0ede8] tracking-[-0.02em]"
-              >
+              <h2 className="text-[15px] font-bold text-[#f0ede8] tracking-[-0.02em]">
                 Print Imposition & Export
               </h2>
-              <p
-                className="text-[10px] text-[rgba(240,237,232,0.35)] mt-px"
-              >
+              <p className="text-[10px] text-[rgba(240,237,232,0.35)] mt-px">
                 GA-optimized card layout on print sheets
               </p>
             </div>
@@ -206,32 +214,40 @@ export function ImpositionModal({
 
         <div className="flex gap-5 flex-1 overflow-hidden">
           {/* Left controls */}
-          <div
-            className="w-[220px] shrink-0 flex flex-col gap-3.5 overflow-y-auto"
-          >
+          <div className="w-[220px] shrink-0 flex flex-col gap-3.5 overflow-y-auto">
             {/* Sheet size dropdown */}
             <div>
-              <p
-                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-[7px]"
-              >
+              <p className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-[7px]">
                 Sheet Size
               </p>
               <Popover open={sheetOpen} onOpenChange={setSheetOpen}>
                 <PopoverTrigger asChild>
-                  <button
-                    className="w-full h-8 px-2.5 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[11px] font-semibold text-[#f0ede8] flex items-center justify-between cursor-pointer"
-                  >
+                  <button className="w-full h-8 px-2.5 rounded-md bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[11px] font-semibold text-[#f0ede8] flex items-center justify-between cursor-pointer">
                     <span className="truncate">
-                      {selectedSheet.label} ({selectedSheet.w}x{selectedSheet.h})
+                      {selectedSheet.label} ({selectedSheet.w}x{selectedSheet.h}
+                      )
                     </span>
-                    <IconChevronDown size={10} style={{ opacity: 0.4, flexShrink: 0 }} />
+                    <IconChevronDown
+                      size={10}
+                      style={{ opacity: 0.4, flexShrink: 0 }}
+                    />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[220px] p-0" align="start" container={modalRef.current} style={{ zIndex: 600 }}>
+                <PopoverContent
+                  className="w-[220px] p-0"
+                  align="start"
+                  container={modalRef.current}
+                  style={{ zIndex: 600 }}
+                >
                   <Command>
-                    <CommandInput placeholder="Search paper size..." className="text-[11px]" />
+                    <CommandInput
+                      placeholder="Search paper size..."
+                      className="text-[11px]"
+                    />
                     <CommandList>
-                      <CommandEmpty className="text-[11px]">No size found.</CommandEmpty>
+                      <CommandEmpty className="text-[11px]">
+                        No size found.
+                      </CommandEmpty>
                       <CommandGroup heading="Default">
                         <CommandItem
                           value="Default"
@@ -242,44 +258,14 @@ export function ImpositionModal({
                           className="text-[11px]"
                         >
                           Default ({customSheet.w}x{customSheet.h})
-                          {selectedSheet.label === "Default" && <IconCheck size={10} className="ml-auto" />}
+                          {selectedSheet.label === "Default" && (
+                            <IconCheck size={10} className="ml-auto" />
+                          )}
                         </CommandItem>
                       </CommandGroup>
                       <CommandGroup heading="ISO A Series">
-                        {SHEET_PRESETS.filter((s) => s.label.startsWith("A")).map((s) => (
-                          <CommandItem
-                            key={s.label}
-                            value={s.label}
-                            onSelect={() => {
-                              setSelectedSheet(s);
-                              setSheetOpen(false);
-                            }}
-                            className="text-[11px]"
-                          >
-                            {s.label} ({s.w}x{s.h})
-                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                      <CommandGroup heading="ISO B Series">
-                        {SHEET_PRESETS.filter((s) => s.label.startsWith("B")).map((s) => (
-                          <CommandItem
-                            key={s.label}
-                            value={s.label}
-                            onSelect={() => {
-                              setSelectedSheet(s);
-                              setSheetOpen(false);
-                            }}
-                            className="text-[11px]"
-                          >
-                            {s.label} ({s.w}x{s.h})
-                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                      <CommandGroup heading="US / North American">
                         {SHEET_PRESETS.filter((s) =>
-                          ["Letter", "Legal", "Tabloid", "Executive"].includes(s.label)
+                          s.label.startsWith("A"),
                         ).map((s) => (
                           <CommandItem
                             key={s.label}
@@ -291,12 +277,16 @@ export function ImpositionModal({
                             className="text-[11px]"
                           >
                             {s.label} ({s.w}x{s.h})
-                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                            {selectedSheet.label === s.label && (
+                              <IconCheck size={10} className="ml-auto" />
+                            )}
                           </CommandItem>
                         ))}
                       </CommandGroup>
-                      <CommandGroup heading="Square / Specialty">
-                        {SHEET_PRESETS.filter((s) => s.label.startsWith("Square")).map((s) => (
+                      <CommandGroup heading="ISO B Series">
+                        {SHEET_PRESETS.filter((s) =>
+                          s.label.startsWith("B"),
+                        ).map((s) => (
                           <CommandItem
                             key={s.label}
                             value={s.label}
@@ -307,7 +297,51 @@ export function ImpositionModal({
                             className="text-[11px]"
                           >
                             {s.label} ({s.w}x{s.h})
-                            {selectedSheet.label === s.label && <IconCheck size={10} className="ml-auto" />}
+                            {selectedSheet.label === s.label && (
+                              <IconCheck size={10} className="ml-auto" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="US / North American">
+                        {SHEET_PRESETS.filter((s) =>
+                          ["Letter", "Legal", "Tabloid", "Executive"].includes(
+                            s.label,
+                          ),
+                        ).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && (
+                              <IconCheck size={10} className="ml-auto" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      <CommandGroup heading="Square / Specialty">
+                        {SHEET_PRESETS.filter((s) =>
+                          s.label.startsWith("Square"),
+                        ).map((s) => (
+                          <CommandItem
+                            key={s.label}
+                            value={s.label}
+                            onSelect={() => {
+                              setSelectedSheet(s);
+                              setSheetOpen(false);
+                            }}
+                            className="text-[11px]"
+                          >
+                            {s.label} ({s.w}x{s.h})
+                            {selectedSheet.label === s.label && (
+                              <IconCheck size={10} className="ml-auto" />
+                            )}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -319,68 +353,39 @@ export function ImpositionModal({
 
             {/* Min bleed */}
             <div>
-              <p
-                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1"
-              >
+              <p className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1">
                 Min Bleed Gap
               </p>
-              <NumInput value={minBleedMm} min={0} max={10} step={0.5} suffix="mm" onChange={setMinBleedMm} style={{ width: 80, marginBottom: 4 }} />
-              <div className="flex gap-1 mt-[7px]">
-                {[0, 2, 3, 5, 8].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setMinBleedMm(v)}
-                    className="flex-1 px-0.5 py-1 rounded-md text-[9px] font-bold cursor-pointer border-none"
-                    style={{
-                      background:
-                        minBleedMm === v
-                          ? "rgba(232,255,71,0.15)"
-                          : "rgba(255,255,255,0.05)",
-                      color:
-                        minBleedMm === v ? "#e8ff47" : "rgba(240,237,232,0.4)",
-                    }}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
+              <NumInput
+                value={minBleedMm}
+                min={0}
+                max={10}
+                step={0.5}
+                suffix="mm"
+                onChange={setMinBleedMm}
+                style={{ width: "100%", marginBottom: 4 }}
+              />
             </div>
 
             {/* Card info */}
-            <div
-              className="px-2.5 py-[9px] rounded-md bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]"
-            >
-              <p
-                className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1.5"
-              >
+            <div className="px-2.5 py-[9px] rounded-md bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]">
+              <p className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em] mb-1.5">
                 Card
               </p>
               <div className="flex flex-col gap-[3px]">
-                <div
-                  className="flex justify-between"
-                >
-                  <span
-                    className="text-[9px] text-[rgba(240,237,232,0.35)]"
-                  >
+                <div className="flex justify-between">
+                  <span className="text-[9px] text-[rgba(240,237,232,0.35)]">
                     Size
                   </span>
-                  <span
-                    className="text-[9px] text-[#f0ede8] font-mono"
-                  >
+                  <span className="text-[9px] text-[#f0ede8] font-mono">
                     {canvasSize.width}×{canvasSize.height}px
                   </span>
                 </div>
-                <div
-                  className="flex justify-between"
-                >
-                  <span
-                    className="text-[9px] text-[rgba(240,237,232,0.35)]"
-                  >
+                <div className="flex justify-between">
+                  <span className="text-[9px] text-[rgba(240,237,232,0.35)]">
                     Total cards
                   </span>
-                  <span
-                    className="text-[9px] text-[#f0ede8] font-mono"
-                  >
+                  <span className="text-[9px] text-[#f0ede8] font-mono">
                     {totalCards || "—"}
                   </span>
                 </div>
@@ -390,14 +395,10 @@ export function ImpositionModal({
             {/* Optimized Result */}
             {bestResult && bestResult.count > 0 ? (
               <div className="flex flex-col gap-2">
-                <p
-                  className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]"
-                >
+                <p className="text-[9px] font-bold text-[rgba(240,237,232,0.28)] uppercase tracking-[0.08em]">
                   Optimized Result
                 </p>
-                <div
-                  className="grid grid-cols-2 gap-1.5"
-                >
+                <div className="grid grid-cols-2 gap-1.5">
                   {[
                     [
                       "Cards / sheet",
@@ -457,33 +458,6 @@ export function ImpositionModal({
                       </p>
                     </div>
                   ))}
-                </div>
-                <div
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 6,
-                    background: "rgba(232,255,71,0.04)",
-                    border: "1px solid rgba(232,255,71,0.15)",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 9,
-                      color: "rgba(240,237,232,0.4)",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    Margins: T{bestResult.gene.marginTop} R
-                    {bestResult.gene.marginRight} B
-                    {bestResult.gene.marginBottom} L{bestResult.gene.marginLeft}
-                    px
-                    {bestResult.gene.rotation === 1 && (
-                      <span style={{ color: "#63b3ed" }}>
-                        {" "}
-                        · Cards rotated 90°
-                      </span>
-                    )}
-                  </p>
                 </div>
               </div>
             ) : gaRunning ? (
@@ -564,7 +538,13 @@ export function ImpositionModal({
                 ))}
               </div>
               <button
-                onClick={() => bestResult && onExport(bestResult, { w: selectedSheet.w, h: selectedSheet.h })}
+                onClick={() =>
+                  bestResult &&
+                  onExport(bestResult, {
+                    w: selectedSheet.w,
+                    h: selectedSheet.h,
+                  })
+                }
                 disabled={exportProgress !== null || !bestResult}
                 style={{
                   width: "100%",
@@ -735,7 +715,13 @@ export function ImpositionModal({
                                   fontWeight: 700,
                                 }}
                               >
-                                {isRotated ? <IconRotate size={Math.min(8, cardPreviewH * 0.25)} /> : ""}
+                                {isRotated ? (
+                                  <IconRotate
+                                    size={Math.min(8, cardPreviewH * 0.25)}
+                                  />
+                                ) : (
+                                  ""
+                                )}
                               </span>
                             </div>
                           ) : (
