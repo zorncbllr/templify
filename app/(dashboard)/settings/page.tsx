@@ -53,12 +53,9 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setCancelStatus("done");
-      setCancelDate(
-        data.cancelsAt
-          ? new Date(data.cancelsAt * 1000).toLocaleDateString()
-          : null,
-      );
       setCancelConfirm(false);
+      // Reload to reflect the free plan
+      window.location.reload();
     } catch {
       setCancelStatus("error");
     }

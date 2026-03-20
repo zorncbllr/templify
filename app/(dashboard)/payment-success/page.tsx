@@ -12,7 +12,6 @@ export default function PaymentSuccessPage() {
   useEffect(() => {
     const supabase = createClient();
     let attempts = 0;
-    const MAX_ATTEMPTS = 15;
     let verified = false;
 
     async function tryVerifyDirectly() {
@@ -72,12 +71,6 @@ export default function PaymentSuccessPage() {
       if (attempts === 5 && !verified) {
         verified = await tryVerifyDirectly();
         if (verified) return;
-      }
-
-      if (attempts >= MAX_ATTEMPTS) {
-        setPolling(false);
-        setTimedOut(true);
-        return;
       }
 
       setTimeout(checkPlan, 2000);

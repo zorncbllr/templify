@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
   // CSRF: verify Origin header
@@ -37,11 +38,23 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
 
-  return NextResponse.json(
-    {
-      error:
-        "PayMongo subscriptions expire automatically — no cancellation needed",
-    },
-    { status: 400 },
-  );
+  // PayMongo plans are one-time payments that expire — "cancelling" means
+  // downgrading to free immediately and clearing the expiry.
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({
+      plan: "free",
+      plan_expires_at: null,
+      payment_gateway: null,
+    })
+    .eq("id", user.id);
+
+  if (error)
+    return NextResponse.json(
+      { error: "Failed to cancel subscription" },
+      { status: 500 },
+    );
+
+  return NextResponse.json({ cancelled: true });
 }

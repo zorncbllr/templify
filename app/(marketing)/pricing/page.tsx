@@ -100,6 +100,14 @@ export default function PricingPage() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Detect cancelled/failed payment return from PayMongo
+    const pendingSession = sessionStorage.getItem("checkout_session_id");
+    if (pendingSession) {
+      setCheckoutError("Payment was not completed. Please try again.");
+      sessionStorage.removeItem("checkout_session_id");
+      sessionStorage.removeItem("checkout_gateway");
+    }
+
     const cookieLocale = document.cookie
       .split(";")
       .find((c) => c.trim().startsWith("locale="))
@@ -136,6 +144,7 @@ export default function PricingPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       sessionStorage.setItem("checkout_session_id", data.sessionId);
+      sessionStorage.setItem("checkout_gateway", data.gateway);
       window.location.href = data.checkoutUrl;
     } catch (err: any) {
       setCheckoutError(err.message ?? "Something went wrong");

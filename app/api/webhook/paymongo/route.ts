@@ -5,7 +5,10 @@ import { verifyWebhookSignature } from '@/lib/payments/paymongo';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { PRICING, getPlanExpiry, type PlanKey } from '@/lib/config/pricing';
 
-const VALID_PLANS: PlanKey[] = ['pro_monthly', 'pro_quarterly', 'pro_annual'];
+const VALID_PLANS: PlanKey[] = [
+  'pro_monthly', 'pro_quarterly', 'pro_annual',
+  'biz_monthly', 'biz_quarterly', 'biz_annual',
+];
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
@@ -56,8 +59,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Amount verification — prevent tampered checkout sessions
-  const expectedAmount = PRICING[plan as PlanKey]['ph']?.amount;
-  if (!expectedAmount || amount !== expectedAmount) {
+  // Accept amount from either locale (user could be ph or intl)
+  const planPricing = PRICING[plan as PlanKey];
+  const validAmounts = [planPricing.ph.amount, planPricing.intl.amount];
+  if (!validAmounts.includes(amount)) {
     return new NextResponse('Amount mismatch', { status: 400 });
   }
 
