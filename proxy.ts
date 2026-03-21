@@ -14,7 +14,7 @@ function isProtected(pathname: string) {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
 
   // Refresh session — required for SSR auth to work correctly
