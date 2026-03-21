@@ -92,11 +92,7 @@ export default function SettingsPage() {
   );
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh] text-app-text/40 text-sm">
-        Loading...
-      </div>
-    );
+    return <SettingsSkeleton />;
   }
 
   return (
@@ -303,6 +299,108 @@ export default function SettingsPage() {
         <IconLogOut size={15} />
         Sign out
       </button>
+    </div>
+  );
+}
+
+function Shimmer({ className }: { className?: string }) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-md bg-[rgba(255,255,255,0.03)] ${className ?? ""}`}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 60%, transparent 100%)",
+          animation: "settings-shimmer 1.8s ease-in-out infinite",
+        }}
+      />
+    </div>
+  );
+}
+
+function SettingsSkeleton() {
+  return (
+    <div className="max-w-160 mx-auto px-6 py-12">
+      <style>{`
+        @keyframes settings-shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes settings-fade-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div
+        className="mb-10 flex flex-col gap-2"
+        style={{ animation: "settings-fade-in 0.3s ease-out both" }}
+      >
+        <Shimmer className="w-[120px] h-[26px]" />
+        <Shimmer className="w-[240px] h-[14px]" />
+      </div>
+
+      {/* Account section */}
+      <section
+        className="bg-white/[0.025] border border-white/[0.07] rounded-2xl p-6 mb-5"
+        style={{ animation: "settings-fade-in 0.4s ease-out 0.1s both" }}
+      >
+        <Shimmer className="w-[60px] h-[10px] mb-5" />
+        <div className="flex items-center gap-4">
+          <Shimmer className="w-11 h-11 !rounded-full shrink-0" />
+          <div className="flex flex-col gap-2">
+            <Shimmer className="w-[140px] h-[15px]" />
+            <Shimmer className="w-[200px] h-[13px]" />
+          </div>
+        </div>
+      </section>
+
+      {/* Subscription section */}
+      <section
+        className="bg-white/[0.025] border border-white/[0.07] rounded-2xl p-6 mb-5"
+        style={{ animation: "settings-fade-in 0.4s ease-out 0.2s both" }}
+      >
+        <Shimmer className="w-[90px] h-[10px] mb-5" />
+        <div className="flex items-center justify-between mb-3">
+          <Shimmer className="w-[100px] h-[18px]" />
+          <Shimmer className="w-[75px] h-[30px] !rounded-lg" />
+        </div>
+      </section>
+
+      {/* Plan limits section */}
+      <section
+        className="bg-white/[0.025] border border-white/[0.07] rounded-2xl p-6 mb-5"
+        style={{ animation: "settings-fade-in 0.4s ease-out 0.3s both" }}
+      >
+        <Shimmer className="w-[80px] h-[10px] mb-5" />
+
+        {/* Storage bar */}
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <Shimmer className="w-[50px] h-[13px]" />
+            <Shimmer className="w-[100px] h-[12px]" />
+          </div>
+          <Shimmer className="w-full h-[8px] !rounded-full" />
+        </div>
+
+        {/* Limit rows */}
+        <div className="space-y-3">
+          {[130, 100, 70].map((w, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <Shimmer className={`w-[${w}px] h-[13px]`} />
+              <Shimmer className="w-[40px] h-[13px]" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Sign out */}
+      <div style={{ animation: "settings-fade-in 0.4s ease-out 0.4s both" }}>
+        <Shimmer className="w-[80px] h-[14px]" />
+      </div>
     </div>
   );
 }
