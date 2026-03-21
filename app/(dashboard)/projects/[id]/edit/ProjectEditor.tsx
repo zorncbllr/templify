@@ -147,21 +147,7 @@ export default function ProjectEditor({
   }, [userId, project.id]);
 
   if (dataLoading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          background: "#0a0a10",
-          color: "rgba(240,237,232,0.5)",
-          fontSize: 14,
-        }}
-      >
-        Loading project data...
-      </div>
-    );
+    return <EditorSkeleton />;
   }
 
   return (
@@ -186,6 +172,168 @@ export default function ProjectEditor({
       maxPhotoColumns={limits.maxPhotoColumns}
       maxRows={limits.maxRows}
     />
+  );
+}
+
+function Shimmer({ className }: { className?: string }) {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-md bg-[rgba(255,255,255,0.03)] ${className ?? ""}`}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 60%, transparent 100%)",
+          animation: "skeleton-shimmer 1.8s ease-in-out infinite",
+        }}
+      />
+    </div>
+  );
+}
+
+function EditorSkeleton() {
+  return (
+    <div className="flex flex-col h-screen bg-app-bg-deep">
+      <style>{`
+        @keyframes skeleton-shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes skeleton-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <header
+        className="flex items-center justify-between px-4 h-[50px] border-b border-border/60 shrink-0"
+        style={{ animation: "skeleton-fade-in 0.3s ease-out" }}
+      >
+        <div className="flex items-center gap-2.5">
+          <Shimmer className="w-[26px] h-[26px] !rounded-md" />
+          <Shimmer className="w-[70px] h-[13px]" />
+          <div className="w-px h-[18px] bg-[rgba(255,255,255,0.06)]" />
+          <Shimmer className="w-[120px] h-[13px]" />
+          <div className="w-px h-[18px] bg-[rgba(255,255,255,0.06)]" />
+          <div className="flex gap-0.5">
+            <Shimmer className="w-7 h-7" />
+            <Shimmer className="w-7 h-7" />
+          </div>
+          <Shimmer className="w-[110px] h-[28px]" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Shimmer className="w-[90px] h-[32px]" />
+          <Shimmer className="w-[190px] h-[32px]" />
+          <div className="w-px h-[18px] bg-[rgba(255,255,255,0.06)]" />
+          <Shimmer className="w-[42px] h-[22px]" />
+          <Shimmer className="w-[80px] h-[13px]" />
+          <Shimmer className="w-7 h-7" />
+          <Shimmer className="w-7 h-7" />
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left panel */}
+        <aside
+          className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] bg-[#0e0e18] flex flex-col"
+          style={{ animation: "skeleton-fade-in 0.4s ease-out" }}
+        >
+          {/* Image upload area */}
+          <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <Shimmer className="w-full h-[42px]" />
+          </div>
+
+          {/* Data file area */}
+          <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <Shimmer className="w-full h-[42px]" />
+          </div>
+
+          {/* Data images area */}
+          <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <Shimmer className="w-full h-[42px]" />
+          </div>
+
+          {/* Layers section */}
+          <div className="px-2.5 pt-3 flex flex-col gap-2">
+            <Shimmer className="w-[50px] h-[8px]" />
+            <div className="flex flex-col gap-1.5 mt-1">
+              <Shimmer className="w-full h-[30px]" />
+              <Shimmer className="w-full h-[30px]" />
+              <Shimmer className="w-full h-[30px]" />
+            </div>
+          </div>
+
+          {/* Shortcuts section at bottom */}
+          <div className="mt-auto px-2.5 pb-3">
+            <Shimmer className="w-[70px] h-[8px]" />
+          </div>
+        </aside>
+
+        {/* Canvas area */}
+        <main
+          className="flex-1 bg-app-bg-deep flex items-center justify-center relative"
+          style={{ animation: "skeleton-fade-in 0.5s ease-out" }}
+        >
+          <Shimmer className="w-[420px] h-[280px] !rounded-lg" />
+          {/* Zoom controls hint */}
+          <div className="absolute bottom-4 right-4 flex gap-1">
+            <Shimmer className="w-7 h-7" />
+            <Shimmer className="w-7 h-7" />
+            <Shimmer className="w-7 h-7" />
+          </div>
+          {/* Page info hint */}
+          <Shimmer className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[140px] h-[10px]" />
+        </main>
+
+        {/* Right panel */}
+        <aside
+          className="w-[248px] shrink-0 border-l border-l-[rgba(255,255,255,0.06)] bg-[#0e0e18] flex flex-col overflow-hidden"
+          style={{ animation: "skeleton-fade-in 0.6s ease-out" }}
+        >
+          {/* Properties header */}
+          <div className="px-3 pt-3 pb-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <Shimmer className="w-[70px] h-[8px]" />
+            <div className="flex gap-2 mt-2.5">
+              <Shimmer className="flex-1 h-[30px]" />
+              <Shimmer className="flex-1 h-[30px]" />
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Shimmer className="flex-1 h-[30px]" />
+              <Shimmer className="flex-1 h-[30px]" />
+            </div>
+          </div>
+
+          {/* Style section */}
+          <div className="px-3 pt-3 pb-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <Shimmer className="w-[50px] h-[8px]" />
+            <Shimmer className="w-full h-[30px] mt-2.5" />
+            <Shimmer className="w-full h-[30px] mt-2" />
+            <div className="flex gap-2 mt-2">
+              <Shimmer className="flex-1 h-[30px]" />
+              <Shimmer className="flex-1 h-[30px]" />
+            </div>
+          </div>
+
+          {/* Shadow section */}
+          <div className="px-3 pt-3 pb-2 border-b border-b-[rgba(255,255,255,0.06)]">
+            <div className="flex items-center justify-between">
+              <Shimmer className="w-[55px] h-[8px]" />
+              <Shimmer className="w-[32px] h-[16px] !rounded-full" />
+            </div>
+          </div>
+
+          {/* Border section */}
+          <div className="px-3 pt-3 pb-2">
+            <div className="flex items-center justify-between">
+              <Shimmer className="w-[45px] h-[8px]" />
+              <Shimmer className="w-[32px] h-[16px] !rounded-full" />
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
   );
 }
 
