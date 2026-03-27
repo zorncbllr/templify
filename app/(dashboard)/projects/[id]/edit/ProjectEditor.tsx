@@ -102,7 +102,9 @@ export default function ProjectEditor({
   const handleDataImagesUpload = useCallback(
     async (files: FileList): Promise<DataImageMap> => {
       const imageFiles = Array.from(files).filter(
-        (f) => /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.name) || f.type.startsWith("image/"),
+        (f) =>
+          /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(f.name) ||
+          f.type.startsWith("image/"),
       );
       if (!imageFiles.length) return {};
 

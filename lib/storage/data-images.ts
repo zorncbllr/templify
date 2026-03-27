@@ -1,42 +1,60 @@
-import { createClient } from '@/lib/supabase/client';
-import { normalizeImageKey } from '@/app/sandbox/utils/data';
-import type { DataImageMap } from '@/app/sandbox/types';
+import {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from "@aws-sdk/client-s3";
+import { normalizeImageKey } from "@/app/sandbox/utils/data";
+import type { DataImageMap } from "@/app/sandbox/types";
 
-const BUCKET = 'data-images';
+const BUCKET = "bulk-images";
+const CDN_URL = process.env.NEXT_PUBLIC_R2_CDN_URL; // e.g. https://cdn.yoursite.com or your r2.dev URL
 
-/** Upload a batch of image files to Supabase Storage and return the DataImageMap + total bytes uploaded. */
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY!,
+    secretAccessKey: process.env.R2_SECRET_KEY!,
+  },
+});
+
+/** Get the public CDN URL for a given path */
+function getPublicUrl(path: string): string {
+  return `${CDN_URL}/${path}`;
+}
+
+/** Upload a batch of image files to R2 and return the DataImageMap + total bytes uploaded. */
 export async function uploadDataImages(
   userId: string,
   projectId: string,
   files: File[],
 ): Promise<{ map: DataImageMap; bytesUploaded: number }> {
-  const supabase = createClient();
   const map: DataImageMap = {};
   let bytesUploaded = 0;
 
   await Promise.all(
     files.map(async (file) => {
       const path = `${userId}/${projectId}/${file.name}`;
+      const arrayBuffer = await file.arrayBuffer();
 
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { upsert: true });
+      try {
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: path,
+            Body: Buffer.from(arrayBuffer),
+            ContentType: file.type || "image/jpeg",
+          }),
+        );
 
-      if (error) {
-        console.error(`Failed to upload ${file.name}:`, error.message);
-        return;
-      }
+        bytesUploaded += file.size;
 
-      bytesUploaded += file.size;
-
-      // Create a signed URL for immediate use
-      const { data: signedData } = await supabase.storage
-        .from(BUCKET)
-        .createSignedUrl(path, 3600);
-
-      if (signedData?.signedUrl) {
-        map[file.name.toLowerCase()] = signedData.signedUrl;
-        map[normalizeImageKey(file.name)] = signedData.signedUrl;
+        const publicUrl = getPublicUrl(path);
+        map[file.name.toLowerCase()] = publicUrl;
+        map[normalizeImageKey(file.name)] = publicUrl;
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
       }
     }),
   );
@@ -44,68 +62,63 @@ export async function uploadDataImages(
   return { map, bytesUploaded };
 }
 
-/** Load all data images for a project from Supabase Storage. */
+/** Load all data images for a project from R2. */
 export async function loadDataImages(
   userId: string,
   projectId: string,
 ): Promise<DataImageMap> {
-  const supabase = createClient();
-  const folder = `${userId}/${projectId}`;
+  const folder = `${userId}/${projectId}/`;
 
-  const { data: files, error } = await supabase.storage
-    .from(BUCKET)
-    .list(folder);
+  const { Contents } = await r2.send(
+    new ListObjectsV2Command({
+      Bucket: BUCKET,
+      Prefix: folder,
+    }),
+  );
 
-  if (error || !files || files.length === 0) return {};
+  if (!Contents || Contents.length === 0) return {};
 
   const map: DataImageMap = {};
 
-  // Generate signed URLs for all files
-  const paths = files
-    .filter((f) => f.name && !f.name.startsWith('.'))
-    .map((f) => `${folder}/${f.name}`);
+  for (const obj of Contents) {
+    if (!obj.Key) continue;
+    const fileName = obj.Key.split("/").pop();
+    if (!fileName || fileName.startsWith(".")) continue;
 
-  if (paths.length === 0) return {};
-
-  const { data: signedUrls } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrls(paths, 3600);
-
-  if (signedUrls) {
-    for (const item of signedUrls) {
-      if (!item.signedUrl || item.error) continue;
-      // Extract filename from path
-      const fileName = item.path?.split('/').pop();
-      if (!fileName) continue;
-      map[fileName.toLowerCase()] = item.signedUrl;
-      map[normalizeImageKey(fileName)] = item.signedUrl;
-    }
+    const publicUrl = getPublicUrl(obj.Key);
+    map[fileName.toLowerCase()] = publicUrl;
+    map[normalizeImageKey(fileName)] = publicUrl;
   }
 
   return map;
 }
 
-/** Delete all data images for a project from Supabase Storage. Returns bytes freed. */
+/** Delete all data images for a project from R2. Returns bytes freed. */
 export async function deleteProjectDataImages(
   userId: string,
   projectId: string,
 ): Promise<number> {
-  const supabase = createClient();
-  const folder = `${userId}/${projectId}`;
+  const folder = `${userId}/${projectId}/`;
 
-  const { data: files } = await supabase.storage
-    .from(BUCKET)
-    .list(folder);
+  const { Contents } = await r2.send(
+    new ListObjectsV2Command({
+      Bucket: BUCKET,
+      Prefix: folder,
+    }),
+  );
 
-  if (!files || files.length === 0) return 0;
+  if (!Contents || Contents.length === 0) return 0;
 
-  let bytesFreed = 0;
-  for (const f of files) {
-    bytesFreed += f.metadata?.size ?? 0;
-  }
+  const bytesFreed = Contents.reduce((acc, obj) => acc + (obj.Size ?? 0), 0);
 
-  const paths = files.map((f) => `${folder}/${f.name}`);
-  await supabase.storage.from(BUCKET).remove(paths);
+  await r2.send(
+    new DeleteObjectsCommand({
+      Bucket: BUCKET,
+      Delete: {
+        Objects: Contents.map((obj) => ({ Key: obj.Key! })),
+      },
+    }),
+  );
 
   return bytesFreed;
 }

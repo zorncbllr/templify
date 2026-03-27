@@ -1,6 +1,19 @@
-import type { CanvasObject, CanvasSize, RowData, DataImageMap, ImageObject, TextField, ImpositionResult } from "../types";
+import type {
+  CanvasObject,
+  CanvasSize,
+  RowData,
+  DataImageMap,
+  ImageObject,
+  TextField,
+  ImpositionResult,
+} from "../types";
 import { resolveDataImageSrc } from "./data";
-import { shrinkFontSize, loadScript, downloadBlob, generateCodeCanvas } from "./rendering";
+import {
+  shrinkFontSize,
+  loadScript,
+  downloadBlob,
+  generateCodeCanvas,
+} from "./rendering";
 
 /** Load an image from a src URL and return it as an HTMLImageElement. */
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -24,7 +37,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  */
 function roundRectPath(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, r: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
 ) {
   r = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -74,13 +91,22 @@ export async function renderThumbnail(
       const imgObj = obj as ImageObject;
       const src = imgObj.isDataImage
         ? resolveDataImageSrc(
-            imgObj.isDataImage, imgObj.dataImageColumn, 0,
-            imgObj.src, rows, 0, dataImages,
+            imgObj.isDataImage,
+            imgObj.dataImageColumn,
+            0,
+            imgObj.src,
+            rows,
+            0,
+            dataImages,
           )
         : imgObj.src;
 
       let img: HTMLImageElement;
-      try { img = await loadImage(src); } catch { continue; }
+      try {
+        img = await loadImage(src);
+      } catch {
+        continue;
+      }
 
       const x = imgObj.isBackground ? 0 : imgObj.x;
       const y = imgObj.isBackground ? 0 : imgObj.y;
@@ -124,7 +150,13 @@ export async function renderThumbnail(
       }
 
       if (codeType === "qr" || codeType === "barcode") {
-        const codeCanvas = await generateCodeCanvas(text, codeType, f.width, f.height, f.color);
+        const codeCanvas = await generateCodeCanvas(
+          text,
+          codeType,
+          f.width,
+          f.height,
+          f.color,
+        );
         if (codeCanvas) {
           ctx.drawImage(codeCanvas, f.x, f.y, f.width, f.height);
         }
@@ -132,9 +164,18 @@ export async function renderThumbnail(
         continue;
       }
 
-      const fs = f.textOverflow === "shrink"
-        ? shrinkFontSize(text, f.width, f.height, f.fontFamily, f.fontSize, f.bold, f.italic)
-        : f.fontSize;
+      const fs =
+        f.textOverflow === "shrink"
+          ? shrinkFontSize(
+              text,
+              f.width,
+              f.height,
+              f.fontFamily,
+              f.fontSize,
+              f.bold,
+              f.italic,
+            )
+          : f.fontSize;
 
       if (f.textOverflow === "shrink") {
         ctx.beginPath();
@@ -148,9 +189,15 @@ export async function renderThumbnail(
       ctx.fillStyle = f.color;
 
       let textX = f.x + 3;
-      if (f.textAlign === "center") { ctx.textAlign = "center"; textX = f.x + f.width / 2; }
-      else if (f.textAlign === "right") { ctx.textAlign = "right"; textX = f.x + f.width - 3; }
-      else { ctx.textAlign = "left"; }
+      if (f.textAlign === "center") {
+        ctx.textAlign = "center";
+        textX = f.x + f.width / 2;
+      } else if (f.textAlign === "right") {
+        ctx.textAlign = "right";
+        textX = f.x + f.width - 3;
+      } else {
+        ctx.textAlign = "left";
+      }
 
       ctx.textBaseline = "middle";
       ctx.fillText(text, textX, f.y + f.height / 2);
@@ -252,7 +299,14 @@ export async function renderSingleCard(
         if (imgObj.border.style === "dashed") ctx.setLineDash([bw * 3, bw * 2]);
         else if (imgObj.border.style === "dotted") ctx.setLineDash([bw, bw]);
         else ctx.setLineDash([]);
-        roundRectPath(ctx, x + bw / 2, y + bw / 2, w - bw, h - bw, Math.max(0, radius - bw / 2));
+        roundRectPath(
+          ctx,
+          x + bw / 2,
+          y + bw / 2,
+          w - bw,
+          h - bw,
+          Math.max(0, radius - bw / 2),
+        );
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -261,7 +315,9 @@ export async function renderSingleCard(
     } else {
       const f = obj as TextField;
       const text =
-        rowIndex >= 0 && rowIndex < rows.length ? (rows[rowIndex][f.column] ?? "") : "";
+        rowIndex >= 0 && rowIndex < rows.length
+          ? (rows[rowIndex][f.column] ?? "")
+          : "";
       if (!text) continue;
 
       const codeType = f.codeType ?? "text";
@@ -278,7 +334,13 @@ export async function renderSingleCard(
       }
 
       if (codeType === "qr" || codeType === "barcode") {
-        const codeCanvas = await generateCodeCanvas(text, codeType, f.width, f.height, f.color);
+        const codeCanvas = await generateCodeCanvas(
+          text,
+          codeType,
+          f.width,
+          f.height,
+          f.color,
+        );
         if (codeCanvas) {
           ctx.drawImage(codeCanvas, f.x, f.y, f.width, f.height);
         }
@@ -286,17 +348,18 @@ export async function renderSingleCard(
         continue;
       }
 
-      const fs = f.textOverflow === "shrink"
-        ? shrinkFontSize(
-            text,
-            f.width,
-            f.height,
-            f.fontFamily,
-            f.fontSize,
-            f.bold,
-            f.italic,
-          )
-        : f.fontSize;
+      const fs =
+        f.textOverflow === "shrink"
+          ? shrinkFontSize(
+              text,
+              f.width,
+              f.height,
+              f.fontFamily,
+              f.fontSize,
+              f.bold,
+              f.italic,
+            )
+          : f.fontSize;
 
       // Clip to text field bounds (only when shrinking)
       if (f.textOverflow === "shrink") {
@@ -447,7 +510,14 @@ export async function exportRecords(
   const cardCanvases: HTMLCanvasElement[] = [];
   for (let i = 0; i < totalCards; i++) {
     cardCanvases.push(
-      await renderSingleCard(objects, canvasSize, rows, i, dataImages, watermark),
+      await renderSingleCard(
+        objects,
+        canvasSize,
+        rows,
+        i,
+        dataImages,
+        watermark,
+      ),
     );
     onProgress(Math.round(5 + (i / totalCards) * 45));
   }
@@ -463,9 +533,12 @@ export async function exportRecords(
       const startIdx = s * cardsPerSheet;
       const endIdx = Math.min(startIdx + cardsPerSheet, totalCards);
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
-      const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
-
-
+      const sheetCanvas = renderImpositionSheet(
+        sheetCards,
+        layout,
+        sheet.w,
+        sheet.h,
+      );
 
       const blob = await new Promise<Blob>((resolve) =>
         sheetCanvas.toBlob((b) => resolve(b!), "image/png"),
@@ -491,9 +564,12 @@ export async function exportRecords(
       const startIdx = s * cardsPerSheet;
       const endIdx = Math.min(startIdx + cardsPerSheet, totalCards);
       const sheetCards = cardCanvases.slice(startIdx, endIdx);
-      const sheetCanvas = renderImpositionSheet(sheetCards, layout, sheet.w, sheet.h);
-
-
+      const sheetCanvas = renderImpositionSheet(
+        sheetCards,
+        layout,
+        sheet.w,
+        sheet.h,
+      );
 
       const imgData = sheetCanvas.toDataURL("image/png");
 
