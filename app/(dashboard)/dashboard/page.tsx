@@ -84,8 +84,7 @@ export default async function DashboardPage() {
   const canCreateProject = !isFree || projectList.length < 3;
   const projectLimit = isFree ? 3 : null;
 
-  const lastUpdated =
-    projectList.length > 0 ? projectList[0].updated_at : null;
+  const lastUpdated = projectList.length > 0 ? projectList[0].updated_at : null;
 
   return (
     <div className="max-w-[1100px] mx-auto px-6 py-12">
@@ -147,9 +146,7 @@ export default async function DashboardPage() {
           >
             <IconCrown
               size={17}
-              color={
-                isFree ? "rgba(240,237,232,0.3)" : "var(--app-accent)"
-              }
+              color={isFree ? "rgba(240,237,232,0.3)" : "var(--app-accent)"}
             />
           </div>
           <div>

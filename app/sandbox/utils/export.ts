@@ -15,20 +15,43 @@ import {
   generateCodeCanvas,
 } from "./rendering";
 
+/**
+ * Convert a Cloudflare R2 CDN URL to a server-side proxy URL.
+ * This avoids canvas tainting caused by missing CORS headers on the CDN.
+ */
+function toProxiedSrc(src: string): string {
+  const cdnBase = process.env.NEXT_PUBLIC_R2_CDN_URL;
+  if (cdnBase && src.startsWith(cdnBase)) {
+    const key = src.slice(cdnBase.length).replace(/^\//, "");
+    return `/api/r2/proxy?key=${encodeURIComponent(key)}`;
+  }
+  return src;
+}
+
 /** Load an image from a src URL and return it as an HTMLImageElement. */
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    const proxied = toProxiedSrc(src);
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => {
+      if (proxied !== src) {
+        // Already tried the proxy — fall through to original without crossOrigin
+        // (data: URLs, local blobs, or non-R2 sources)
+        const retry = new Image();
+        retry.onload = () => resolve(retry);
+        retry.onerror = reject;
+        retry.src = src;
+        return;
+      }
       // Retry without crossOrigin for data: URLs or local blobs
       const retry = new Image();
       retry.onload = () => resolve(retry);
       retry.onerror = reject;
       retry.src = src;
     };
-    img.src = src;
+    img.src = proxied;
   });
 }
 
