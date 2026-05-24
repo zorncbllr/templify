@@ -93,7 +93,7 @@ export default function PaymentSuccessPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#0a0a10",
+        background: "#0a0a0a",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -214,7 +214,7 @@ export default function PaymentSuccessPage() {
                 display: "inline-block",
                 padding: "12px 32px",
                 background: "#e8ff47",
-                color: "#0a0a10",
+                color: "#0a0a0a",
                 borderRadius: 10,
                 fontWeight: 600,
                 fontSize: 14,

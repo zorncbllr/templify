@@ -1530,7 +1530,7 @@ export default function Editor({
 
       {exportProgress !== null && !showImpositionModal && (
         <div className="fixed inset-0 bg-[rgba(0,0,0,0.7)] z-[500] flex items-center justify-center">
-          <div className="bg-[#14141e] border border-[rgba(255,255,255,0.1)] rounded-md px-9 py-7 min-w-[260px] text-center">
+          <div className="bg-[#141414] border border-[rgba(255,255,255,0.1)] rounded-md px-9 py-7 min-w-[260px] text-center">
             <div className="mb-3.5">
               {exportProgress < 100 ? (
                 <div
@@ -1916,7 +1916,7 @@ export default function Editor({
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
-        <aside className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] flex flex-col bg-[#0e0e18] overflow-hidden p-0">
+        <aside className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] flex flex-col bg-[#0e0e0e] overflow-hidden p-0">
           {/* Image upload */}
           <div className="px-2.5 py-2 border-b border-b-[rgba(255,255,255,0.06)]">
             <label
@@ -2237,7 +2237,7 @@ export default function Editor({
           ref={canvasAreaRef}
           style={{
             flex: 1,
-            background: "#07070e",
+            background: "#070707",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -2312,7 +2312,7 @@ export default function Editor({
                     <IconImage size={40} style={{ opacity: 0.07 }} />
                     <p
                       style={{
-                        color: "rgba(10,10,16,0.18)",
+                        color: "rgba(10,10,10,0.18)",
                         fontSize: 12,
                         fontWeight: 500,
                       }}
@@ -2445,7 +2445,7 @@ export default function Editor({
             borderLeft: "1px solid rgba(255,255,255,0.06)",
             display: "flex",
             flexDirection: "column",
-            background: "#0e0e18",
+            background: "#0e0e0e",
             overflow: "hidden",
           }}
         >

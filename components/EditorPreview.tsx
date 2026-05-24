@@ -65,7 +65,7 @@ function EditorPreview() {
     <div
       style={{
         fontFamily: "'DM Sans', sans-serif",
-        background: "#0c0c14",
+        background: "#0c0c0c",
         border: "1px solid rgba(255,255,255,0.08)",
         borderRadius: 14,
         overflow: "hidden",
@@ -82,7 +82,7 @@ function EditorPreview() {
           padding: "0 14px",
           height: 44,
           borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "#0c0c14",
+          background: "#0c0c0c",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -96,7 +96,7 @@ function EditorPreview() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#0a0a10",
+                color: "#0a0a0a",
               }}
             >
               <IconSparkle size={10} />
@@ -174,7 +174,7 @@ function EditorPreview() {
             cursor: "default",
             background: "#e8ff47",
             border: "none",
-            color: "#0a0a10",
+            color: "#0a0a0a",
           }}
         >
           <IconGrid size={10} />
@@ -200,7 +200,7 @@ function EditorPreview() {
           style={{
             width: 172,
             borderRight: "1px solid rgba(255,255,255,0.06)",
-            background: "#0e0e18",
+            background: "#0e0e0e",
             display: "flex",
             height: "37.5rem",
             flexDirection: "column",
@@ -423,7 +423,7 @@ function EditorPreview() {
         <div
           style={{
             flex: 1,
-            background: "#07070e",
+            background: "#070707",
             position: "relative",
             display: "flex",
             alignItems: "center",
@@ -472,7 +472,7 @@ function EditorPreview() {
                   position: "absolute",
                   top: -19,
                   left: 0,
-                  background: "#0c0c14",
+                  background: "#0c0c0c",
                   border: "1px solid rgba(232,255,71,0.3)",
                   color: "#e8ff47",
                   fontSize: 8,
@@ -552,7 +552,7 @@ function EditorPreview() {
               gap: 6,
               padding: "6px 12px",
               borderRadius: 14,
-              background: "rgba(10,10,16,0.92)",
+              background: "rgba(10,10,10,0.92)",
               border: "1px solid rgba(255,255,255,0.1)",
               backdropFilter: "blur(12px)",
             }}
@@ -653,7 +653,7 @@ function EditorPreview() {
               right: 14,
               display: "flex",
               flexDirection: "column",
-              background: "rgba(10,10,16,0.92)",
+              background: "rgba(10,10,10,0.92)",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 9,
               overflow: "hidden",
@@ -720,7 +720,7 @@ function EditorPreview() {
           style={{
             width: 196,
             borderLeft: "1px solid rgba(255,255,255,0.06)",
-            background: "#0e0e18",
+            background: "#0e0e0e",
             display: "flex",
             flexDirection: "column",
             flexShrink: 0,

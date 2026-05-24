@@ -91,7 +91,7 @@ export function ToggleSwitch({
         style={{
           top: 2,
           left: value ? 14 : 2,
-          background: value ? "#0a0a10" : "white",
+          background: value ? "#0a0a0a" : "white",
           boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
         }}
       />

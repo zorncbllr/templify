@@ -130,10 +130,10 @@
 
 /* App theme variables */
 :root {
-  --app-bg: #0a0a0f;
-  --app-bg-deep: #0c0c14;
-  --app-panel: #0e0e18;
-  --app-canvas: #07070e;
+  --app-bg: #0a0a0a;
+  --app-bg-deep: #0c0c0c;
+  --app-panel: #0e0e0e;
+  --app-canvas: #070707;
   --app-text: #f0ede8;
   --app-accent: #e8ff47;
   --app-accent-blue: #63b3ed;
@@ -147,6 +147,6 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-app-bg text-app-text;
   }
 }

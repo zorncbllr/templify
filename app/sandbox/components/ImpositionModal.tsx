@@ -185,7 +185,7 @@ export function ImpositionModal({
       }}
     >
       <div
-        className="bg-[#12121c] border border-[rgba(255,255,255,0.09)] rounded-md p-6 w-fit max-h-[90vh] flex flex-col gap-0 overflow-hidden"
+        className="bg-[#121212] border border-[rgba(255,255,255,0.09)] rounded-md p-6 w-fit max-h-[90vh] flex flex-col gap-0 overflow-hidden"
         style={{
           boxShadow: "0 40px 120px rgba(0,0,0,0.8)",
           animation: "popIn 0.18s ease",
@@ -557,7 +557,7 @@ export function ImpositionModal({
                   cursor: exportProgress !== null ? "not-allowed" : "pointer",
                   background: exportProgress !== null ? "#b8cc38" : "#e8ff47",
                   border: "none",
-                  color: "#0a0a10",
+                  color: "#0a0a0a",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",

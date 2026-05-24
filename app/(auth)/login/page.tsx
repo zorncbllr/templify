@@ -6,7 +6,7 @@ import EditorPreview from "@/components/EditorPreview";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[#08080f] flex relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0a0a] flex relative overflow-hidden">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@700;900&display=swap');
         * { font-family: 'DM Sans', sans-serif; }
@@ -79,7 +79,7 @@ export default function LoginPage() {
           <div
             className="absolute inset-y-0 right-0 w-32 pointer-events-none"
             style={{
-              background: "linear-gradient(to right, transparent, #08080f)",
+              background: "linear-gradient(to right, transparent, #0a0a0a)",
               zIndex: 3,
             }}
           />
@@ -87,7 +87,7 @@ export default function LoginPage() {
           <div
             className="absolute inset-x-0 top-0 h-24 pointer-events-none"
             style={{
-              background: "linear-gradient(to bottom, #08080f, transparent)",
+              background: "linear-gradient(to bottom, #0a0a0a, transparent)",
               zIndex: 3,
             }}
           />
@@ -95,7 +95,7 @@ export default function LoginPage() {
           <div
             className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
             style={{
-              background: "linear-gradient(to top, #08080f, transparent)",
+              background: "linear-gradient(to top, #0a0a0a, transparent)",
               zIndex: 3,
             }}
           />
@@ -127,7 +127,7 @@ export default function LoginPage() {
             className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ background: "#e8ff47" }}
           >
-            <IconSparkle size={15} color="#08080f" />
+            <IconSparkle size={15} color="#0a0a0a" />
           </div>
           <span className="font-bold text-[17px] text-[#f0ede8] tracking-tight">
             Templify
@@ -155,7 +155,7 @@ export default function LoginPage() {
               style={{
                 padding: "13px 20px",
                 background: "#e8ff47",
-                color: "#08080f",
+                color: "#0a0a0a",
                 border: "none",
               }}
             >

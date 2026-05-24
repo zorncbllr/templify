@@ -24,7 +24,7 @@ export function ZoomControls({
   return (
     <div className="absolute bottom-5 right-5 z-30 flex flex-col">
       <div
-        className="flex flex-col bg-[rgba(12,12,20,0.92)] border border-[rgba(255,255,255,0.1)] rounded-lg overflow-hidden"
+        className="flex flex-col bg-[rgba(12,12,12,0.92)] border border-[rgba(255,255,255,0.1)] rounded-lg overflow-hidden"
         style={{
           backdropFilter: "blur(16px)",
           boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
@@ -103,7 +103,7 @@ export function FloatingPageNav({
 
   return (
     <div
-      className="absolute bottom-5 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[rgba(12,12,20,0.92)] border border-[rgba(255,255,255,0.1)]"
+      className="absolute bottom-5 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[rgba(12,12,12,0.92)] border border-[rgba(255,255,255,0.1)]"
       style={{
         left: "50%",
         transform: "translateX(-50%)",

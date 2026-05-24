@@ -1,7 +1,14 @@
-function Shimmer({ className }: { className?: string }) {
+function Shimmer({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return (
     <div
       className={`relative overflow-hidden rounded-md bg-[rgba(255,255,255,0.03)] ${className ?? ""}`}
+      style={style}
     >
       <div
         className="absolute inset-0"

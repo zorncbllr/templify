@@ -239,7 +239,7 @@ function EditorSkeleton() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel */}
         <aside
-          className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] bg-[#0e0e18] flex flex-col"
+          className="w-[200px] shrink-0 border-r border-r-[rgba(255,255,255,0.06)] bg-[#0e0e0e] flex flex-col"
           style={{ animation: "skeleton-fade-in 0.4s ease-out" }}
         >
           {/* Image upload area */}
@@ -291,7 +291,7 @@ function EditorSkeleton() {
 
         {/* Right panel */}
         <aside
-          className="w-[248px] shrink-0 border-l border-l-[rgba(255,255,255,0.06)] bg-[#0e0e18] flex flex-col overflow-hidden"
+          className="w-[248px] shrink-0 border-l border-l-[rgba(255,255,255,0.06)] bg-[#0e0e0e] flex flex-col overflow-hidden"
           style={{ animation: "skeleton-fade-in 0.6s ease-out" }}
         >
           {/* Properties header */}
