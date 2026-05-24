@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { deleteProjectDataImages } from "@/lib/storage/data-images";
 import { IconTrash, IconWarning } from "@/components/Icons";
 
 interface DeleteProjectButtonProps {
@@ -21,41 +22,23 @@ export default function DeleteProjectButton({
 
   async function handleDelete() {
     setDeleting(true);
-    const supabase = createClient();
-    const folder = `${userId}/${projectId}`;
+    try {
+      const supabase = createClient();
 
-    // Delete data images from storage and track freed bytes
-    let bytesFreed = 0;
-    const { data: imageFiles } = await supabase.storage
-      .from("data-images")
-      .list(folder);
-    if (imageFiles && imageFiles.length > 0) {
-      for (const f of imageFiles) {
-        bytesFreed += f.metadata?.size ?? 0;
+      // Reclaim R2 storage for this project's data images, then decrement
+      // the profile's storage_used by the freed amount.
+      const bytesFreed = await deleteProjectDataImages(userId, projectId);
+      if (bytesFreed > 0) {
+        await supabase.rpc("update_storage_used", { delta: -bytesFreed });
       }
-      await supabase.storage
-        .from("data-images")
-        .remove(imageFiles.map((f) => `${folder}/${f.name}`));
-    }
 
-    // Delete data files from storage
-    const { data: dataFiles } = await supabase.storage
-      .from("data-files")
-      .list(folder);
-    if (dataFiles && dataFiles.length > 0) {
-      await supabase.storage
-        .from("data-files")
-        .remove(dataFiles.map((f) => `${folder}/${f.name}`));
+      // Delete the project row (data_rows jsonb is removed with it)
+      await supabase.from("projects").delete().eq("id", projectId);
+      window.location.reload();
+    } catch (err) {
+      console.error("Project delete failed:", err);
+      setDeleting(false);
     }
-
-    // Update storage_used on profile
-    if (bytesFreed > 0) {
-      await supabase.rpc("update_storage_used", { delta: -bytesFreed });
-    }
-
-    // Delete the project row
-    await supabase.from("projects").delete().eq("id", projectId);
-    window.location.reload();
   }
 
   return (

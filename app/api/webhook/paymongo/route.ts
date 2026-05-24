@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   // Amount verification — prevent tampered checkout sessions
   // Accept amount from either locale (user could be ph or intl)
   const planPricing = PRICING[plan as PlanKey];
-  const validAmounts = [planPricing.ph.amount, planPricing.intl.amount];
+  const validAmounts: number[] = [planPricing.ph.amount, planPricing.intl.amount];
   if (!validAmounts.includes(amount)) {
     return new NextResponse('Amount mismatch', { status: 400 });
   }
