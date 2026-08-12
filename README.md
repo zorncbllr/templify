@@ -12,7 +12,7 @@
 
 <img src="public/screenshots/flexible-editor.png" alt="Templify flexible editor" width="700">
 
-**Smart dynamic print impositioning** — arrange 1, 2, 4, 6, or 9 records per page for batch printing.
+**Smart dynamic print impositioning** — press export and Templify automatically handles the layout for batch printing.
 
 <img src="public/screenshots/smart--dynamic-print-impositioning.png" alt="Smart dynamic print impositioning" width="700">
 
