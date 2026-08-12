@@ -1,4 +1,10 @@
-<div align="center">
+# Templify
+
+**Bulk-fill certificates, ID cards, badges, and invitations from a spreadsheet — no copy-pasting.**
+
+Upload your Excel. Design your template. Drag your fields into place. Export as PNG or PDF — all in one go.
+
+Open the editor and try it free at **`/sandbox`** (no account needed) · [Report a Bug](https://github.com/zorncbllr/templify/issues)
 
 ---
 
