@@ -173,18 +173,43 @@ export async function generateCodeCanvas(
 
 const _scriptCache: Record<string, Promise<any>> = {};
 
-export function loadScript(src: string, globalKey: string): Promise<any> {
-  if ((window as any)[globalKey]) return Promise.resolve((window as any)[globalKey]);
+const SCRIPT_TIMEOUT_MS = 15000;
+
+export function loadScript(
+  src: string,
+  globalKey: string,
+  integrity?: string,
+): Promise<any> {
+  if ((window as any)[globalKey])
+    return Promise.resolve((window as any)[globalKey]);
   if (src in _scriptCache) return _scriptCache[src];
   _scriptCache[src] = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = src;
+    s.async = true;
+    if (integrity) {
+      s.integrity = integrity;
+      s.crossOrigin = "anonymous";
+    }
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      delete _scriptCache[src];
+      reject(new Error(`Script load timed out: ${src}`));
+    }, SCRIPT_TIMEOUT_MS);
     s.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       const val = (window as any)[globalKey];
       if (val) resolve(val);
       else reject(new Error(`${globalKey} not found after loading ${src}`));
     };
     s.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       delete _scriptCache[src];
       reject(new Error(`Failed to load script: ${src}`));
     };

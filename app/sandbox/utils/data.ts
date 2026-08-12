@@ -50,19 +50,45 @@ export function detectImageColumns(
   return detected;
 }
 
-async function loadSheetJS(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if ((window as any).XLSX) {
-      resolve((window as any).XLSX);
-      return;
-    }
+let _xlsxPromise: Promise<any> | null = null;
+
+function loadSheetJS(): Promise<any> {
+  if (_xlsxPromise) return _xlsxPromise;
+  if ((window as any).XLSX) {
+    _xlsxPromise = Promise.resolve((window as any).XLSX);
+    return _xlsxPromise;
+  }
+  _xlsxPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src =
       "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    s.onload = () => resolve((window as any).XLSX);
-    s.onerror = reject;
+    s.async = true;
+    s.integrity =
+      "sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==";
+    s.crossOrigin = "anonymous";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      _xlsxPromise = null;
+      reject(new Error("Script load timed out: XLSX"));
+    }, 15000);
+    s.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve((window as any).XLSX);
+    };
+    s.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      _xlsxPromise = null;
+      reject(new Error("Failed to load script: XLSX"));
+    };
     document.head.appendChild(s);
   });
+  return _xlsxPromise;
 }
 
 export async function parseSpreadsheet(

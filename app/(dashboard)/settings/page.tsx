@@ -31,16 +31,21 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase
-      .from("profiles")
-      .select("*")
-      .single()
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .single();
         if (data) {
           setProfile(data as Profile);
         }
+      } catch {
+        // ignore — stays on the loading state
+      } finally {
         setLoading(false);
-      });
+      }
+    })();
   }, []);
 
   async function handleCancelSubscription() {

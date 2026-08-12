@@ -118,7 +118,7 @@ export default function PricingPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       setIsLoggedIn(true);
-      supabase
+      void supabase
         .from("profiles")
         .select("plan, locale")
         .eq("id", user.id)
@@ -129,7 +129,7 @@ export default function PricingPage() {
             setLocale(data.locale as Locale);
           }
         });
-    });
+    }).catch(() => {});
   }, []);
 
   async function handleCheckout(planKey: string) {

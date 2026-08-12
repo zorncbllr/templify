@@ -34,7 +34,6 @@ export async function loadDataImages(
   );
   const text = await res.text();
   if (!res.ok) throw new Error(`List failed: ${text}`);
-  console.log("R2 list response:", text);
   const { files } = JSON.parse(text);
 
   const map: DataImageMap = {};

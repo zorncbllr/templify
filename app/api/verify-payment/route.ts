@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { retrieveCheckoutSession } from "@/lib/payments/paymongo";
-import { getPlanExpiry, type PlanKey } from "@/lib/config/pricing";
+import { getPlanExpiry, PRICING, type PlanKey } from "@/lib/config/pricing";
 
 const VALID_PLANS: PlanKey[] = [
   "pro_monthly",
@@ -99,6 +99,19 @@ export async function POST(req: NextRequest) {
       session.attributes?.payment_intent?.attributes?.currency ??
       session.attributes?.line_items?.[0]?.currency ??
       "PHP";
+
+    // Amount verification — reject tampered sessions paid at the wrong price
+    const planPricing = PRICING[plan as PlanKey];
+    const validAmounts: number[] = [
+      planPricing.ph.amount,
+      planPricing.intl.amount,
+    ];
+    if (!validAmounts.includes(amount)) {
+      return NextResponse.json(
+        { error: "Amount mismatch" },
+        { status: 400 },
+      );
+    }
 
     // Insert payment record
     await admin.from("payments").insert({

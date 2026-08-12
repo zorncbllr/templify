@@ -11,8 +11,11 @@ export default function PaymentSuccessPage() {
 
   useEffect(() => {
     const supabase = createClient();
+    const MAX_ATTEMPTS = 30; // ~60s of polling
     let attempts = 0;
     let verified = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
 
     async function tryVerifyDirectly() {
       // Read checkout info stored before redirect
@@ -42,41 +45,51 @@ export default function PaymentSuccessPage() {
     }
 
     async function checkPlan() {
-      // On first attempt, try direct verification with the gateway
-      if (attempts === 0 && !verified) {
+      if (disposed) return;
+
+      if (attempts >= MAX_ATTEMPTS) {
+        setTimedOut(true);
+        setPolling(false);
+        return;
+      }
+
+      // Try direct verification on the first attempt and again at attempt 5
+      // (gives the gateway time to settle)
+      if ((attempts === 0 || attempts === 5) && !verified) {
         verified = await tryVerifyDirectly();
+        if (disposed) return;
         if (verified) return;
       }
 
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (disposed) return;
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("plan")
+          .eq("id", user.id)
+          .single();
+        if (disposed) return;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("plan")
-        .eq("id", user.id)
-        .single();
-
-      if (profile?.plan && profile.plan !== "free") {
-        setPlan(profile.plan);
-        setPolling(false);
-        return;
+        if (profile?.plan && profile.plan !== "free") {
+          setPlan(profile.plan);
+          setPolling(false);
+          return;
+        }
       }
 
       attempts++;
-
-      // Try direct verification again at attempt 5 (gives gateway time to settle)
-      if (attempts === 5 && !verified) {
-        verified = await tryVerifyDirectly();
-        if (verified) return;
-      }
-
-      setTimeout(checkPlan, 2000);
+      timer = setTimeout(checkPlan, 2000);
     }
 
     checkPlan();
+
+    return () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const planLabel = plan

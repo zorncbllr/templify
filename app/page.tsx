@@ -155,7 +155,7 @@ export default function LandingPage() {
         setUserName(data.session.user.user_metadata?.full_name ?? null);
         setUserAvatar(data.session.user.user_metadata?.avatar_url ?? null);
       }
-    });
+    }).catch(() => {});
     const interval = setInterval(() => {
       setActiveFormat((p) => (p + 1) % exportFormats.length);
     }, 1800);

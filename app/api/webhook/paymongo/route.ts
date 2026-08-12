@@ -54,6 +54,14 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Missing metadata', { status: 400 });
   }
 
+  // Reject test-mode events when using a live secret key
+  const secretKey = process.env.PAYMONGO_SECRET_KEY ?? '';
+  const isLiveKey = secretKey.startsWith('sk_live_');
+  const isLiveEvent = session?.attributes?.livemode !== false;
+  if (isLiveKey && !isLiveEvent) {
+    return new NextResponse('Livemode mismatch', { status: 400 });
+  }
+
   if (!VALID_PLANS.includes(plan as PlanKey)) {
     return new NextResponse('Invalid plan in metadata', { status: 400 });
   }
@@ -86,24 +94,32 @@ export async function POST(req: NextRequest) {
 
   if (existing) return NextResponse.json({ received: true }); // already processed
 
-  // Insert payment record
-  await supabase.from('payments').insert({
-    user_id: userId,
-    gateway: 'paymongo',
-    gateway_payment_id: paymentId,
-    amount,
-    currency,
-    plan: plan as Exclude<PlanKey, 'free'>,
-    status: 'succeeded',
-    metadata: { event_type: eventType },
-  });
+  try {
+    // Insert payment record
+    const { error: insertError } = await supabase.from('payments').insert({
+      user_id: userId,
+      gateway: 'paymongo',
+      gateway_payment_id: paymentId,
+      amount,
+      currency,
+      plan: plan as Exclude<PlanKey, 'free'>,
+      status: 'succeeded',
+      metadata: { event_type: eventType },
+    });
+    if (insertError) throw insertError;
 
-  // Update profile
-  await supabase.from('profiles').update({
-    plan,
-    plan_expires_at: getPlanExpiry(plan as PlanKey).toISOString(),
-    payment_gateway: 'paymongo',
-  }).eq('id', userId);
+    // Update profile
+    const { error: updateError } = await supabase.from('profiles').update({
+      plan,
+      plan_expires_at: getPlanExpiry(plan as PlanKey).toISOString(),
+      payment_gateway: 'paymongo',
+    }).eq('id', userId);
+    if (updateError) throw updateError;
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    // Return 500 so PayMongo retries, but the idempotency check keeps retries safe
+    return new NextResponse('Processing failed', { status: 500 });
+  }
 
   return NextResponse.json({ received: true });
 }

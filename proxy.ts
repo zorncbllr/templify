@@ -15,17 +15,31 @@ function isProtected(pathname: string) {
 }
 
 export async function proxy(request: NextRequest) {
-  const { supabase, response } = createMiddlewareClient(request);
-
-  // Refresh session — required for SSR auth to work correctly
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
+  const protectedRoute = isProtected(pathname);
+
+  // Only call Supabase when we actually need the user identity.
+  // Public routes (/, /pricing, /sandbox) skip the network round-trip.
+  const needUser = protectedRoute || pathname === "/login";
+  let user: { id: string } | null = null;
+  let supabase: ReturnType<typeof createMiddlewareClient>["supabase"] | null =
+    null;
+  let response: NextResponse;
+
+  if (needUser) {
+    const client = createMiddlewareClient(request);
+    supabase = client.supabase;
+    response = client.response;
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser();
+    user = u;
+  } else {
+    response = NextResponse.next({ request });
+  }
 
   // Redirect unauthenticated users away from protected paths
-  if (!user && isProtected(pathname)) {
+  if (!user && protectedRoute) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
@@ -48,12 +62,15 @@ export async function proxy(request: NextRequest) {
     });
 
     // Sync detected locale to the user's profile
-    if (user) {
+    if (user && supabase) {
       supabase
         .from("profiles")
         .update({ locale })
         .eq("id", user.id)
-        .then(() => {});
+        .then(
+          () => {},
+          () => {},
+        );
     }
   }
 
@@ -62,6 +79,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

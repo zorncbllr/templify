@@ -549,6 +549,7 @@ export async function exportRecords(
     const JSZip = await loadScript(
       "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
       "JSZip",
+      "sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==",
     );
     const zip = new JSZip();
 
@@ -576,6 +577,7 @@ export async function exportRecords(
     const jsPDF = await loadScript(
       "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
       "jspdf",
+      "sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA==",
     );
     const { jsPDF: JsPDF } = jsPDF;
     const pxToMm = 0.264583;
