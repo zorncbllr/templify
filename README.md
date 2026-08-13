@@ -26,7 +26,7 @@ Open the editor and try it free at **`/sandbox`** (no account needed) · [Report
 
 ## The Problem
 
-Manually typing names into a certificate template for 500 students is soul-crushing. One typo in row 400 means re-doing everything.
+Manually typing names into a certificate template for 500 students is soul-crushing and time consuming.
 
 **Templify reads your spreadsheet, fills every record into your design, and exports the whole batch in seconds.**
 
